@@ -1,0 +1,241 @@
+[00:00] Oi, gente. Estão me ouvindo? Acho que meu microfone tava meio estranho aqui.
+
+[00:05] Tá ouvindo sim. Bom dia, pessoal.
+
+[00:09] Bom diaa. Eu entrei agora, foi mal, a internet deu uma travada.
+
+[00:14] Relaxa. Vamos esperar só mais um minutinho pelo Lucas e pela Carla. A Maria já falou que vai entrar pelo celular porque tá saindo de uma aula.
+
+[00:32] Eu tô aqui também, mas sem câmera porque tô comendo. Não me julguem.
+
+[00:37] Justo, daily cedo é isso. Ah, Lucas entrou. Falta só a Carla.
+
+[00:52] Opa, desculpa. Eu achei que era nove e dez. Foi mal mesmo.
+
+[00:58] Não, era nove, mas tá tudo certo. A Carla mandou mensagem, vai entrar em cinco minutos. A gente já começa. A ideia hoje é fechar o planejamento da próxima sprint, revisar o que ficou pendente da anterior e dividir as tasks. Sem apresentação, sem enrolar muito, porque todo mundo tem coisa depois.
+
+[01:19] Graças a Deus, reunião objetiva.
+
+[01:22] É o plano. Então, só pra relembrar, a gente tinha três frentes maiores no backlog: autenticação, dashboard e integração com a API externa. E tinha também aquele débito técnico do módulo de notificações. Maria, você consegue começar? Acho que você entrou.
+
+[01:42] Consigo sim. Tô na rua, então se ficar muito barulho vocês me falam. Bom, sobre autenticação, eu terminei a implementação do refresh token e abri o PR ontem. O fluxo principal tá funcionando, mas eu ainda tô esperando o review porque tem umas mudanças na camada de middleware que eu não quero aprovar sozinha.
+
+[02:03] Boa.
+
+[02:04] Eu também rodei os testes que já existiam. Passaram todos. O que eu não consegui fechar foi o teste de expiração do token, porque o mock de tempo tá meio ruim. Eu deixei um comentário no PR explicando.
+
+[02:24] Clássico. Teste que depende de relógio é sempre uma alegria.
+
+[02:27] Pois é. E o Lucas comentou que podia olhar isso hoje. Se ele conseguir, eu resolvo e já deixo o PR pronto pra merge.
+
+[02:42] Sim, perfeito. A parte de autenticação pode sair da sprint então. Você chegou a quebrar o restante em tasks ou só deixou o PR?
+
+[02:52] Fiz uma ideia. Tem o refresh token, tratamento de sessão expirada e depois a parte de logout em todos os dispositivos. Essa última eu não queria começar antes de fechar o modelo de sessão, porque senão a gente pode ter retrabalho.
+
+[03:15] Concordo. Melhor não abrir três tasks dependentes e depois descobrir que a primeira mudou tudo.
+
+[03:21] Exatamente. Ah, e eu também criei uma issue pra melhorar as mensagens de erro da API. Hoje tem alguns endpoints retornando erro genérico, então fica difícil pro frontend saber o que mostrar.
+
+[03:40] Tá. Vamos decidir isso agora então. Eu acho que essa melhoria entra nessa sprint, mas com prioridade menor que o dashboard. O que vocês acham?
+
+[03:54] Eu acho razoável. Pelo que eu vi no frontend, os erros de autenticação já estão sendo tratados. Os genéricos incomodam, mas não bloqueiam.
+
+[04:00] Sim. Se for uma task pequena, dá pra colocar como segunda prioridade.
+
+[04:05] Talvez deixe como task de manutenção. Se sobrar capacidade no final da sprint, a gente pega.
+
+[04:14] Sim, boa. Então fica assim: Maria termina o PR de autenticação e pega o tratamento de sessão. A melhoria dos erros vai pro backlog da sprint como prioridade baixa.
+
+[04:30] Fecho hoje à noite e mando o PR atualizado. Ah, uma coisa: vocês querem colocar a definição de pronto dos endpoints no ticket ou só na documentação?
+
+[04:37] Nos dois. No ticket coloca os critérios de aceite e na documentação a gente deixa o comportamento final.
+
+[04:44] Isso. E coloca teste cobrindo os casos principais. Depois a gente vê se automatiza os casos mais chatos.
+
+[04:52] Teste automatizado é ótimo até o pipeline quebrar às seis da tarde.
+
+[04:57] Verdade. Mas pelo menos a gente descobre antes de subir pra produção. Beleza, Maria, então: fechar o PR, sessão expirada e atualizar a documentação. Se travar em alguma dependência, sinaliza no canal.
+
+[05:10] Combinado.
+
+[05:12] Pedro, manda aí do dashboard.
+
+[05:16] Tá. Eu peguei a issue do dashboard e comecei a adaptar o layout que o produto passou. A estrutura tá praticamente pronta. Coloquei os cards de métricas, filtro por período, tabela de atividades e paginação. O que eu não defini sozinho foi o comportamento dos filtros, porque no protótipo tem umas coisas que não estão muito claras.
+
+[05:38] Eu lembro. Parecia que o filtro de período alterava só o gráfico, mas não a tabela.
+
+[05:43] Então. Minha ideia é fazer o filtro global. Selecionou o período, atualiza gráfico, cards e tabela. Aí podia ter presets de hoje, sete dias e trinta dias. Faz sentido?
+
+[06:00] Pra mim faz. Fica mais previsível e evita a pessoa achar que tá vendo dados de um período e a tabela de outro.
+
+[06:08] E dá pra colocar loading separado por componente? Porque se a tabela demora mais que os cards, não precisa travar tudo.
+
+[06:19] Dá sim. Eu pensei em usar skeleton nos cards e na tabela. Não precisa ter uma tela inteira de loading.
+
+[06:31] Só não faz virar uma animação de loading do LinkedIn, pelo amor de Deus.
+
+[06:35] Não, prometo. Bem simples. As tasks que eu pensei são: estrutura da página, endpoint de métricas, filtros, tabela e responsividade. Mas eu preciso saber se o endpoint de métricas já vai estar disponível.
+
+[06:55] Eu falo com o backend hoje. Se não estiver pronto, a gente usa mock até a integração. Mas vou tentar encaixar. Você já criou as tasks no board?
+
+[07:07] Ainda não, só deixei os subtarefas anotadas. Eu queria confirmar o escopo primeiro pra não criar um monte de coisa que depois vai ser descartada.
+
+[07:14] Justo. Então fecha o escopo com essa divisão, manda pra revisão até amanhã e depois cria as tasks. E coloca os critérios de aceite no ticket principal.
+
+[07:30] Sim. Eu coloquei também uma regra pra tabela mostrar no máximo vinte registros por página, mas não sei se tá muito baixo.
+
+[07:35] Acho ok. Se tiver muita coisa, paginação resolve. Se o pessoal reclamar, a gente ajusta depois.
+
+[07:42] Vamos colocar vinte inicialmente, mas deixa isso configurável no componente. E explica que a primeira versão não tem exportação.
+
+[07:55] Fechado.
+
+[07:57] Bia, frontend. Como você tá?
+
+[08:01] Eu tô bem, mais ou menos. Eu fiz as três opções de componente pro dashboard e mandei no grupo ontem. Vocês viram ou eu tô falando sozinha?
+
+[08:10] Vi sim. A primeira, com os cards mais compactos, ficou muito boa.
+
+[08:15] Eu gostei da primeira também. A segunda é bonitinha, mas ocupa espaço demais.
+
+[08:21] É, eu também tava inclinada pra primeira. Então vou seguir nela. Eu consigo fazer os componentes dos cards, a tabela e o estado vazio. Só preciso que o Pedro me mande os nomes finais das métricas assim que tiver.
+
+[08:38] Mando até sexta de manhã.
+
+[08:41] Boa. Outra coisa que eu reparei: nosso frontend tá com alguns componentes duplicados. Tem botão, modal e tabela em três lugares diferentes. Então pro dashboard eu queria usar o design system e, se faltar algum componente, criar lá em vez de fazer local.
+
+[09:02] Acho ótimo. Tipo botão, input, tabela, paginação, essas coisas.
+
+[09:10] Isso. E eu pensei em fazer um componente de filtro reutilizável. Assim depois a gente usa no relatório e na tela de usuários também.
+
+[09:24] Eu sou péssimo com CSS responsivo, mas eu faço.
+
+[09:27] Todo mundo fala isso. Eu mando um exemplo de breakpoint, vocês testam no celular e em monitor grande. Se ficar ruim eu ajusto, não se preocupem.
+
+[09:39] Você tá pedindo demais da gente antes das dez da manhã.
+
+[09:43] Eu sei, mas é pela causa. Ah, e pro módulo de usuários eu faço a estrutura usando os mesmos componentes do dashboard. Assim ninguém cria uma implementação diferente pra cada tela.
+
+[09:55] Perfeito. Prioriza deixar os estados de erro e loading bem definidos. Às vezes a pessoa só olha a tela e não entende que a requisição falhou.
+
+[10:03] Sim, vou fazer. Até sexta eu entrego os componentes iniciais do dashboard e já deixo o filtro reutilizável.
+
+[10:12] Ótimo. João, backend e infraestrutura, manda.
+
+[10:17] Tá. Eu analisei quatro opções pra resolver o problema de cache da API. A mais simples é usar Redis. A outra que eu gostei custa um pouco mais, mas já tem monitoramento integrado.
+
+[10:37] E qual é a diferença total, mais ou menos?
+
+[10:40] Se a gente pensar no volume atual e no que foi projetado pros próximos meses, a solução mais completa dá uns trezentos reais a mais por mês. Não é absurdo, mas é dinheiro.
+
+[10:50] O monitoramento é importante, né? Senão a gente vai ter que montar tudo separado depois.
+
+[10:56] Foi o que eu pensei. Talvez dê pra usar Redis agora e colocar métricas pelo nosso stack atual. Ainda não configurei isso. E, gente, eu acho que a gente não devia otimizar pra uma carga enorme de cara. Hoje o problema é latência em alguns endpoints específicos.
+
+[11:11] Verdade. Podemos medir primeiro e atacar os endpoints que realmente estão lentos. Aí você fecha a solução baseada nos números.
+
+[11:20] Sim. Outra frente é CI. Eu comecei a mexer no pipeline porque hoje a gente roda lint, teste e build tudo em sequência. Dá pra paralelizar algumas etapas e diminuir bastante o tempo.
+
+[11:37] Se tiver cache de dependência, me manda a configuração depois. Não quero baixar node_modules do zero em todo pipeline porque eu sofro.
+
+[11:43] Anotado. Sobre deploy: a gente confirmou a janela de publicação pra quinta, mas pediu uma lista das mudanças até quarta. O ambiente já tem os secrets configurados. A gente precisa confirmar se a migration nova vai rodar automaticamente ou manualmente.
+
+[12:03] Você consegue verificar isso hoje ou amanhã?
+
+[12:07] Hoje eu verifico. Vou testar migration, rollback, health check e também o comportamento se o serviço externo estiver fora do ar. Também vou olhar o log, apesar de eu não confiar muito nele.
+
+[12:19] Não confie. A gente já sofreu com isso naquele deploy.
+
+[12:24] Exato. E eu posso criar uma documentação de deploy pra colocar migration, rollback, checklist e responsáveis num lugar só. Porque hoje cada informação tá num canto.
+
+[12:36] Por favor, faz isso. Você é oficialmente o dono da documentação agora.
+
+[12:41] Aceito esse cargo com muita responsabilidade e zero aumento.
+
+[12:47] Próximo, Lucas. Como foi na integração?
+
+[12:51] Foi legal. Eu testei a integração com a API externa ontem e conversei com o pessoal que mantém o serviço. Eles curtiram a nossa proposta, mas avisaram que não querem uma integração que faça várias chamadas pequenas, porque o limite de requisições é baixo. Então eu sugeri fazer cache e agrupar algumas consultas.
+
+[13:11] Que endpoints você imaginou usar?
+
+[13:14] Um endpoint de dados principais, um de detalhes, um de status e um de histórico. A ideia é fazer uma chamada inicial e depois atualizar só o que mudou. O problema é que são bastante dados, então vamos precisar cuidar bem da paginação.
+
+[13:34] Quantos registros, mais ou menos?
+
+[13:37] Entre cento e vinte e cento e quarenta mil no cenário maior. É bastante coisa, então não dá pra carregar tudo de uma vez. A API sugeriu paginação por cursor. Eu prefiro isso porque dá mais estabilidade.
+
+[13:57] Concordo. Eu ainda preciso confirmar com infraestrutura se o cache vai ficar pronto nessa sprint, mas acho que cursor é a melhor opção. Você já viu o que a API suporta?
+
+[14:06] Eles têm cursor, limite de página, filtro por data e webhooks. A gente vai precisar implementar praticamente o resto. Retry, tratamento de timeout, log de erro e uma fila pra processar os eventos.
+
+[14:23] Posso te ajudar a fazer uma lista com as tasks e estimativa de esforço depois.
+
+[14:27] Boa. Eu vou falar com o pessoal da API primeiro. Se o webhook não estiver disponível no ambiente de teste, a gente adapta a integração, mas seria melhor testar com ele. Outra coisa: eles falaram sobre dados sensíveis. Então acho mais seguro a gente não colocar payload completo nos logs.
+
+[14:46] Sim, dá pra mascarar os campos e logar só o identificador da requisição, status e tempo de resposta. Eu faço um lembrete disso antes do merge.
+
+[14:56] Ótimo. Lucas, então confirma com a API se dá pra usar o cursor e os webhooks, fecha o plano das tasks e fala com infraestrutura. Se tiver qualquer mudança grande no contrato, avisa antes de implementar.
+
+[15:11] Fechou.
+
+[15:13] Carla entrou? Ah, Carla. Oi, você consegue falar agora?
+
+[15:19] Consigo, gente, desculpa o atraso. Minha aula atrasou e eu não conseguia sair. Eu peguei só o final da integração, mas depois eu leio as issues se tiver.
+
+[15:30] Relaxa. Conta pra gente dos testes.
+
+[15:35] Tá. Eu revisei a suíte de testes com os comentários da última sprint. Corrigi os testes de integração e deixei os casos de erro mais claros. O principal pedido foi a gente não depender de dados fixos do ambiente, então tirei algumas fixtures antigas e deixei tudo preparado pra gerar dados de teste.
+
+[15:54] Boa.
+
+[15:56] A suíte tá quase pronta. Eu tirei dois testes que eram repetidos e coloquei um caso de timeout da API externa. No meu teste local, a suíte inteira demora uns sete minutos. Eu queria mandar pra duas pessoas rodarem antes, porque às vezes funciona na minha máquina e quebra no CI.
+
+[16:15] Eu testo pelo ambiente local.
+
+[16:17] Eu testo pelo pipeline.
+
+[16:20] Perfeito. Eu mando hoje. A primeira parte já tem os testes unitários, de integração e os casos de erro. Depois que vocês testarem, eu ajusto e mando o PR pra revisão.
+
+[16:37] E cobertura, como você pensou?
+
+[16:40] Eu queria usar o relatório do CI e focar primeiro nos módulos críticos. Só não quero colocar uma meta de cobertura artificial e fazer a gente escrever teste só pra aumentar número.
+
+[16:51] Uma meta mínima e revisão manual já resolve.
+
+[16:56] Sim. E deixa o dashboard de cobertura separado do pipeline principal. Pode sair na mesma sprint, mas não bloqueia tudo se cair por causa de uma linha nova.
+
+[17:05] Combinado. Eu mando o PR da suíte hoje, vocês me devolvem até amanhã se der, e eu tento fechar antes do code freeze.
+
+[17:17] Maravilha. Antes de encerrar, dois avisos bem rápidos. Primeiro, a sprint passada teve algumas tasks que ficaram paradas porque ninguém sinalizou o bloqueio. Não tô falando isso pra brigar, tá? É só porque a gente tem bastante gente, mas sempre acaba sobrando pras mesmas pessoas.
+
+[17:37] Verdade.
+
+[17:39] Eu vou mandar uma planilha com as tasks: backend, frontend, infraestrutura, QA e documentação. Cada membro vai marcar onde consegue ajudar. Quem não tiver como assumir algo agora, tudo bem, mas precisa avisar. Ficar com task parada sem sinalizar é que quebra a gente.
+
+[17:56] Eu organizo o board. Posso deixar pronto até domingo.
+
+[18:00] Obrigada. Segundo aviso: eu vou mandar a enquete sobre o horário da próxima planning. Talvez de manhã não esteja funcionando pra todo mundo. Não vamos mudar sem ouvir a maioria, mas respondam a enquete, por favor.
+
+[18:14] Se colocar depois do almoço eu agradeço muito.
+
+[18:18] Se colocar à noite eu provavelmente vou estar no ônibus, então tanto faz pra mim.
+
+[18:24] A vida de desenvolvedor é uma grande agenda impossível. Tá, só recapitulando pra ficar gravado: Maria fecha o PR de autenticação e implementa sessão expirada. Pedro fecha o escopo do dashboard e cria as tasks. Bia faz os componentes e o filtro reutilizável. João verifica o deploy, termina a análise do cache, melhora o CI e cria a documentação. Lucas fecha o desenho da integração e valida o contrato com a API. Carla fecha a suíte de testes e manda o PR. Eu vou revisar as prioridades do backlog e confirmar as dependências com produto.
+
+[18:58] E o pipeline, eu vejo a parte de paralelizar os jobs.
+
+[19:02] Isso, bem lembrado. Alguma coisa que eu esqueci? Alguma task impossível? Falem agora, não deixem pra mandar mensagem meia-noite de quarta-feira.
+
+[19:14] Por mim, tudo certo.
+
+[19:16] Tudo certo. Só preciso mesmo da confirmação do contrato da API pra fechar a integração.
+
+[19:22] Te aviso assim que o pessoal responder. Se tiver mudança grande, a gente reestima a task.
+
+[19:30] Eu mando o link do PR assim que terminar aqui.
+
+[19:34] E eu mando no board qual task ficou com cada pessoa, só pra ficar registrado e ninguém vir daqui a uma semana perguntar de novo.
+
+[19:42] Excelente. Então é isso, gente. Obrigada por terem aparecido. Qualquer bloqueio, mandem no canal na hora, não precisa esperar a próxima reunião. Próxima quinta, mesmo horário por enquanto. Tchau, pessoal.
+
+[19:55] Tchau, gente. Valeu. Até mais.
