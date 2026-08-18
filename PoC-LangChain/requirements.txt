@@ -1,0 +1,5 @@
+python-dotenv
+pydantic
+langchain-core
+langchain-google-genai
+langchain-text-splitters
