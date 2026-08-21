@@ -1,0 +1,57 @@
+
+# Variáveis de ambiente 
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Builds e empacotamento
+build/
+dist/
+*.egg-info/
+
+# Dados gerados pelo processamento de reuniões
+data/
+uploads/
+recordings/
+transcriptions/
+summaries/
+exports/
+
+# Áudio e vídeo
+*.mp3
+*.wav
+*.m4a
+*.mp4
+*.webm
+
+# Modelos e caches de IA
+models/
+checkpoints/
+.cache/
+huggingface/
+
+# Logs
+*.log
+logs/
+
+# IDE e sistema operacional
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Arquivos locais e documentação privada
+./local/*
+./local/
+
