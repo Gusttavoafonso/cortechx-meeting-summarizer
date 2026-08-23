@@ -1,0 +1,3 @@
+SQLAlchemy
+Alembic
+psycopg[binary]
