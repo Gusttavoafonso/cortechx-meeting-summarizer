@@ -1,19 +1,15 @@
-import os
 from collections.abc import Generator
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
+from app.core.config import settings
 
-DATABASE_URL = os.getenv("DATABASE_URL")
 
-if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL não foi configurada.")
-
-#engine: responsável pela conexão com o PostgreSQL
+# engine: responsável pela conexão com o PostgreSQL
 engine = create_engine(
-    DATABASE_URL,
-    echo=False,
+    settings.DATABASE_URL,
+    echo=settings.DEBUG,
 )
 
 #SessionLocal: responsável por criar sessões para operações no banco;
