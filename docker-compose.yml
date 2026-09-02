@@ -4,13 +4,18 @@ services:
     container_name: cortechx_db
     restart: unless-stopped
     env_file:
-      - .env
+      - path: ./backend/.env
+        required: false
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-cortechx_meeting}
     ports:
       - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -22,7 +27,11 @@ services:
     container_name: cortechx_backend
     restart: unless-stopped
     env_file:
-      - .env
+      - path: ./backend/.env
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://postgres:postgres@db:5432/cortechx_meeting}
+      APP_DEBUG: ${APP_DEBUG:-false}
     ports:
       - "8000:8000"
     volumes:

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cortechx-meeting-summarizer-backend"
 version = "0.1.0"
-description = "API para transcrição e sumarização de reuniões."
+description = "API para transcricao e sumarizacao de reunioes."
 requires-python = ">=3.12"
 dependencies = [
     "fastapi[standard]",
@@ -16,6 +16,7 @@ dependencies = [
     "alembic",
     "asyncpg",
     "psycopg[binary]",
+    "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -23,15 +24,6 @@ dev = [
     "pytest",
     "pytest-cov",
     "ruff",
-name = "cortechx-meeting-summarizer"
-version = "0.1.0"
-requires-python = ">=3.12"
-dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.30.0",
-    "asyncpg>=0.29.0",
-    "sqlalchemy[asyncio]>=2.0.0",
-    "python-dotenv>=1.0.0",
 ]
 
 [tool.setuptools.packages.find]

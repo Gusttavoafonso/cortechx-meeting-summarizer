@@ -11,7 +11,6 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 from app.core.config import settings
 from app.core.database import Base
 
-
 # Objeto de configuração do Alembic
 config = context.config
 
