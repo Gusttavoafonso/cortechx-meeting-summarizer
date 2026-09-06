@@ -86,6 +86,81 @@ Adotamos a **Opção B (Operação Separada)** em vez da transcrição síncrona
 * **Ciclo de Vida Transparente:** Permite que o frontend acompanhe com clareza o estado da reunião:
   `received` ➔ `audio_uploaded` ➔ `transcribing` ➔ `transcribed`.
 
+## Arquitetura do Processamento
+
+O pipeline foi projetado de forma modular e resiliente, separando o ciclo de vida do arquivo de áudio do motor de inteligência artificial:
+
+```mermaid
+flowchart TD
+    subgraph Client ["Cliente / Frontend"]
+        U1["1. POST /meetings/{id}/audio"]
+        U2["2. POST /meetings/{id}/transcribe"]
+    end
+
+    subgraph StoragePipeline ["Ingestão & Validação de Áudio"]
+        V1["Validação de Extensão e MIME"]
+        V2["Streaming em Chunks (Disco)"]
+        V3["Controle de Tamanho (Max 250MB)"]
+        V4[("Storage Local / Armazenamento")]
+        DB1[("Banco de Dados: AudioFile")]
+    end
+
+    subgraph STTPipeline ["Pipeline de Speech-to-Text"]
+        T1{"Provedor Configurado?"}
+        
+        subgraph GroqProvider ["Provedor Groq (Cloud / Ultra-rápido)"]
+            G1{"Tamanho > 24MB?"}
+            G2["Envio Direto ao Whisper-large-v3"]
+            G3["Particionamento com Silero VAD"]
+            G4["Fatiamento nos pontos de silêncio"]
+            G5["Transcrição paralela/sequencial dos Chunks"]
+            G6["Recombinação com Offsets Temporais"]
+        end
+
+        subgraph LocalProvider ["Provedor Faster-Whisper (Local / Offline)"]
+            L1["Model Cache Singleton (Whisper small)"]
+            L2["Silero VAD Filter Integrado"]
+            L3["Inferência CPU / GPU"]
+        end
+    end
+
+    subgraph Persistence ["Persistência de Resultados"]
+        R1[("Transcript & Segments com Timestamps")]
+        ST["Atualização de Status: transcribed"]
+    end
+
+    U1 --> V1 --> V2 --> V3 --> V4 --> DB1
+    U2 --> T1
+    T1 -- "GROQ_API_KEY presente" --> G1
+    G1 -- "Não" --> G2
+    G1 -- "Sim" --> G3 --> G4 --> G5 --> G6
+    T1 -- "Sem GROQ_API_KEY" --> L1 --> L2 --> L3
+    G2 & G6 & L3 --> R1 --> ST
+```
+
+### Componentes do Pipeline:
+
+1. **Ingestão e Validação Segura de Arquivos (`AudioStorageService`):**
+   - **Streaming em Chunks:** Gravação em blocos de 1 MB para proteger a memória RAM contra exaustão ao receber gravações pesadas.
+   - **Sanitização de Nomes:** Sanitização de caracteres de risco e limitação de comprimento do nome do arquivo (evitando estouro em sistemas de arquivos e colunas `VARCHAR`).
+   - **Controle Concorrente:** Bloqueio contra re-upload ou deleção enquanto o arquivo estiver em processo ativo de transcrição (`409 Conflict`).
+
+2. **Detecção de Atividade de Voz (VAD - Silero VAD):**
+   - Elimina trechos longos de silêncio, ruídos de fundo e respirações antes de enviar o áudio ao motor neural.
+   - Identifica os pontos exatos de pausas naturais na fala para guiar o fatiamento do áudio.
+
+3. **Particionamento de Áudio para API Cloud (*Audio Chunking*):**
+   - APIs de nuvem como a Groq impõem um limite estrito de **25 MB por requisição HTTP**.
+   - Arquivos que ultrapassam o teto seguro de 24 MB são automaticamente particionados em janelas temporais baseadas nos silêncios detectados pelo VAD.
+   - Cada parte é transcrita individualmente e o motor realiza a **recombinação e ajuste de deslocamento temporal (*offset math*)**, garantindo timestamps contínuos e sem perda de contexto entre as falas.
+
+4. **Gerenciamento Eficiente de Modelos Locais (`faster-whisper`):**
+   - Implementa padrão **Singleton (`_MODEL_CACHE`)** para reaproveitar os pesos carregados do modelo Whisper na memória, reduzindo o tempo de inicialização em transcrições consecutivas.
+
+5. **Persistência Estruturada (`TranscriptRepository`):**
+   - Armazena a transcrição bruta completa unificada.
+   - Salva cada fala fragmentada na tabela `transcript_segments` com metadados de tempo (`start_time`, `end_time`), facilitando as futuras etapas de diarização de locutores e sumarização com LLMs.
+
 
 
 ## Organização do backend
