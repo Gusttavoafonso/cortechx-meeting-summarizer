@@ -214,7 +214,9 @@ def test_get_audio_metadata_not_found(client: TestClient) -> None:
     assert "áudio não encontrado" in response.json()["detail"].lower()
 
 
-def test_upload_audio_replace_existing(client: TestClient) -> None:
+def test_upload_audio_replace_existing(
+    client: TestClient, cleanup_test_storage: Path
+) -> None:
     meeting_resp = client.post("/meetings", json={"title": "Demo"})
     meeting_id = meeting_resp.json()["id"]
 
@@ -232,6 +234,32 @@ def test_upload_audio_replace_existing(client: TestClient) -> None:
     assert resp2.status_code == 201
     assert resp2.json()["original_filename"] == "v2.mp3"
     assert resp2.json()["file_size_bytes"] == len(b"audio-v2-bytes-updated")
+
+    # Verifica que o arquivo antigo foi removido e resta apenas
+    # 1 arquivo na pasta da reunião
+    meeting_dir = cleanup_test_storage / str(meeting_id)
+    saved_files = list(meeting_dir.glob("*.mp3"))
+    assert len(saved_files) == 1
+    assert saved_files[0].read_bytes() == b"audio-v2-bytes-updated"
+
+
+def test_storage_service_helper_methods(tmp_path: Path) -> None:
+    service = AudioStorageService(base_storage_path=tmp_path)
+    sample_file = tmp_path / "sample.mp3"
+    sample_file.write_bytes(b"hello audio")
+
+    # get_file_path
+    resolved_path = service.get_file_path(str(sample_file))
+    assert resolved_path == sample_file
+
+    # file_exists
+    assert service.file_exists(str(sample_file)) is True
+    assert service.file_exists(str(tmp_path / "non_existent.mp3")) is False
+
+    # delete_file
+    assert service.delete_file(str(sample_file)) is True
+    assert service.file_exists(str(sample_file)) is False
+    assert service.delete_file(str(sample_file)) is False
 
 
 def test_upload_audio_without_extension(client: TestClient) -> None:

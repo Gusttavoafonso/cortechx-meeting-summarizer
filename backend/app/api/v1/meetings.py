@@ -104,6 +104,11 @@ def upload_audio(
             detail=f"Reunião com ID {meeting_id} não encontrada.",
         )
 
+    # Remove áudio anterior do disco caso já exista para evitar arquivos órfãos
+    existing_audio = audio_repo.get_by_meeting_id(meeting_id)
+    if existing_audio and existing_audio.file_path:
+        storage_service.delete_file(existing_audio.file_path)
+
     saved_filename, relative_path, total_bytes = storage_service.save_audio_file(
         meeting_id=meeting_id,
         file=file,

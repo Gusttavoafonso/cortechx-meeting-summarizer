@@ -40,6 +40,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - audio_storage:/app/storage
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       db:
@@ -47,3 +48,4 @@ services:
 
 volumes:
   postgres_data:
+  audio_storage:

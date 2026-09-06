@@ -1,5 +1,6 @@
 import re
 import uuid
+from abc import ABC, abstractmethod
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile, status
@@ -7,7 +8,31 @@ from fastapi import HTTPException, UploadFile, status
 from app.core.config import BACKEND_DIR, settings
 
 
-class AudioStorageService:
+class BaseAudioStorage(ABC):
+    @abstractmethod
+    def save_audio_file(
+        self, meeting_id: int, file: UploadFile
+    ) -> tuple[str, str, int]:
+        """Salva o arquivo de áudio e retorna metadados do arquivo gravado."""
+        pass
+
+    @abstractmethod
+    def get_file_path(self, relative_path: str) -> Path:
+        """Resolve e retorna o caminho absoluto do arquivo para o pipeline."""
+        pass
+
+    @abstractmethod
+    def file_exists(self, relative_path: str) -> bool:
+        """Verifica se o arquivo existe no armazenamento."""
+        pass
+
+    @abstractmethod
+    def delete_file(self, relative_path: str) -> bool:
+        """Exclui o arquivo do armazenamento se existir."""
+        pass
+
+
+class AudioStorageService(BaseAudioStorage):
     CHUNK_SIZE = 64 * 1024  # 64 KB
 
     def __init__(
@@ -83,6 +108,22 @@ class AudioStorageService:
                 )
 
         return ext
+
+    def get_file_path(self, relative_path: str) -> Path:
+        path = Path(relative_path)
+        if path.is_absolute():
+            return path
+        return BACKEND_DIR / relative_path
+
+    def file_exists(self, relative_path: str) -> bool:
+        return self.get_file_path(relative_path).is_file()
+
+    def delete_file(self, relative_path: str) -> bool:
+        path = self.get_file_path(relative_path)
+        if path.is_file():
+            path.unlink()
+            return True
+        return False
 
     def save_audio_file(
         self, meeting_id: int, file: UploadFile
