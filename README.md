@@ -40,7 +40,16 @@ python -m pytest
 A API ficará disponível em `http://127.0.0.1:8000`. Verifique o status em
 `http://127.0.0.1:8000/health`.
 
- ## Organização do backend
+## Upload de Áudio e Formatos Suportados
+
+O endpoint `POST /meetings/{meeting_id}/audio` recebe gravações de reuniões via `multipart/form-data`.
+
+* **Formatos / Extensões Suportadas:** `.mp3`, `.wav`, `.m4a`, `.mp4`, `.webm`.
+* **MIME Types Aceitos:** `audio/mpeg`, `audio/wav`, `audio/x-wav`, `audio/mp4`, `audio/x-m4a`, `audio/webm`, `video/mp4`, `video/webm`.
+* **Tamanho Máximo Padrão:** `250 MB` (configurável via variável de ambiente `MAX_AUDIO_SIZE_MB`).
+* **Validações:** Rejeição imediata de arquivos vazios (0 bytes), arquivos com formatos não suportados e identificadores de reunião inexistentes ou inválidos.
+
+## Organização do backend
 
 ```text
 backend/

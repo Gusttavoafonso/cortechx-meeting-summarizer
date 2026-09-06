@@ -99,6 +99,35 @@ def test_upload_audio_meeting_not_found(client: TestClient) -> None:
     assert "não encontrada" in response.json()["detail"].lower()
 
 
+def test_upload_audio_invalid_meeting_id_negative(client: TestClient) -> None:
+    files = {
+        "file": ("sample.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg"),
+    }
+    response = client.post("/meetings/-1/audio", files=files)
+
+    assert response.status_code == 400
+    assert "inválido" in response.json()["detail"].lower()
+
+
+def test_upload_audio_invalid_meeting_id_zero(client: TestClient) -> None:
+    files = {
+        "file": ("sample.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg"),
+    }
+    response = client.post("/meetings/0/audio", files=files)
+
+    assert response.status_code == 400
+    assert "inválido" in response.json()["detail"].lower()
+
+
+def test_upload_audio_invalid_meeting_id_string(client: TestClient) -> None:
+    files = {
+        "file": ("sample.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg"),
+    }
+    response = client.post("/meetings/invalid_id/audio", files=files)
+
+    assert response.status_code == 422
+
+
 def test_upload_audio_empty_file(client: TestClient) -> None:
     meeting_resp = client.post("/meetings", json={"title": "Daily"})
     meeting_id = meeting_resp.json()["id"]
@@ -203,3 +232,42 @@ def test_upload_audio_replace_existing(client: TestClient) -> None:
     assert resp2.status_code == 201
     assert resp2.json()["original_filename"] == "v2.mp3"
     assert resp2.json()["file_size_bytes"] == len(b"audio-v2-bytes-updated")
+
+
+def test_upload_audio_without_extension(client: TestClient) -> None:
+    meeting_resp = client.post("/meetings", json={"title": "Demo"})
+    meeting_id = meeting_resp.json()["id"]
+
+    files = {
+        "file": ("recording", io.BytesIO(b"content"), "audio/mpeg"),
+    }
+    response = client.post(f"/meetings/{meeting_id}/audio", files=files)
+    assert response.status_code == 400
+    assert "não possui extensão" in response.json()["detail"].lower()
+
+
+
+@pytest.mark.parametrize(
+    "filename,content_type",
+    [
+        ("audio.mp3", "audio/mpeg"),
+        ("audio.wav", "audio/wav"),
+        ("audio.m4a", "audio/m4a"),
+        ("video.mp4", "video/mp4"),
+        ("video.webm", "video/webm"),
+    ],
+)
+def test_upload_audio_all_supported_formats(
+    client: TestClient, filename: str, content_type: str
+) -> None:
+    meeting_resp = client.post("/meetings", json={"title": f"Format Test {filename}"})
+    meeting_id = meeting_resp.json()["id"]
+
+    files = {
+        "file": (filename, io.BytesIO(b"valid-sample-binary-data"), content_type),
+    }
+    response = client.post(f"/meetings/{meeting_id}/audio", files=files)
+    assert response.status_code == 201
+    data = response.json()
+    assert data["original_filename"] == filename
+    assert data["content_type"] == content_type

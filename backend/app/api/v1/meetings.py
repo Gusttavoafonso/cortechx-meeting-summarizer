@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_session
 from app.repositories.audio_repository import AudioRepository
 from app.repositories.meeting_repository import MeetingRepository
@@ -21,6 +22,18 @@ def get_audio_repository(db: Session = Depends(get_session)) -> AudioRepository:
 
 def get_audio_storage_service() -> AudioStorageService:
     return AudioStorageService()
+
+
+def validate_meeting_id(meeting_id: int) -> int:
+    if meeting_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Identificador de reunião inválido. O ID deve ser um "
+                "número inteiro positivo."
+            ),
+        )
+    return meeting_id
 
 
 @router.post(
@@ -46,6 +59,7 @@ def get_meeting(
     meeting_id: int,
     meeting_repo: MeetingRepository = Depends(get_meeting_repository),
 ) -> MeetingResponse:
+    validate_meeting_id(meeting_id)
     meeting = meeting_repo.get_by_id(meeting_id)
     if not meeting:
         raise HTTPException(
@@ -60,6 +74,20 @@ def get_meeting(
     response_model=AudioUploadResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Upload de áudio da reunião",
+    description=(
+        "Recebe uma gravação de áudio ou vídeo compatível associada a uma "
+        "reunião existente.\n\n"
+        "### Regras de Validação:\n"
+        "- **Formatos aceitos:** "
+        f"{', '.join(sorted(settings.ALLOWED_AUDIO_EXTENSIONS))}.\n"
+        "- **MIME types permitidos:** `audio/mpeg`, `audio/wav`, `audio/mp4`, "
+        "`audio/webm`, `video/mp4`, etc.\n"
+        f"- **Tamanho máximo:** {settings.MAX_AUDIO_SIZE_MB} MB "
+        "(rejeita com HTTP 413 se exceder).\n"
+        "- **Arquivo vazio:** Arquivos com 0 bytes são rejeitados (HTTP 400).\n"
+        "- **Reunião:** O identificador deve ser um inteiro positivo e existir no "
+        "banco (HTTP 400 / 404)."
+    ),
 )
 def upload_audio(
     meeting_id: int,
@@ -68,6 +96,7 @@ def upload_audio(
     audio_repo: AudioRepository = Depends(get_audio_repository),
     storage_service: AudioStorageService = Depends(get_audio_storage_service),
 ) -> AudioUploadResponse:
+    validate_meeting_id(meeting_id)
     meeting = meeting_repo.get_by_id(meeting_id)
     if not meeting:
         raise HTTPException(
@@ -112,6 +141,7 @@ def get_audio_metadata(
     meeting_repo: MeetingRepository = Depends(get_meeting_repository),
     audio_repo: AudioRepository = Depends(get_audio_repository),
 ) -> AudioUploadResponse:
+    validate_meeting_id(meeting_id)
     meeting = meeting_repo.get_by_id(meeting_id)
     if not meeting:
         raise HTTPException(

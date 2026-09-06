@@ -31,7 +31,20 @@ class AudioStorageService:
                 detail="Nome de arquivo não informado ou inválido.",
             )
 
-        ext = Path(file.filename).suffix.lower()
+        name = Path(file.filename).name.strip()
+        if not name or name in (".", ".."):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Nome de arquivo não informado ou inválido.",
+            )
+
+        ext = Path(name).suffix.lower()
+        if not ext:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="O arquivo de áudio enviado não possui extensão.",
+            )
+
         if ext not in settings.ALLOWED_AUDIO_EXTENSIONS:
             allowed = ", ".join(sorted(settings.ALLOWED_AUDIO_EXTENSIONS))
             raise HTTPException(
@@ -52,6 +65,22 @@ class AudioStorageService:
                     f"Tipos permitidos: {allowed_mimes}."
                 ),
             )
+
+        # Verificação antecipada de tamanho se o client já enviou no header
+        if file.size is not None:
+            if file.size == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="O arquivo de áudio enviado está vazio (0 bytes).",
+                )
+            if file.size > self.max_bytes:
+                raise HTTPException(
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    detail=(
+                        "Tamanho do arquivo excede o limite máximo "
+                        f"permitido de {self.max_size_mb} MB."
+                    ),
+                )
 
         return ext
 
