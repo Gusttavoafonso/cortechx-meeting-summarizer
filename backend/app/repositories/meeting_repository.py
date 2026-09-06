@@ -1,5 +1,5 @@
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.meeting import Meeting
 
@@ -9,7 +9,14 @@ class MeetingRepository:
         self.db = db
 
     def get_by_id(self, meeting_id: int) -> Meeting | None:
-        statement = select(Meeting).where(Meeting.id == meeting_id)
+        statement = (
+            select(Meeting)
+            .where(Meeting.id == meeting_id)
+            .options(
+                selectinload(Meeting.audio),
+                selectinload(Meeting.transcript),
+            )
+        )
         return self.db.scalars(statement).first()
 
     def create(self, title: str, status: str = "received") -> Meeting:

@@ -5,9 +5,15 @@ from app.core.config import settings
 from app.core.database import get_session
 from app.repositories.audio_repository import AudioRepository
 from app.repositories.meeting_repository import MeetingRepository
+from app.repositories.transcript_repository import TranscriptRepository
 from app.schemas.audio import AudioUploadResponse
 from app.schemas.meeting import MeetingCreate, MeetingResponse
+from app.schemas.transcription import TranscriptResponse
 from app.services.audio_storage import AudioStorageService
+from app.services.transcription import (
+    BaseSpeechToTextService,
+    get_speech_to_text_service,
+)
 
 router = APIRouter()
 
@@ -20,8 +26,18 @@ def get_audio_repository(db: Session = Depends(get_session)) -> AudioRepository:
     return AudioRepository(db)
 
 
+def get_transcript_repository(
+    db: Session = Depends(get_session),
+) -> TranscriptRepository:
+    return TranscriptRepository(db)
+
+
 def get_audio_storage_service() -> AudioStorageService:
     return AudioStorageService()
+
+
+def get_transcription_service() -> BaseSpeechToTextService:
+    return get_speech_to_text_service()
 
 
 def validate_meeting_id(meeting_id: int) -> int:
@@ -170,3 +186,94 @@ def get_audio_metadata(
         file_path=audio_record.file_path,
         uploaded_at=audio_record.created_at,
     )
+
+
+@router.post(
+    "/{meeting_id}/transcribe",
+    response_model=TranscriptResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Executar transcrição do áudio da reunião",
+    description=(
+        "Inicia o pipeline de transcrição do áudio associado à reunião via "
+        "Speech-to-Text (local via faster-whisper com Silero VAD ou Groq via nuvem)."
+    ),
+)
+def transcribe_meeting(
+    meeting_id: int,
+    meeting_repo: MeetingRepository = Depends(get_meeting_repository),
+    audio_repo: AudioRepository = Depends(get_audio_repository),
+    transcript_repo: TranscriptRepository = Depends(get_transcript_repository),
+    storage_service: AudioStorageService = Depends(get_audio_storage_service),
+    stt_service: BaseSpeechToTextService = Depends(get_transcription_service),
+) -> TranscriptResponse:
+    validate_meeting_id(meeting_id)
+    meeting = meeting_repo.get_by_id(meeting_id)
+    if not meeting:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reunião com ID {meeting_id} não encontrada.",
+        )
+
+    audio_record = audio_repo.get_by_meeting_id(meeting_id)
+    if not audio_record:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Reunião com ID {meeting_id} não possui áudio associado "
+                "para transcrição."
+            ),
+        )
+
+    if not storage_service.file_exists(audio_record.file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Arquivo de áudio não encontrado no armazenamento.",
+        )
+
+    audio_file_path = storage_service.get_file_path(audio_record.file_path)
+
+    # Atualiza status para transcrevendo
+    meeting_repo.update_status(meeting, status="transcribing")
+
+    # Executa transcrição
+    result = stt_service.transcribe(audio_file_path, language="pt")
+
+    # Persiste transcrição e segmentos
+    transcript = transcript_repo.save_transcript(
+        meeting_id=meeting_id,
+        content=result.text,
+        segments=result.segments,
+    )
+
+    # Atualiza status para transcrito
+    meeting_repo.update_status(meeting, status="transcribed")
+
+    return TranscriptResponse.model_validate(transcript)
+
+
+@router.get(
+    "/{meeting_id}/transcript",
+    response_model=TranscriptResponse,
+    summary="Obter transcrição da reunião",
+)
+def get_meeting_transcript(
+    meeting_id: int,
+    meeting_repo: MeetingRepository = Depends(get_meeting_repository),
+    transcript_repo: TranscriptRepository = Depends(get_transcript_repository),
+) -> TranscriptResponse:
+    validate_meeting_id(meeting_id)
+    meeting = meeting_repo.get_by_id(meeting_id)
+    if not meeting:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reunião com ID {meeting_id} não encontrada.",
+        )
+
+    transcript = transcript_repo.get_by_meeting_id(meeting_id)
+    if not transcript:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Transcrição não encontrada para a reunião com ID {meeting_id}.",
+        )
+
+    return TranscriptResponse.model_validate(transcript)

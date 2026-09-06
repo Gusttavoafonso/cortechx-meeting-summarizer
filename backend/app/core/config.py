@@ -1,7 +1,8 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
-from pydantic import Field, HttpUrl, SecretStr
+from pydantic import Field, HttpUrl, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -40,11 +41,35 @@ class Settings(BaseSettings):
         "video/webm",
     }
 
+    groq_api_key: SecretStr | None = None
     openai_api_key: SecretStr | None = None
     gemini_api_key: SecretStr | None = None
     notion_token: SecretStr | None = None
     notion_database_id: str | None = None
     discord_webhook_url: HttpUrl | None = None
+
+    WHISPER_MODEL_SIZE: str = Field(
+        default="small", validation_alias="WHISPER_MODEL_SIZE"
+    )
+    WHISPER_DEVICE: str = Field(default="auto", validation_alias="WHISPER_DEVICE")
+    WHISPER_COMPUTE_TYPE: str = Field(
+        default="auto", validation_alias="WHISPER_COMPUTE_TYPE"
+    )
+
+    @field_validator(
+        "discord_webhook_url",
+        "groq_api_key",
+        "openai_api_key",
+        "gemini_api_key",
+        "notion_token",
+        "notion_database_id",
+        mode="before",
+    )
+    @classmethod
+    def empty_str_to_none(cls, v: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
 
     model_config = SettingsConfigDict(
         env_file=(PROJECT_DIR / ".env", BACKEND_DIR / ".env", ".env"),
