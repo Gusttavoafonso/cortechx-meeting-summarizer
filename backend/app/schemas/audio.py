@@ -13,4 +13,3 @@ class AudioUploadResponse(BaseModel):
     file_size_bytes: int
     file_path: str
     uploaded_at: datetime = Field(validation_alias="created_at")
-

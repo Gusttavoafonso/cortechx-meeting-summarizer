@@ -56,6 +56,16 @@ class Settings(BaseSettings):
         default="auto", validation_alias="WHISPER_COMPUTE_TYPE"
     )
 
+    @field_validator("AUDIO_STORAGE_PATH", mode="before")
+    @classmethod
+    def resolve_storage_path(cls, v: Any) -> Path:
+        if v is not None:
+            path = Path(v)
+            if not path.is_absolute():
+                return BACKEND_DIR / path
+            return path
+        return BACKEND_DIR / "storage" / "meetings"
+
     @field_validator(
         "discord_webhook_url",
         "groq_api_key",

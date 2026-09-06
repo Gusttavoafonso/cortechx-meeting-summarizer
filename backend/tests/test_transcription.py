@@ -296,3 +296,182 @@ def test_groq_whisper_service_missing_credentials() -> None:
 
     with pytest.raises(ValueError, match="Chave de API da Groq ausente ou inválida"):
         GroqWhisperService(api_key="   ")
+
+
+def test_transcribe_while_transcribing_conflict(client: TestClient) -> None:
+    meeting_resp = client.post("/meetings", json={"title": "Reunião Concorrente"})
+    meeting_id = meeting_resp.json()["id"]
+
+    files = {"file": ("audio.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg")}
+    client.post(f"/meetings/{meeting_id}/audio", files=files)
+
+    # Força status para transcribing
+    from app.core.database import get_session
+    from app.repositories.meeting_repository import MeetingRepository
+
+    db = next(client.app.dependency_overrides[get_session]())
+    meeting_repo = MeetingRepository(db)
+    meeting = meeting_repo.get_by_id(meeting_id)
+    meeting_repo.update_status(meeting, status="transcribing")
+
+    # Segunda tentativa deve ser bloqueada
+    response = client.post(f"/meetings/{meeting_id}/transcribe")
+    assert response.status_code == 409
+    assert "já está em processo de transcrição" in response.json()["detail"].lower()
+
+
+def test_transcribe_corrupt_audio_file(client: TestClient) -> None:
+    meeting_resp = client.post("/meetings", json={"title": "Reunião Áudio Corrompido"})
+    meeting_id = meeting_resp.json()["id"]
+
+    files = {"file": ("corrupt.mp3", io.BytesIO(b"corrupted-bytes"), "audio/mpeg")}
+    client.post(f"/meetings/{meeting_id}/audio", files=files)
+
+    class CorruptDecodingSTT(MockSpeechToTextService):
+        def transcribe(self, audio_path, language="pt"):
+            raise RuntimeError(
+                "Invalid data found when processing input (InvalidDataError)"
+            )
+
+    app.dependency_overrides[get_transcription_service] = CorruptDecodingSTT
+
+    response = client.post(f"/meetings/{meeting_id}/transcribe")
+    assert response.status_code == 422
+    assert "corrompido ou formato ilegível" in response.json()["detail"].lower()
+
+
+def test_groq_whisper_preserves_falsy_zero_timestamp() -> None:
+    class MockSegment:
+        start = 0.0
+        end = 3.5
+        text = "Início da reunião."
+
+    class MockResponse:
+        text = "Início da reunião."
+        segments = [MockSegment()]
+        duration = 3.5
+        language = "pt"
+
+    service = GroqWhisperService(api_key="gsk_valid_key")
+    text, segments, lang, dur = service._parse_groq_response(MockResponse())
+
+    assert len(segments) == 1
+    assert segments[0].start == 0.0
+    assert segments[0].end == 3.5
+    assert segments[0].text == "Início da reunião."
+    assert dur == 3.5
+
+
+def test_groq_whisper_chunking_on_large_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import numpy as np
+
+    service = GroqWhisperService(api_key="gsk_valid_key")
+
+    # Cria arquivo fictício de áudio
+    large_audio_file = tmp_path / "large_recording.mp3"
+    large_audio_file.write_bytes(b"A" * 1024)
+
+    # Mock decode_audio para simular 25 minutos de áudio (1500 segundos)
+    sample_rate = 16000
+    total_samples = 1500 * sample_rate
+    fake_audio_array = np.zeros(total_samples, dtype=np.float32)
+
+    import faster_whisper.audio
+
+    monkeypatch.setattr(
+        faster_whisper.audio,
+        "decode_audio",
+        lambda *args, **kwargs: fake_audio_array,
+    )
+
+    # Mock do cliente Groq para simular transcrição de cada chunk
+    from types import SimpleNamespace
+
+    call_records: list[str] = []
+
+    class MockGroqAudioTranscriptions:
+        def create(self, file, model, response_format, language):
+            call_records.append(file[0])
+            return SimpleNamespace(
+                text=f"Texto do chunk {file[0]}",
+                segments=[
+                    SimpleNamespace(
+                        start=1.0, end=5.0, text=f"Texto do chunk {file[0]}"
+                    )
+                ],
+                duration=5.0,
+                language=language,
+            )
+
+    class MockGroqAudio:
+        transcriptions = MockGroqAudioTranscriptions()
+
+    class MockGroqClient:
+        audio = MockGroqAudio()
+
+    service._client = MockGroqClient()
+
+    # Força execução do particionador
+    result = service._transcribe_chunked(large_audio_file, language="pt")
+
+    assert len(call_records) == 3  # 1500s fatiado em 600s + 600s + 300s = 3 chunks
+    assert len(result.segments) == 3
+    # Verifica que o segundo chunk teve o offset aplicado
+    assert result.segments[1].start == 601.0
+    assert result.duration == 1500.0
+
+
+def test_faster_whisper_model_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.services.transcription.faster_whisper_service import (
+        _MODEL_CACHE,
+        FasterWhisperService,
+    )
+
+    _MODEL_CACHE.clear()
+    created_instances = []
+
+    class DummyWhisperModel:
+        def __init__(self, model_size_or_path, device, compute_type):
+            created_instances.append(self)
+
+    import faster_whisper
+
+    monkeypatch.setattr(faster_whisper, "WhisperModel", DummyWhisperModel)
+
+    # Primeira chamada instancia
+    s1 = FasterWhisperService(model_size="small")
+    m1 = s1._get_model()
+
+    # Segunda chamada com outra instância de serviço aproveita o cache
+    s2 = FasterWhisperService(model_size="small")
+    m2 = s2._get_model()
+
+    assert m1 is m2
+    assert len(created_instances) == 1
+
+
+def test_meeting_repository_eager_loads_transcript_segments(client: TestClient) -> None:
+    from app.core.database import get_session
+    from app.repositories.meeting_repository import MeetingRepository
+    from app.repositories.transcript_repository import TranscriptRepository
+    from app.services.transcription.base import SegmentData
+
+    db = next(client.app.dependency_overrides[get_session]())
+    meeting_repo = MeetingRepository(db)
+    transcript_repo = TranscriptRepository(db)
+
+    m = meeting_repo.create(title="Reunião Teste Eager")
+    transcript_repo.save_transcript(
+        meeting_id=m.id,
+        content="Conteúdo",
+        segments=[SegmentData(start=0.0, end=1.0, text="Seg 1")],
+    )
+
+    loaded_meeting = meeting_repo.get_by_id(m.id)
+    assert loaded_meeting is not None
+    assert loaded_meeting.transcript is not None
+    # Verifica que segments foram carregados e estão acessíveis
+    assert len(loaded_meeting.transcript.segments) == 1
+    assert loaded_meeting.transcript.segments[0].text == "Seg 1"

@@ -21,13 +21,19 @@ class AudioRepository:
         content_type: str,
         file_size_bytes: int,
     ) -> AudioFile:
+        from datetime import datetime, timezone
+
+        safe_original = original_filename[:255]
+        safe_filename = filename[:255]
+
         existing = self.get_by_meeting_id(meeting_id)
         if existing:
-            existing.original_filename = original_filename
-            existing.filename = filename
+            existing.original_filename = safe_original
+            existing.filename = safe_filename
             existing.file_path = file_path
             existing.content_type = content_type
             existing.file_size_bytes = file_size_bytes
+            existing.created_at = datetime.now(timezone.utc)
             self.db.add(existing)
             self.db.commit()
             self.db.refresh(existing)
@@ -35,8 +41,8 @@ class AudioRepository:
 
         audio_file = AudioFile(
             meeting_id=meeting_id,
-            original_filename=original_filename,
-            filename=filename,
+            original_filename=safe_original,
+            filename=safe_filename,
             file_path=file_path,
             content_type=content_type,
             file_size_bytes=file_size_bytes,

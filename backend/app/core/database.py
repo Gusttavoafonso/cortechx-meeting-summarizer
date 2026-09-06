@@ -11,14 +11,15 @@ engine = create_engine(
     echo=settings.DEBUG,
 )
 
-#SessionLocal: responsável por criar sessões para operações no banco;
+# SessionLocal: responsável por criar sessões para operações no banco;
 SessionLocal = sessionmaker(
     bind=engine,
     autoflush=False,
     autocommit=False,
 )
 
-#Base: classe base usada pelos models.
+
+# Base: classe base usada pelos models.
 class Base(DeclarativeBase):
     pass
 

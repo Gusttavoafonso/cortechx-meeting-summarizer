@@ -12,7 +12,7 @@ class BaseAudioStorage(ABC):
     @abstractmethod
     def save_audio_file(
         self, meeting_id: int, file: UploadFile
-    ) -> tuple[str, str, int]:
+    ) -> tuple[str, str, int, str]:
         """Salva o arquivo de áudio e retorna metadados do arquivo gravado."""
         pass
 
@@ -38,7 +38,10 @@ class AudioStorageService(BaseAudioStorage):
     def __init__(
         self, base_storage_path: Path | None = None, max_size_mb: int | None = None
     ) -> None:
-        self.base_storage_path = base_storage_path or settings.AUDIO_STORAGE_PATH
+        raw_path = base_storage_path or settings.AUDIO_STORAGE_PATH
+        self.base_storage_path = (
+            raw_path if raw_path.is_absolute() else (BACKEND_DIR / raw_path)
+        ).resolve()
         self.max_size_mb = (
             max_size_mb if max_size_mb is not None else settings.MAX_AUDIO_SIZE_MB
         )
@@ -47,9 +50,12 @@ class AudioStorageService(BaseAudioStorage):
     def sanitize_filename(self, filename: str) -> str:
         name = Path(filename).name
         sanitized = re.sub(r"[^\w\-.]", "_", name)
-        return sanitized or "audio"
+        sanitized = sanitized or "audio"
+        stem = Path(sanitized).stem[:180]
+        suffix = Path(sanitized).suffix
+        return f"{stem}{suffix}" if stem else sanitized
 
-    def validate_file_metadata(self, file: UploadFile) -> str:
+    def validate_file_metadata(self, file: UploadFile) -> tuple[str, str]:
         if not file.filename or not file.filename.strip():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -81,7 +87,17 @@ class AudioStorageService(BaseAudioStorage):
             )
 
         content_type = (file.content_type or "").lower().strip()
-        if content_type and content_type not in settings.ALLOWED_AUDIO_MIME_TYPES:
+        if not content_type:
+            inferred_types = {
+                ".mp3": "audio/mpeg",
+                ".wav": "audio/wav",
+                ".m4a": "audio/mp4",
+                ".mp4": "video/mp4",
+                ".webm": "audio/webm",
+            }
+            content_type = inferred_types.get(ext, "")
+
+        if content_type not in settings.ALLOWED_AUDIO_MIME_TYPES:
             allowed_mimes = ", ".join(sorted(settings.ALLOWED_AUDIO_MIME_TYPES))
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -107,7 +123,7 @@ class AudioStorageService(BaseAudioStorage):
                     ),
                 )
 
-        return ext
+        return ext, content_type
 
     def get_file_path(self, relative_path: str) -> Path:
         path = Path(relative_path)
@@ -127,8 +143,8 @@ class AudioStorageService(BaseAudioStorage):
 
     def save_audio_file(
         self, meeting_id: int, file: UploadFile
-    ) -> tuple[str, str, int]:
-        self.validate_file_metadata(file)
+    ) -> tuple[str, str, int, str]:
+        ext, resolved_content_type = self.validate_file_metadata(file)
 
         meeting_dir = self.base_storage_path / str(meeting_id)
         meeting_dir.mkdir(parents=True, exist_ok=True)
@@ -195,4 +211,4 @@ class AudioStorageService(BaseAudioStorage):
             else str(destination_path)
         )
 
-        return saved_filename, relative_path, total_bytes
+        return saved_filename, relative_path, total_bytes, resolved_content_type

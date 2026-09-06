@@ -110,6 +110,7 @@ def upload_audio(
     file: UploadFile = File(...),
     meeting_repo: MeetingRepository = Depends(get_meeting_repository),
     audio_repo: AudioRepository = Depends(get_audio_repository),
+    transcript_repo: TranscriptRepository = Depends(get_transcript_repository),
     storage_service: AudioStorageService = Depends(get_audio_storage_service),
 ) -> AudioUploadResponse:
     validate_meeting_id(meeting_id)
@@ -120,26 +121,53 @@ def upload_audio(
             detail=f"Reunião com ID {meeting_id} não encontrada.",
         )
 
-    # Remove áudio anterior do disco caso já exista para evitar arquivos órfãos
+    # Impede substituição de áudio durante transcrição em andamento
+    if meeting.status == "transcribing":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Não é possível enviar ou substituir o áudio enquanto a reunião "
+                "está sendo transcrita."
+            ),
+        )
+
     existing_audio = audio_repo.get_by_meeting_id(meeting_id)
-    if existing_audio and existing_audio.file_path:
-        storage_service.delete_file(existing_audio.file_path)
+    old_file_path = existing_audio.file_path if existing_audio else None
 
-    saved_filename, relative_path, total_bytes = storage_service.save_audio_file(
-        meeting_id=meeting_id,
-        file=file,
+    # Salva o novo arquivo PRIMEIRO antes de remover o anterior
+    saved_filename, relative_path, total_bytes, resolved_content_type = (
+        storage_service.save_audio_file(
+            meeting_id=meeting_id,
+            file=file,
+        )
     )
 
-    audio_record = audio_repo.save_audio_metadata(
-        meeting_id=meeting_id,
-        original_filename=file.filename or saved_filename,
-        filename=saved_filename,
-        file_path=relative_path,
-        content_type=file.content_type or "audio/mpeg",
-        file_size_bytes=total_bytes,
-    )
+    try:
+        audio_record = audio_repo.save_audio_metadata(
+            meeting_id=meeting_id,
+            original_filename=file.filename or saved_filename,
+            filename=saved_filename,
+            file_path=relative_path,
+            content_type=resolved_content_type,
+            file_size_bytes=total_bytes,
+        )
 
-    meeting_repo.update_status(meeting, status="audio_uploaded")
+        # Se já existia transcrição para o áudio anterior, invalida/limpa
+        transcript_repo.delete_by_meeting_id(meeting_id)
+
+        meeting_repo.update_status(meeting, status="audio_uploaded")
+    except Exception as db_exc:
+        # Se a persistência falhar, remove o arquivo gravado para evitar arquivo órfão
+        storage_service.delete_file(relative_path)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao registrar metadados do áudio no banco de dados: {db_exc}",
+        )
+
+    # Exclui o arquivo antigo do disco agora que o novo arquivo
+    # e registro foram comitados com sucesso
+    if old_file_path and old_file_path != relative_path:
+        storage_service.delete_file(old_file_path)
 
     return AudioUploadResponse(
         meeting_id=meeting_id,
@@ -214,6 +242,13 @@ def transcribe_meeting(
             detail=f"Reunião com ID {meeting_id} não encontrada.",
         )
 
+    # Impede execuções concorrentes na mesma reunião
+    if meeting.status == "transcribing":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A reunião já está em processo de transcrição.",
+        )
+
     audio_record = audio_repo.get_by_meeting_id(meeting_id)
     if not audio_record:
         raise HTTPException(
@@ -247,8 +282,28 @@ def transcribe_meeting(
     # Executa transcrição com tratamento de falha no provedor de STT
     try:
         result = stt_service.transcribe(audio_file_path, language="pt")
+    except (OSError, IOError) as io_err:
+        meeting_repo.update_status(meeting, status="audio_uploaded")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro inesperado durante a leitura do arquivo de áudio: {io_err}",
+        )
     except Exception as stt_err:
         meeting_repo.update_status(meeting, status="audio_uploaded")
+        err_msg = str(stt_err).lower()
+        if any(
+            token in err_msg
+            for token in (
+                "invalid data",
+                "corrupt",
+                "could not find codec",
+                "invaliddataerror",
+            )
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"Arquivo de áudio corrompido ou formato ilegível: {stt_err}",
+            )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Falha no serviço de Speech-to-Text: {stt_err}",
@@ -264,7 +319,6 @@ def transcribe_meeting(
                 "O áudio pode conter apenas silêncio ou ser inaudível."
             ),
         )
-
 
     # Persiste transcrição e segmentos
     transcript = transcript_repo.save_transcript(

@@ -61,3 +61,12 @@ class TranscriptRepository:
         self.db.commit()
         self.db.refresh(transcript)
         return transcript
+
+    def delete_by_meeting_id(self, meeting_id: int) -> bool:
+        """Remove a transcrição de uma reunião se existir."""
+        existing = self.get_by_meeting_id(meeting_id)
+        if existing:
+            self.db.delete(existing)
+            self.db.commit()
+            return True
+        return False

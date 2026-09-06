@@ -2,6 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.meeting import Meeting
+from app.models.transcript import Transcript
 
 
 class MeetingRepository:
@@ -14,7 +15,7 @@ class MeetingRepository:
             .where(Meeting.id == meeting_id)
             .options(
                 selectinload(Meeting.audio),
-                selectinload(Meeting.transcript),
+                selectinload(Meeting.transcript).selectinload(Transcript.segments),
             )
         )
         return self.db.scalars(statement).first()

@@ -12,6 +12,10 @@ from app.services.transcription.base import (
 
 logger = logging.getLogger(__name__)
 
+# Cache de instâncias do WhisperModel para evitar recarga de modelos
+# pesados em RAM a cada requisição
+_MODEL_CACHE: dict[tuple[str, str, str], Any] = {}
+
 
 class FasterWhisperService(BaseSpeechToTextService):
     """Implementação de Speech-to-Text local utilizando faster-whisper e Silero VAD."""
@@ -29,23 +33,23 @@ class FasterWhisperService(BaseSpeechToTextService):
         self.compute_type = compute_type
         self.vad_filter = vad_filter
         self.min_silence_duration_ms = min_silence_duration_ms
-        self._model: Any = None
 
     def _get_model(self) -> Any:
-        if self._model is None:
+        cache_key = (self.model_size, self.device, self.compute_type)
+        if cache_key not in _MODEL_CACHE:
             logger.info(
                 f"Carregando modelo faster-whisper '{self.model_size}' "
                 f"(device={self.device}, compute_type={self.compute_type})..."
             )
             from faster_whisper import WhisperModel
 
-            self._model = WhisperModel(
+            _MODEL_CACHE[cache_key] = WhisperModel(
                 model_size_or_path=self.model_size,
                 device=self.device,
                 compute_type=self.compute_type,
             )
-            logger.info("Modelo faster-whisper carregado com sucesso.")
-        return self._model
+            logger.info("Modelo faster-whisper carregado e armazenado em cache.")
+        return _MODEL_CACHE[cache_key]
 
     def transcribe(
         self,
@@ -90,7 +94,9 @@ class FasterWhisperService(BaseSpeechToTextService):
                 )
 
         full_text = " ".join(text_parts)
-        duration = round(info.duration, 2) if info and info.duration else None
+        duration = (
+            round(info.duration, 2) if info and info.duration is not None else None
+        )
         detected_language = info.language if info else language
 
         logger.info(

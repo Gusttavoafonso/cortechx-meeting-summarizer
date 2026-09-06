@@ -279,7 +279,6 @@ def test_upload_audio_without_extension(client: TestClient) -> None:
     assert "não possui extensão" in response.json()["detail"].lower()
 
 
-
 @pytest.mark.parametrize(
     "filename,content_type",
     [
@@ -304,3 +303,102 @@ def test_upload_audio_all_supported_formats(
     data = response.json()
     assert data["original_filename"] == filename
     assert data["content_type"] == content_type
+
+
+def test_meeting_create_empty_or_whitespace_title(client: TestClient) -> None:
+    # Título vazio
+    resp1 = client.post("/meetings", json={"title": ""})
+    assert resp1.status_code == 422
+
+    # Título só de espaços
+    resp2 = client.post("/meetings", json={"title": "     "})
+    assert resp2.status_code == 422
+
+
+def test_upload_audio_while_transcribing_conflict(client: TestClient) -> None:
+    meeting_resp = client.post("/meetings", json={"title": "Reunião Bloqueio"})
+    meeting_id = meeting_resp.json()["id"]
+
+    # Força status da reunião para "transcribing"
+    from app.core.database import get_session
+    from app.repositories.meeting_repository import MeetingRepository
+
+    db = next(client.app.dependency_overrides[get_session]())
+    meeting_repo = MeetingRepository(db)
+    meeting = meeting_repo.get_by_id(meeting_id)
+    meeting_repo.update_status(meeting, status="transcribing")
+
+    files = {"file": ("audio.mp3", io.BytesIO(b"data"), "audio/mpeg")}
+    response = client.post(f"/meetings/{meeting_id}/audio", files=files)
+    assert response.status_code == 409
+    assert "está sendo transcrita" in response.json()["detail"].lower()
+
+
+def test_upload_audio_long_filename_truncated_safely(client: TestClient) -> None:
+    meeting_resp = client.post("/meetings", json={"title": "Reunião Nome Longo"})
+    meeting_id = meeting_resp.json()["id"]
+
+    long_filename = ("a" * 250) + ".mp3"
+    files = {"file": (long_filename, io.BytesIO(b"audio-data"), "audio/mpeg")}
+    response = client.post(f"/meetings/{meeting_id}/audio", files=files)
+    assert response.status_code == 201
+    data = response.json()
+    assert len(data["filename"]) <= 255
+    assert len(data["original_filename"]) <= 255
+
+
+def test_upload_audio_missing_content_type_inferred(client: TestClient) -> None:
+    meeting_resp = client.post("/meetings", json={"title": "Reunião Sem Content-Type"})
+    meeting_id = meeting_resp.json()["id"]
+
+    # Simula cliente enviando sem header de content-type
+    files = {"file": ("audio.wav", io.BytesIO(b"wav-data"), "")}
+    response = client.post(f"/meetings/{meeting_id}/audio", files=files)
+    assert response.status_code == 201
+    data = response.json()
+    assert data["content_type"] == "audio/wav"
+
+
+def test_upload_audio_clears_old_transcript(client: TestClient) -> None:
+    meeting_resp = client.post(
+        "/meetings", json={"title": "Reunião Re-upload Transcrição"}
+    )
+    meeting_id = meeting_resp.json()["id"]
+
+    # 1. Primeiro upload
+    files1 = {"file": ("audio1.mp3", io.BytesIO(b"audio-1"), "audio/mpeg")}
+    client.post(f"/meetings/{meeting_id}/audio", files=files1)
+
+    # 2. Cria transcrição simulada no banco
+    from app.core.database import get_session
+    from app.repositories.transcript_repository import TranscriptRepository
+    from app.services.transcription.base import SegmentData
+
+    db = next(client.app.dependency_overrides[get_session]())
+    transcript_repo = TranscriptRepository(db)
+    transcript_repo.save_transcript(
+        meeting_id=meeting_id,
+        content="Texto antigo do primeiro áudio",
+        segments=[SegmentData(start=0.0, end=2.0, text="Texto antigo")],
+    )
+
+    # Verifica que transcrição existe
+    trans_resp = client.get(f"/meetings/{meeting_id}/transcript")
+    assert trans_resp.status_code == 200
+    assert trans_resp.json()["content"] == "Texto antigo do primeiro áudio"
+
+    # 3. Faz novo upload para a mesma reunião
+    files2 = {"file": ("audio2.mp3", io.BytesIO(b"audio-2"), "audio/mpeg")}
+    upload2_resp = client.post(f"/meetings/{meeting_id}/audio", files=files2)
+    assert upload2_resp.status_code == 201
+
+    # 4. Transcrição anterior deve ter sido limpa
+    trans_check = client.get(f"/meetings/{meeting_id}/transcript")
+    assert trans_check.status_code == 404
+
+    # 5. Detalhes da reunião devem refletir áudio novo e transcript None
+    meeting_check = client.get(f"/meetings/{meeting_id}")
+    assert meeting_check.status_code == 200
+    assert meeting_check.json()["status"] == "audio_uploaded"
+    assert meeting_check.json()["audio"]["original_filename"] == "audio2.mp3"
+    assert meeting_check.json()["transcript"] is None
