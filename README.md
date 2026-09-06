@@ -75,6 +75,18 @@ O pipeline de transcrição é acionado via `POST /meetings/{meeting_id}/transcr
    ```
 > **Nota:** Se `GROQ_API_KEY` estiver vazia ou não informada, o sistema alternará automaticamente para o modo local com `faster-whisper`.
 
+### Decisão Arquitetural: Fluxo de Transcrição (Opção B — Operação Separada)
+
+Adotamos a **Opção B (Operação Separada)** em vez da transcrição síncrona acoplada ao endpoint de upload, com base nas seguintes justificativas:
+
+* **Prevenção de Timeouts HTTP:** Arquivos de reunião de 45 a 60 minutos (até 250 MB) levam alguns minutos para processar localmente em CPU. Executar o STT dentro do request de upload acarretaria erros de timeout (`HTTP 504 Gateway Timeout`) em navegadores, clientes HTTP e proxies reversos (Nginx/Cloudflare).
+* **Separação de Responsabilidades (SRP):** O endpoint `POST /meetings/{id}/audio` cuida exclusivamente de I/O de rede, validação de integridade e armazenamento em disco. O endpoint `POST /meetings/{id}/transcribe` é responsável estritamente pela inferência de IA/STT.
+* **Resiliência e Reprocessamento:** Falhas na transcrição ou troca de modelo/provedor não exigem que o usuário reenvie o arquivo de áudio. Basta invocar novamente o endpoint de transcrição.
+* **Preparação para Assincronismo Futuro:** Como o processamento assíncrono definitivo será introduzido em épico posterior, a rota dedicada `POST /transcribe` já estabelece o contrato perfeito para responder com `202 Accepted` e enfileirar jobs (Celery / Background Tasks) sem alterar o endpoint de upload.
+* **Ciclo de Vida Transparente:** Permite que o frontend acompanhe com clareza o estado da reunião:
+  `received` ➔ `audio_uploaded` ➔ `transcribing` ➔ `transcribed`.
+
+
 
 ## Organização do backend
 
@@ -82,24 +94,35 @@ O pipeline de transcrição é acionado via `POST /meetings/{meeting_id}/transcr
 backend/
 │
 ├── app/
-│   ├── main.py             # Criação da aplicação FastAPI e definição dos endpoints
+│   ├── main.py                  # Criação da aplicação FastAPI e inclusão de rotas
 │   │
 │   ├── api/
+│   │   └── v1/
+│   │       ├── health.py        # Health check da aplicação
+│   │       └── meetings.py      # Endpoints de reuniões, upload e transcrição
 │   │
 │   ├── core/
+│   │   ├── config.py            # Configurações com Pydantic Settings e variáveis de ambiente
+│   │   └── database.py          # Conexão com o banco SQLAlchemy e sessão
 │   │
-│   ├── models/
+│   ├── models/                  # Modelos SQLAlchemy (Meeting, AudioFile, Transcript, etc.)
 │   │
-│   ├── schemas/
+│   ├── repositories/            # Camada de persistência (MeetingRepository, AudioRepository, TranscriptRepository)
+│   │
+│   ├── schemas/                 # Schemas Pydantic de entrada e saída
 │   │
 │   └── services/
+│       ├── audio_storage.py     # Armazenamento e validação de arquivos de áudio
+│       └── transcription/       # Abstrações e provedores de STT (Faster-Whisper, Groq, Mock)
 │
-├── tests/
-│     ├── conftest.py       # Configurações e fixtures compartilhadas dos testes
-|     └── test_health.py    # Testes do health check e da documentação automática
-|
-├── .env.example
+├── tests/                       # Suíte de testes automatizados com pytest
+│   ├── conftest.py              # Fixtures e banco de testes SQLite em memória
+│   ├── test_audio_upload.py     # Testes de upload, streaming e validações de arquivo
+│   ├── test_transcription.py    # Testes unitários do pipeline de transcrição
+│   └── test_health.py           # Testes do health check e da documentação automática
+│
+├── .env.example                 # Modelo centralizado de variáveis de ambiente
 ├── .gitignore
-├── pyproject.toml          # Configuração do projeto, dependências e ferramentas de teste
+├── pyproject.toml               # Configuração do projeto, dependências e ferramentas de teste
 └── README.md
 ```
