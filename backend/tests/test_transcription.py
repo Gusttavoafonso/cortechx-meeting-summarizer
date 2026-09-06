@@ -44,7 +44,9 @@ def setup_test_environment(tmp_path: Path):
         shutil.rmtree(test_storage_path, ignore_errors=True)
 
 
-def test_transcribe_meeting_success(client: TestClient) -> None:
+def test_transcribe_meeting_success(client: TestClient, setup_test_environment) -> None:
+    _, mock_stt = setup_test_environment
+
     # 1. Cria reunião
     meeting_resp = client.post("/meetings", json={"title": "Reunião de Arquitetura"})
     assert meeting_resp.status_code == 201
@@ -61,8 +63,15 @@ def test_transcribe_meeting_success(client: TestClient) -> None:
     assert transcribe_resp.status_code == 200
     data = transcribe_resp.json()
 
+    # Validação da chamada ao serviço de STT
+    assert mock_stt.call_count == 1
+    assert "reuniao.mp3" in str(mock_stt.last_audio_path)
+    assert mock_stt.last_language == "pt"
+
+    # Validação do retorno da transcrição
     assert data["meeting_id"] == meeting_id
-    assert "Bom dia a todos" in data["content"]
+    assert "Bom dia a todos" in data["text"]
+    assert data["text"] == data["content"]
     assert len(data["segments"]) == 2
     assert data["segments"][0]["start_time"] == 0.0
     assert data["segments"][0]["end_time"] == 3.5
@@ -92,8 +101,8 @@ def test_transcribe_meeting_without_audio(client: TestClient) -> None:
     meeting_id = meeting_resp.json()["id"]
 
     response = client.post(f"/meetings/{meeting_id}/transcribe")
-    assert response.status_code == 400
-    assert "não possui áudio" in response.json()["detail"]
+    assert response.status_code == 404
+    assert "Arquivo de áudio não encontrado" in response.json()["detail"]
 
 
 def test_transcribe_audio_missing_on_disk(
@@ -117,6 +126,77 @@ def test_transcribe_audio_missing_on_disk(
     assert "não encontrado no armazenamento" in response.json()["detail"]
 
 
+def test_transcribe_stt_service_failure(client: TestClient) -> None:
+    meeting_resp = client.post("/meetings", json={"title": "Reunião Falha STT"})
+    meeting_id = meeting_resp.json()["id"]
+
+    files = {"file": ("audio.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg")}
+    client.post(f"/meetings/{meeting_id}/audio", files=files)
+
+    # Simula erro de API ou execução no provider de STT
+    class FailingSTTService(MockSpeechToTextService):
+        def transcribe(self, audio_path, language="pt"):
+            raise RuntimeError("Conexão interrompida com o serviço de STT")
+
+    app.dependency_overrides[get_transcription_service] = FailingSTTService
+
+    response = client.post(f"/meetings/{meeting_id}/transcribe")
+    assert response.status_code == 502
+    assert "Falha no serviço de Speech-to-Text" in response.json()["detail"]
+
+    # Valida que o status da reunião não ficou travado em "transcribing"
+    meeting_data = client.get(f"/meetings/{meeting_id}").json()
+    assert meeting_data["status"] == "audio_uploaded"
+
+
+def test_transcribe_stt_empty_response(client: TestClient) -> None:
+    meeting_resp = client.post("/meetings", json={"title": "Reunião Áudio Mudo"})
+    meeting_id = meeting_resp.json()["id"]
+
+    files = {"file": ("audio.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg")}
+    client.post(f"/meetings/{meeting_id}/audio", files=files)
+
+    # Simula retorno vazio do STT (áudio inaudível ou sem voz)
+    empty_mock = MockSpeechToTextService(
+        canned_result=TranscriptionResult(text="", segments=[])
+    )
+    app.dependency_overrides[get_transcription_service] = lambda: empty_mock
+
+    response = client.post(f"/meetings/{meeting_id}/transcribe")
+    assert response.status_code == 422
+    assert "resposta vazia" in response.json()["detail"]
+
+    # Status revertido para permitir retentativa
+    meeting_data = client.get(f"/meetings/{meeting_id}").json()
+    assert meeting_data["status"] == "audio_uploaded"
+
+
+def test_transcribe_unexpected_read_error(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    meeting_resp = client.post("/meetings", json={"title": "Reunião Erro IO"})
+    meeting_id = meeting_resp.json()["id"]
+
+    files = {"file": ("audio.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg")}
+    client.post(f"/meetings/{meeting_id}/audio", files=files)
+
+    # Simula falha de leitura I/O do disco
+    import builtins
+
+    real_open = builtins.open
+
+    def failing_open(file, *args, **kwargs):
+        if str(file).endswith(".mp3"):
+            raise OSError("Falha física de I/O no disco")
+        return real_open(file, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", failing_open)
+
+    response = client.post(f"/meetings/{meeting_id}/transcribe")
+    assert response.status_code == 500
+    assert "Erro inesperado durante a leitura" in response.json()["detail"]
+
+
 def test_get_transcript_success(client: TestClient) -> None:
     # 1. Cria, envia áudio e transcreve
     meeting_resp = client.post("/meetings", json={"title": "Reunião Teste GET"})
@@ -131,7 +211,8 @@ def test_get_transcript_success(client: TestClient) -> None:
     assert get_resp.status_code == 200
     data = get_resp.json()
     assert data["meeting_id"] == meeting_id
-    assert "Bom dia a todos" in data["content"]
+    assert "Bom dia a todos" in data["text"]
+    assert data["text"] == data["content"]
     assert len(data["segments"]) == 2
 
 
@@ -207,3 +288,11 @@ def test_speech_to_text_factory(monkeypatch: pytest.MonkeyPatch) -> None:
     service_cloud = get_speech_to_text_service()
     assert isinstance(service_cloud, GroqWhisperService)
     assert service_cloud.api_key == "gsk_fake_key_12345"
+
+
+def test_groq_whisper_service_missing_credentials() -> None:
+    with pytest.raises(ValueError, match="Chave de API da Groq ausente ou inválida"):
+        GroqWhisperService(api_key="")
+
+    with pytest.raises(ValueError, match="Chave de API da Groq ausente ou inválida"):
+        GroqWhisperService(api_key="   ")

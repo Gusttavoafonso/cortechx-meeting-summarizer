@@ -21,7 +21,12 @@ class GroqWhisperService(BaseSpeechToTextService):
         api_key: str,
         model: str = "whisper-large-v3",
     ) -> None:
-        self.api_key = api_key
+        if not api_key or not str(api_key).strip():
+            raise ValueError(
+                "Chave de API da Groq ausente ou inválida. "
+                "Configure GROQ_API_KEY no arquivo .env."
+            )
+        self.api_key = api_key.strip()
         self.model = model
         self._client: Any = None
 

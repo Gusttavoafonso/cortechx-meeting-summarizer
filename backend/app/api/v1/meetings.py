@@ -217,10 +217,9 @@ def transcribe_meeting(
     audio_record = audio_repo.get_by_meeting_id(meeting_id)
     if not audio_record:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                f"Reunião com ID {meeting_id} não possui áudio associado "
-                "para transcrição."
+                f"Arquivo de áudio não encontrado para a reunião com ID {meeting_id}."
             ),
         )
 
@@ -232,11 +231,40 @@ def transcribe_meeting(
 
     audio_file_path = storage_service.get_file_path(audio_record.file_path)
 
+    # Tratamento de erro inesperado durante leitura do arquivo
+    try:
+        with open(audio_file_path, "rb") as f:
+            f.read(1024)
+    except OSError as io_err:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(f"Erro inesperado durante a leitura do arquivo de áudio: {io_err}"),
+        )
+
     # Atualiza status para transcrevendo
     meeting_repo.update_status(meeting, status="transcribing")
 
-    # Executa transcrição
-    result = stt_service.transcribe(audio_file_path, language="pt")
+    # Executa transcrição com tratamento de falha no provedor de STT
+    try:
+        result = stt_service.transcribe(audio_file_path, language="pt")
+    except Exception as stt_err:
+        meeting_repo.update_status(meeting, status="audio_uploaded")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Falha no serviço de Speech-to-Text: {stt_err}",
+        )
+
+    # Tratamento de resposta vazia do STT (áudio mudo ou inaudível)
+    if not result.text or not result.text.strip():
+        meeting_repo.update_status(meeting, status="audio_uploaded")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "O serviço de transcrição retornou uma resposta vazia. "
+                "O áudio pode conter apenas silêncio ou ser inaudível."
+            ),
+        )
+
 
     # Persiste transcrição e segmentos
     transcript = transcript_repo.save_transcript(

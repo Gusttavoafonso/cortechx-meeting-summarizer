@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TranscriptSegmentResponse(BaseModel):
@@ -16,10 +16,16 @@ class TranscriptSegmentResponse(BaseModel):
 
 
 class TranscriptResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: int
     meeting_id: int
-    content: str
+    text: str = Field(
+        validation_alias="content",
+        description="Texto transcrito da reunião.",
+    )
+    content: str = Field(
+        description="Conteúdo textual consolidado da transcrição.",
+    )
     created_at: datetime
     segments: list[TranscriptSegmentResponse] = []

@@ -162,10 +162,30 @@ class AudioStorageService(BaseAudioStorage):
                     detail="O arquivo de áudio enviado está vazio (0 bytes).",
                 )
 
-        except Exception:
+        except HTTPException:
             if destination_path.exists():
                 destination_path.unlink()
             raise
+        except OSError as os_err:
+            if destination_path.exists():
+                destination_path.unlink()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=(
+                    "Erro inesperado durante a leitura ou gravação do "
+                    f"arquivo de áudio: {os_err}"
+                ),
+            )
+        except Exception as exc:
+            if destination_path.exists():
+                destination_path.unlink()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=(
+                    "Erro inesperado durante o processamento do "
+                    f"arquivo de áudio: {exc}"
+                ),
+            )
         finally:
             file.file.close()
 
