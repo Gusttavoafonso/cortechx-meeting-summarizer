@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -26,9 +26,19 @@ class Summary(Base):
         unique=True,
     )
 
-    content: Mapped[str] = mapped_column(
+    objective: Mapped[str | None] = mapped_column(
         Text,
-        nullable=False,
+        nullable=True,
+    )
+
+    main_ideas: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    structured_result: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
     )
 
     created_at: Mapped[datetime] = mapped_column(
