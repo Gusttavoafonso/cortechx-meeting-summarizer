@@ -31,6 +31,7 @@ def test_create_meeting(client: TestClient) -> None:
     assert data["title"] == "Reunião de Alinhamento"
     assert data["status"] == "received"
     assert "id" in data
+    assert data["audio"] is None
 
 
 def test_upload_audio_success(client: TestClient, cleanup_test_storage: Path) -> None:
@@ -61,10 +62,14 @@ def test_upload_audio_success(client: TestClient, cleanup_test_storage: Path) ->
     assert len(saved_files) == 1
     assert saved_files[0].read_bytes() == audio_content
 
-    # 4. Verifica se status da reunião foi atualizado
+    # 4. Verifica se status e metadados de áudio da reunião foram atualizados
     meeting_check = client.get(f"/meetings/{meeting_id}")
     assert meeting_check.status_code == 200
-    assert meeting_check.json()["status"] == "audio_uploaded"
+    meeting_data = meeting_check.json()
+    assert meeting_data["status"] == "audio_uploaded"
+    assert meeting_data["audio"] is not None
+    assert meeting_data["audio"]["original_filename"] == "recording.mp3"
+    assert meeting_data["audio"]["file_size_bytes"] == len(audio_content)
 
 
 def test_get_audio_metadata(client: TestClient) -> None:
