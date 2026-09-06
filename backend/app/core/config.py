@@ -14,6 +14,32 @@ class Settings(BaseSettings):
     )
     DEBUG: bool = Field(False, validation_alias="APP_DEBUG")
 
+    AUDIO_STORAGE_PATH: Path = Field(
+        default=BACKEND_DIR / "storage" / "meetings",
+        validation_alias="AUDIO_STORAGE_PATH",
+    )
+    MAX_AUDIO_SIZE_MB: int = Field(250, validation_alias="MAX_AUDIO_SIZE_MB")
+    ALLOWED_AUDIO_EXTENSIONS: set[str] = {
+        ".mp3",
+        ".wav",
+        ".m4a",
+        ".mp4",
+        ".webm",
+    }
+    ALLOWED_AUDIO_MIME_TYPES: set[str] = {
+        "audio/mpeg",
+        "audio/mp3",
+        "audio/wav",
+        "audio/x-wav",
+        "audio/wave",
+        "audio/mp4",
+        "audio/x-m4a",
+        "audio/m4a",
+        "audio/webm",
+        "video/mp4",
+        "video/webm",
+    }
+
     openai_api_key: SecretStr | None = None
     gemini_api_key: SecretStr | None = None
     notion_token: SecretStr | None = None
@@ -21,7 +47,7 @@ class Settings(BaseSettings):
     discord_webhook_url: HttpUrl | None = None
 
     model_config = SettingsConfigDict(
-        env_file=(BACKEND_DIR / ".env", PROJECT_DIR / ".env", ".env"),
+        env_file=(PROJECT_DIR / ".env", BACKEND_DIR / ".env", ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )

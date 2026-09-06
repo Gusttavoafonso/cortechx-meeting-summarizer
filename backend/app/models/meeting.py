@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.audio_file import AudioFile
     from app.models.integration_configuration import IntegrationConfiguration
     from app.models.summary import Summary
     from app.models.transcript import Transcript
@@ -44,6 +45,13 @@ class Meeting(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
+    )
+
+    audio: Mapped["AudioFile | None"] = relationship(
+        "AudioFile",
+        back_populates="meeting",
+        uselist=False,
+        cascade="all, delete-orphan",
     )
 
     transcript: Mapped["Transcript | None"] = relationship(

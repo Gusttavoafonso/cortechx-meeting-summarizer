@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String
+from sqlalchemy import BigInteger, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -12,8 +12,8 @@ if TYPE_CHECKING:
     from app.models.meeting import Meeting
 
 
-class IntegrationConfiguration(Base):
-    __tablename__ = "integration_configurations"
+class AudioFile(Base):
+    __tablename__ = "audio_files"
 
     id: Mapped[int] = mapped_column(
         primary_key=True,
@@ -23,22 +23,32 @@ class IntegrationConfiguration(Base):
     meeting_id: Mapped[int] = mapped_column(
         ForeignKey("meetings.id", ondelete="CASCADE"),
         nullable=False,
+        unique=True,
     )
 
-    platform: Mapped[str] = mapped_column(
+    original_filename: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    filename: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    file_path: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
+    )
+
+    content_type: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
     )
 
-    enabled: Mapped[bool] = mapped_column(
-        Boolean,
+    file_size_bytes: Mapped[int] = mapped_column(
+        BigInteger,
         nullable=False,
-        default=True,
-    )
-
-    configuration: Mapped[dict | None] = mapped_column(
-        JSON,
-        nullable=True,
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -49,5 +59,5 @@ class IntegrationConfiguration(Base):
 
     meeting: Mapped["Meeting"] = relationship(
         "Meeting",
-        back_populates="integration_configurations",
+        back_populates="audio",
     )

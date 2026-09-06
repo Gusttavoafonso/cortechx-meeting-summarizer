@@ -17,6 +17,7 @@ dependencies = [
     "asyncpg",
     "psycopg[binary]",
     "python-dotenv>=1.0.0",
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
