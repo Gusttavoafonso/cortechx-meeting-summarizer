@@ -27,7 +27,7 @@ class Transcript(Base):
         unique=True,
     )
 
-    content: Mapped[str] = mapped_column(
+    raw_text: Mapped[str] = mapped_column(
         Text,
         nullable=False,
     )
