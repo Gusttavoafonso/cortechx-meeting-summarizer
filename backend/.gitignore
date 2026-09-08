@@ -27,6 +27,7 @@ recordings/
 transcriptions/
 summaries/
 exports/
+storage/
 
 # Áudio e vídeo
 *.mp3
@@ -36,7 +37,8 @@ exports/
 *.webm
 
 # Modelos e caches de IA
-models/
+/models/
+!app/models/
 checkpoints/
 .cache/
 huggingface/

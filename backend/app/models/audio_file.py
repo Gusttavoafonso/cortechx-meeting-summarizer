@@ -3,18 +3,17 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.meeting import Meeting
-    from app.models.transcript_segment import TranscriptSegment
 
 
-class Transcript(Base):
-    __tablename__ = "transcripts"
+class AudioFile(Base):
+    __tablename__ = "audio_files"
 
     id: Mapped[int] = mapped_column(
         primary_key=True,
@@ -27,8 +26,28 @@ class Transcript(Base):
         unique=True,
     )
 
-    content: Mapped[str] = mapped_column(
-        Text,
+    original_filename: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    filename: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    file_path: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
+    )
+
+    content_type: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+    )
+
+    file_size_bytes: Mapped[int] = mapped_column(
+        BigInteger,
         nullable=False,
     )
 
@@ -40,11 +59,5 @@ class Transcript(Base):
 
     meeting: Mapped["Meeting"] = relationship(
         "Meeting",
-        back_populates="transcript",
-    )
-
-    segments: Mapped[list["TranscriptSegment"]] = relationship(
-        "TranscriptSegment",
-        back_populates="transcript",
-        cascade="all, delete-orphan",
+        back_populates="audio",
     )
