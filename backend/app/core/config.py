@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     notion_token: SecretStr | None = None
     notion_database_id: str | None = None
     discord_webhook_url: HttpUrl | None = None
+    huggingface_token: SecretStr | None = None
 
     model_config = SettingsConfigDict(
         env_file=(BACKEND_DIR / ".env", PROJECT_DIR / ".env", ".env"),
