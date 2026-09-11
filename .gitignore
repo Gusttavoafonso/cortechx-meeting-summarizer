@@ -7,3 +7,10 @@ venv
 __pycache__/
 *.pyc
 .env
+
+# arquivos temporarios do pytest
+.pytest_cache/
+.pytest-tmp/
+.pytest-tmp-local/
+backend/.pytest-tmp/
+backend/.pytest-tmp-local/
