@@ -6,7 +6,9 @@ from app.services.diarization import (
     DiarizationProvider,
     DiarizationSegment,
     DiarizationService,
+    PyannoteDiarizationProvider,
 )
+
 
 # define um provider falso para testes, que retorna os segmentos fornecidos ou lança um erro
 class FakeDiarizationProvider(DiarizationProvider):
@@ -26,11 +28,64 @@ class FakeDiarizationProvider(DiarizationProvider):
         return self.segments
 
 
+# representa um intervalo de fala retornado pelo Pyannote nos testes
+class FakeTurn:
+    def __init__(self, start: float, end: float) -> None:
+        self.start = start
+        self.end = end
+
+
+# simula a colecao de intervalos retornada pelo Pyannote
+class FakeAnnotation:
+    def __init__(self, tracks: list[tuple[FakeTurn, str, str]]) -> None:
+        self._tracks = tracks
+
+    def itertracks(self, *, yield_label: bool):
+        assert yield_label is True
+        yield from self._tracks
+
+
+# simula a resposta do pipeline com a diarizacao exclusiva
+class FakePyannoteOutput:
+    def __init__(self, annotation: FakeAnnotation) -> None:
+        self.exclusive_speaker_diarization = annotation
+
+
+# simula o pipeline real sem baixar nem executar o modelo
+class FakePyannotePipeline:
+    def __init__(self, output: FakePyannoteOutput) -> None:
+        self._output = output
+        self.received_path: str | None = None
+
+    def __call__(self, audio_path: str) -> FakePyannoteOutput:
+        self.received_path = audio_path
+        return self._output
+
+
 @pytest.fixture
 def audio_path(tmp_path: Path) -> Path:
     path = tmp_path / "meeting.wav"
     path.write_bytes(b"audio")
     return path
+
+
+# garante que o provider converte a resposta exclusiva do Pyannote em segmentos internos
+def test_pyannote_provider_converts_exclusive_diarization(audio_path: Path) -> None:
+    annotation = FakeAnnotation(
+        [
+            (FakeTurn(0.2, 1.5), "track_0", "speaker_a"),
+            (FakeTurn(1.8, 3.9), "track_1", "speaker_b"),
+        ]
+    )
+    pipeline = FakePyannotePipeline(FakePyannoteOutput(annotation))
+
+    result = PyannoteDiarizationProvider(pipeline=pipeline).diarize(audio_path)
+
+    assert result == [
+        DiarizationSegment("speaker_a", 0.2, 1.5),
+        DiarizationSegment("speaker_b", 1.8, 3.9),
+    ]
+    assert pipeline.received_path == str(audio_path)
 
 
 # garante que o serviço ordena os segmentos e mantém o mesmo ID para a mesma voz

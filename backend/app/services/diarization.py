@@ -4,7 +4,9 @@ import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
+
+from app.core.config import settings
 
 
 class DiarizationError(Exception):
@@ -26,6 +28,73 @@ class DiarizationProvider(ABC):
     @abstractmethod
     def diarize(self, audio_path: Path) -> Iterable[DiarizationSegment]:
         pass
+
+# Implementação do provedor de diarização usando a biblioteca Pyannote.
+# o modelo escolhido é "pyannote/speaker-diarization-community-1" 
+# e requer um token de autenticação do Hugging Face.
+class PyannoteDiarizationProvider(DiarizationProvider):
+    def __init__(
+        self,
+        token: str | None = None,
+        pipeline: Any | None = None,
+    ) -> None:
+        # token e opcional para permitir a configuracao pelo arquivo .env
+        self._token = token
+        # pipeline pode ser injetado nos testes sem carregar o modelo real
+        self._pipeline = pipeline
+
+    # executa o Pyannote e converte o resultado para segmentos internos
+    def diarize(self, audio_path: Path) -> list[DiarizationSegment]:
+        try:
+            output = self._get_pipeline()(str(audio_path))
+            # diarizacao exclusiva evita sobreposicao entre speakers
+            annotation = output.exclusive_speaker_diarization
+
+            return [
+                DiarizationSegment(
+                    speaker=str(speaker),
+                    start_time=float(turn.start),
+                    end_time=float(turn.end),
+                )
+                for turn, _, speaker in annotation.itertracks(yield_label=True)
+            ]
+        except DiarizationError:
+            raise
+        except Exception as exc:
+            raise DiarizationError("Falha ao executar o Pyannote") from exc
+
+    # carrega o modelo apenas na primeira chamada de diarizacao
+    def _get_pipeline(self) -> Any:
+        if self._pipeline is not None:
+            return self._pipeline
+
+        token = self._token or self._get_configured_token()
+        try:
+            from pyannote.audio import Pipeline
+
+            self._pipeline = Pipeline.from_pretrained(
+                "pyannote/speaker-diarization-community-1",
+                token=token,
+            )
+        except Exception as exc:
+            raise DiarizationError("Falha ao carregar o modelo do Pyannote") from exc
+
+        if self._pipeline is None:
+            raise DiarizationError("Não foi possível carregar o modelo do Pyannote")
+
+        return self._pipeline
+
+    @staticmethod
+    # busca o token configurado para baixar o modelo do Hugging Face
+    def _get_configured_token() -> str:
+        if settings.huggingface_token is None:
+            raise DiarizationError("HUGGINGFACE_TOKEN não configurado")
+
+        token = settings.huggingface_token.get_secret_value().strip()
+        if not token:
+            raise DiarizationError("HUGGINGFACE_TOKEN não configurado")
+
+        return token
 
 
 class DiarizationService:
