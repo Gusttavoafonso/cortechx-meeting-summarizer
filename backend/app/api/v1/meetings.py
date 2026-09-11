@@ -10,6 +10,11 @@ from app.schemas.audio import AudioUploadResponse
 from app.schemas.meeting import MeetingCreate, MeetingResponse
 from app.schemas.transcription import TranscriptResponse
 from app.services.audio_storage import AudioStorageService
+from app.services.diarization import (
+    DiarizationError,
+    DiarizationService,
+    PyannoteDiarizationProvider,
+)
 from app.services.transcription import (
     BaseSpeechToTextService,
     get_speech_to_text_service,
@@ -38,6 +43,10 @@ def get_audio_storage_service() -> AudioStorageService:
 
 def get_transcription_service() -> BaseSpeechToTextService:
     return get_speech_to_text_service()
+
+
+def get_diarization_service() -> DiarizationService:
+    return DiarizationService(PyannoteDiarizationProvider())
 
 
 def validate_meeting_id(meeting_id: int) -> int:
@@ -333,6 +342,76 @@ def transcribe_meeting(
     return TranscriptResponse.model_validate(transcript)
 
 
+# Rota para diarização do áudio da reunião, associando locutores aos segmentos transcritos
+@router.post(
+    "/{meeting_id}/diarize",
+    response_model=TranscriptResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Identificar locutores na transcrição da reunião",
+    description=(
+        "Executa a diarização do áudio da reunião e associa os locutores aos "
+        "segmentos já transcritos."
+    ),
+)
+def diarize_meeting(
+    meeting_id: int,
+    meeting_repo: MeetingRepository = Depends(get_meeting_repository),
+    audio_repo: AudioRepository = Depends(get_audio_repository),
+    transcript_repo: TranscriptRepository = Depends(get_transcript_repository),
+    storage_service: AudioStorageService = Depends(get_audio_storage_service),
+    diarization_service: DiarizationService = Depends(get_diarization_service),
+) -> TranscriptResponse:
+    validate_meeting_id(meeting_id)
+    meeting = meeting_repo.get_by_id(meeting_id)
+
+    # trata erros de reunião inexistente, áudio ausente ou transcrição não realizada
+    if not meeting:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reunião com ID {meeting_id} não encontrada.",
+        )
+
+    audio_record = audio_repo.get_by_meeting_id(meeting_id)
+    if not audio_record or not storage_service.file_exists(audio_record.file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Arquivo de áudio não encontrado para a reunião com ID {meeting_id}."
+            ),
+        )
+
+    transcript = transcript_repo.get_by_meeting_id(meeting_id)
+    if not transcript:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A reunião precisa ser transcrita antes da diarização.",
+        )
+
+    # trata erros de audio ausente no armazenamento ou falha no serviço de diarização
+    audio_file_path = storage_service.get_file_path(audio_record.file_path)
+    try:
+        diarization_segments = diarization_service.diarize(audio_file_path)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Arquivo de áudio não encontrado no armazenamento.",
+        ) from None
+    except DiarizationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Falha no serviço de diarização: {exc}",
+        ) from exc
+
+    updated_transcript = transcript_repo.apply_diarization(
+        transcript,
+        diarization_segments,
+    )
+
+    # retorna a transcrição atualizada com locutores associados aos segmentos
+    return TranscriptResponse.model_validate(updated_transcript)
+
+
+# rota para obter a transcrição completa da reunião, incluindo segmentos e locutores
 @router.get(
     "/{meeting_id}/transcript",
     response_model=TranscriptResponse,
@@ -345,6 +424,8 @@ def get_meeting_transcript(
 ) -> TranscriptResponse:
     validate_meeting_id(meeting_id)
     meeting = meeting_repo.get_by_id(meeting_id)
+
+    # trata erros de reunião inexistente ou transcrição não realizada
     if not meeting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

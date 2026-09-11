@@ -9,6 +9,7 @@ from app.models.transcript import Transcript
 from app.models.transcript_segment import TranscriptSegment
 
 if TYPE_CHECKING:
+    from app.services.diarization import DiarizationSegment
     from app.services.transcription.base import SegmentData
 
 
@@ -70,3 +71,47 @@ class TranscriptRepository:
             self.db.commit()
             return True
         return False
+
+    def apply_diarization(
+        self,
+        transcript: Transcript,
+        diarization_segments: list[DiarizationSegment],
+    ) -> Transcript:
+        """Associa cada segmento transcrito ao locutor com maior sobreposição."""
+        for transcript_segment in transcript.segments:
+            transcript_segment.speaker = None
+
+            if (
+                transcript_segment.start_time is None
+                or transcript_segment.end_time is None
+            ):
+                continue
+
+            best_match = max(
+                diarization_segments,
+                key=lambda diarization_segment: max(
+                    0.0,
+                    min(
+                        transcript_segment.end_time,
+                        diarization_segment.end_time,
+                    )
+                    - max(
+                        transcript_segment.start_time,
+                        diarization_segment.start_time,
+                    ),
+                ),
+                default=None,
+            )
+
+            if best_match is None:
+                continue
+
+            overlap = min(transcript_segment.end_time, best_match.end_time) - max(
+                transcript_segment.start_time, best_match.start_time
+            )
+            if overlap > 0:
+                transcript_segment.speaker = best_match.speaker
+
+        self.db.commit()
+        self.db.refresh(transcript)
+        return transcript
