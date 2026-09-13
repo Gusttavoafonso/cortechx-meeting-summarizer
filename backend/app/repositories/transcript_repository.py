@@ -4,6 +4,7 @@ import math
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.transcript import Transcript
@@ -200,6 +201,10 @@ class TranscriptRepository:
         for transcript_segment, speaker in assignments:
             transcript_segment.speaker = speaker
 
-        self.db.commit()
+        try:
+            self.db.commit()
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise
         self.db.refresh(transcript)
         return transcript

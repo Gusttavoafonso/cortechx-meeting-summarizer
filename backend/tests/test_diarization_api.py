@@ -13,6 +13,7 @@ from app.services.diarization import (
 )
 from app.services.transcription.base import SegmentData
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 
@@ -146,6 +147,45 @@ def test_diarize_meeting_preserves_speakers_when_a_segment_has_no_match(
     ] == [
         "SPEAKER_00",
         "SPEAKER_01",
+    ]
+
+
+def test_diarize_meeting_rolls_back_when_persistence_fails(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    meeting_id = create_meeting_with_audio_and_transcript(client, db_session)
+    transcript = TranscriptRepository(db_session).get_by_meeting_id(meeting_id)
+    assert transcript is not None
+    transcript.segments[0].speaker = "ORIGINAL_00"
+    transcript.segments[1].speaker = "ORIGINAL_01"
+    db_session.commit()
+
+    app.dependency_overrides[get_diarization_service] = lambda: DiarizationService(
+        FakeDiarizationProvider(
+            [
+                DiarizationSegment("host", 0.0, 2.0),
+                DiarizationSegment("guest", 2.0, 4.0),
+            ]
+        )
+    )
+
+    def failing_commit() -> None:
+        raise SQLAlchemyError("Falha simulada no banco")
+
+    monkeypatch.setattr(db_session, "commit", failing_commit)
+
+    response = client.post(f"/meetings/{meeting_id}/diarize")
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Falha ao persistir a diarização."
+    transcript_response = client.get(f"/meetings/{meeting_id}/transcript")
+    assert [
+        segment["speaker"] for segment in transcript_response.json()["segments"]
+    ] == [
+        "ORIGINAL_00",
+        "ORIGINAL_01",
     ]
 
 

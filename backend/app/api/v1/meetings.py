@@ -434,6 +434,11 @@ def diarize_meeting(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
+    except SQLAlchemyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Falha ao persistir a diarização.",
+        ) from exc
 
     # retorna a transcrição atualizada com locutores associados aos segmentos
     return TranscriptResponse.model_validate(updated_transcript)
