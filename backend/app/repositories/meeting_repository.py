@@ -27,9 +27,12 @@ class MeetingRepository:
         self.db.refresh(meeting)
         return meeting
 
-    def update_status(self, meeting: Meeting, status: str) -> Meeting:
+    def update_status(
+        self, meeting: Meeting, status: str, *, commit: bool = True
+    ) -> Meeting:
         meeting.status = status
         self.db.add(meeting)
-        self.db.commit()
-        self.db.refresh(meeting)
+        if commit:
+            self.db.commit()
+            self.db.refresh(meeting)
         return meeting

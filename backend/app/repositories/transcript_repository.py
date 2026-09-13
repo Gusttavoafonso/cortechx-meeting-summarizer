@@ -35,6 +35,8 @@ class TranscriptRepository:
         meeting_id: int,
         content: str,
         segments: list[SegmentData],
+        *,
+        commit: bool = True,
     ) -> Transcript:
         """Cria ou substitui a transcrição de uma reunião e seus segmentos."""
         existing = self.get_by_meeting_id(meeting_id)
@@ -61,8 +63,11 @@ class TranscriptRepository:
             )
             transcript.segments.append(segment_model)
 
-        self.db.commit()
-        self.db.refresh(transcript)
+        if commit:
+            self.db.commit()
+            self.db.refresh(transcript)
+        else:
+            self.db.flush()
         return transcript
 
     def delete_by_meeting_id(self, meeting_id: int) -> bool:
@@ -81,7 +86,7 @@ class TranscriptRepository:
         second_start: float,
         second_end: float,
     ) -> float:
-        """Calcula a duração da sobreposição (interseção) entre dois intervalos temporais."""
+        """Calcula a duração da interseção entre dois intervalos."""
         return max(0.0, min(first_end, second_end) - max(first_start, second_start))
 
     @staticmethod
@@ -91,7 +96,7 @@ class TranscriptRepository:
         second_start: float,
         second_end: float,
     ) -> float:
-        """Calcula a distância/gap de tempo entre dois intervalos (retorna 0.0 se houver sobreposição)."""
+        """Calcula o gap entre intervalos; retorna zero se eles se sobrepõem."""
         return max(0.0, second_start - first_end, first_start - second_end)
 
     def apply_diarization(

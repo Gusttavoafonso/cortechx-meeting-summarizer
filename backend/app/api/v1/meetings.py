@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -237,6 +238,7 @@ def get_audio_metadata(
 )
 def transcribe_meeting(
     meeting_id: int,
+    db: Session = Depends(get_session),
     meeting_repo: MeetingRepository = Depends(get_meeting_repository),
     audio_repo: AudioRepository = Depends(get_audio_repository),
     transcript_repo: TranscriptRepository = Depends(get_transcript_repository),
@@ -329,20 +331,29 @@ def transcribe_meeting(
             ),
         )
 
-    # Persiste transcrição e segmentos
-    transcript = transcript_repo.save_transcript(
-        meeting_id=meeting_id,
-        content=result.text,
-        segments=result.segments,
-    )
+    # Persiste transcrição, segmentos e status final em uma única transação.
+    try:
+        transcript = transcript_repo.save_transcript(
+            meeting_id=meeting_id,
+            content=result.text,
+            segments=result.segments,
+            commit=False,
+        )
+        meeting_repo.update_status(meeting, status="transcribed", commit=False)
+        db.commit()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        meeting_repo.update_status(meeting, status="audio_uploaded")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Falha ao persistir a transcrição.",
+        ) from exc
 
-    # Atualiza status para transcrito
-    meeting_repo.update_status(meeting, status="transcribed")
-
+    db.refresh(transcript)
     return TranscriptResponse.model_validate(transcript)
 
 
-# Rota para diarização do áudio da reunião, associando locutores aos segmentos transcritos
+# Rota de diarização do áudio da reunião.
 @router.post(
     "/{meeting_id}/diarize",
     response_model=TranscriptResponse,
