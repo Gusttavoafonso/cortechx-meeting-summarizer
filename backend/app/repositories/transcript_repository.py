@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -12,6 +13,10 @@ from app.services.diarization import DiarizationAssociationError
 if TYPE_CHECKING:
     from app.services.diarization import DiarizationSegment
     from app.services.transcription.base import SegmentData
+
+
+class InvalidTranscriptSegmentError(ValueError):
+    pass
 
 
 class TranscriptRepository:
@@ -40,6 +45,7 @@ class TranscriptRepository:
         commit: bool = True,
     ) -> Transcript:
         """Cria ou substitui a transcrição de uma reunião e seus segmentos."""
+        self._validate_segments(segments)
         existing = self.get_by_meeting_id(meeting_id)
 
         if existing is not None:
@@ -70,6 +76,37 @@ class TranscriptRepository:
         else:
             self.db.flush()
         return transcript
+
+    @staticmethod
+    def _validate_segments(segments: list[SegmentData]) -> None:
+        for segment in segments:
+            if not isinstance(segment.text, str) or not segment.text.strip():
+                raise InvalidTranscriptSegmentError(
+                    "Os segmentos da transcrição precisam conter texto."
+                )
+
+            if segment.start is None or segment.end is None:
+                raise InvalidTranscriptSegmentError(
+                    "Os segmentos da transcrição precisam conter timestamps."
+                )
+
+            try:
+                start_time = float(segment.start)
+                end_time = float(segment.end)
+            except (TypeError, ValueError) as exc:
+                raise InvalidTranscriptSegmentError(
+                    "Os timestamps dos segmentos são inválidos."
+                ) from exc
+
+            if (
+                not math.isfinite(start_time)
+                or not math.isfinite(end_time)
+                or start_time < 0
+                or end_time <= start_time
+            ):
+                raise InvalidTranscriptSegmentError(
+                    "Os timestamps dos segmentos são inválidos."
+                )
 
     def delete_by_meeting_id(self, meeting_id: int) -> bool:
         """Remove a transcrição de uma reunião se existir."""

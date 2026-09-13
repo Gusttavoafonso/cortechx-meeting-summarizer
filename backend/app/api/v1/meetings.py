@@ -6,7 +6,10 @@ from app.core.config import settings
 from app.core.database import get_session
 from app.repositories.audio_repository import AudioRepository
 from app.repositories.meeting_repository import MeetingRepository
-from app.repositories.transcript_repository import TranscriptRepository
+from app.repositories.transcript_repository import (
+    InvalidTranscriptSegmentError,
+    TranscriptRepository,
+)
 from app.schemas.audio import AudioUploadResponse
 from app.schemas.meeting import MeetingCreate, MeetingResponse
 from app.schemas.transcription import TranscriptResponse
@@ -342,6 +345,13 @@ def transcribe_meeting(
         )
         meeting_repo.update_status(meeting, status="transcribed", commit=False)
         db.commit()
+    except InvalidTranscriptSegmentError as exc:
+        db.rollback()
+        meeting_repo.update_status(meeting, status="audio_uploaded")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
     except SQLAlchemyError as exc:
         db.rollback()
         meeting_repo.update_status(meeting, status="audio_uploaded")

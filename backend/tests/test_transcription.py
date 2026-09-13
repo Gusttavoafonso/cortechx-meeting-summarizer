@@ -203,6 +203,34 @@ def test_transcribe_stt_empty_response(client: TestClient) -> None:
     assert meeting_data["status"] == "audio_uploaded"
 
 
+@pytest.mark.parametrize(
+    "segment",
+    [
+        SegmentData(text="   ", start=0.0, end=1.0),
+        SegmentData(text="Texto", start=2.0, end=1.0),
+    ],
+)
+def test_transcribe_rejects_invalid_segments(
+    client: TestClient, segment: SegmentData
+) -> None:
+    meeting_response = client.post("/meetings", json={"title": "Segmento inválido"})
+    meeting_id = meeting_response.json()["id"]
+    client.post(
+        f"/meetings/{meeting_id}/audio",
+        files={"file": ("audio.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg")},
+    )
+    invalid_mock = MockSpeechToTextService(
+        canned_result=TranscriptionResult(text="Texto completo", segments=[segment])
+    )
+    app.dependency_overrides[get_transcription_service] = lambda: invalid_mock
+
+    response = client.post(f"/meetings/{meeting_id}/transcribe")
+
+    assert response.status_code == 422
+    assert client.get(f"/meetings/{meeting_id}/transcript").status_code == 404
+    assert client.get(f"/meetings/{meeting_id}").json()["status"] == "audio_uploaded"
+
+
 def test_transcribe_unexpected_read_error(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
