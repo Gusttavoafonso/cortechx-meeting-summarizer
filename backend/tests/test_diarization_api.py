@@ -93,3 +93,28 @@ def test_diarize_meeting_requires_transcript(client: TestClient) -> None:
 
     assert response.status_code == 409
     assert "transcrita" in response.json()["detail"]
+
+
+def test_get_transcript_returns_segments_in_chronological_order(
+    client: TestClient, db_session: Session
+) -> None:
+    meeting_response = client.post("/meetings", json={"title": "Ordem cronológica"})
+    meeting_id = meeting_response.json()["id"]
+    TranscriptRepository(db_session).save_transcript(
+        meeting_id=meeting_id,
+        content="Primeiro. Segundo. Terceiro.",
+        segments=[
+            SegmentData(start=4.0, end=6.0, text="Terceiro."),
+            SegmentData(start=0.0, end=2.0, text="Primeiro."),
+            SegmentData(start=2.0, end=4.0, text="Segundo."),
+        ],
+    )
+
+    response = client.get(f"/meetings/{meeting_id}/transcript")
+
+    assert response.status_code == 200
+    assert [segment["text"] for segment in response.json()["segments"]] == [
+        "Primeiro.",
+        "Segundo.",
+        "Terceiro.",
+    ]
