@@ -95,6 +95,30 @@ def test_diarize_meeting_requires_transcript(client: TestClient) -> None:
     assert "transcrita" in response.json()["detail"]
 
 
+def test_diarize_meeting_accepts_timestamp_difference_within_tolerance(
+    client: TestClient, db_session: Session
+) -> None:
+    app.dependency_overrides[get_diarization_service] = lambda: DiarizationService(
+        FakeDiarizationProvider([DiarizationSegment("host", 1.2, 2.0)])
+    )
+    meeting_response = client.post("/meetings", json={"title": "Tolerancia de tempo"})
+    meeting_id = meeting_response.json()["id"]
+    client.post(
+        f"/meetings/{meeting_id}/audio",
+        files={"file": ("meeting.wav", b"audio", "audio/wav")},
+    )
+    TranscriptRepository(db_session).save_transcript(
+        meeting_id=meeting_id,
+        content="Bom dia.",
+        segments=[SegmentData(start=0.0, end=1.0, text="Bom dia.")],
+    )
+
+    response = client.post(f"/meetings/{meeting_id}/diarize")
+
+    assert response.status_code == 200
+    assert response.json()["segments"][0]["speaker"] == "SPEAKER_00"
+
+
 def test_get_transcript_returns_segments_in_chronological_order(
     client: TestClient, db_session: Session
 ) -> None:

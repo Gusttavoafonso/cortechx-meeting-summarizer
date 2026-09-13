@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 class TranscriptRepository:
     """Repositório para persistência e recuperação de transcrições e seus segmentos."""
 
+    TIMESTAMP_TOLERANCE_SECONDS = 0.3
+
     def __init__(self, db: Session) -> None:
         self.db = db
 
@@ -72,6 +74,26 @@ class TranscriptRepository:
             return True
         return False
 
+    @staticmethod
+    def _calculate_overlap(
+        first_start: float,
+        first_end: float,
+        second_start: float,
+        second_end: float,
+    ) -> float:
+        """Calcula a duração da sobreposição (interseção) entre dois intervalos temporais."""
+        return max(0.0, min(first_end, second_end) - max(first_start, second_start))
+
+    @staticmethod
+    def _calculate_interval_distance(
+        first_start: float,
+        first_end: float,
+        second_start: float,
+        second_end: float,
+    ) -> float:
+        """Calcula a distância/gap de tempo entre dois intervalos (retorna 0.0 se houver sobreposição)."""
+        return max(0.0, second_start - first_end, first_start - second_end)
+
     def apply_diarization(
         self,
         transcript: Transcript,
@@ -89,28 +111,41 @@ class TranscriptRepository:
 
             best_match = max(
                 diarization_segments,
-                key=lambda diarization_segment: max(
-                    0.0,
-                    min(
-                        transcript_segment.end_time,
-                        diarization_segment.end_time,
-                    )
-                    - max(
-                        transcript_segment.start_time,
-                        diarization_segment.start_time,
-                    ),
+                key=lambda diarization_segment: self._calculate_overlap(
+                    transcript_segment.start_time,
+                    transcript_segment.end_time,
+                    diarization_segment.start_time,
+                    diarization_segment.end_time,
                 ),
                 default=None,
             )
 
-            if best_match is None:
+            if best_match is not None and self._calculate_overlap(
+                transcript_segment.start_time,
+                transcript_segment.end_time,
+                best_match.start_time,
+                best_match.end_time,
+            ) > 0:
+                transcript_segment.speaker = best_match.speaker
                 continue
 
-            overlap = min(transcript_segment.end_time, best_match.end_time) - max(
-                transcript_segment.start_time, best_match.start_time
+            nearest_match = min(
+                diarization_segments,
+                key=lambda diarization_segment: self._calculate_interval_distance(
+                    transcript_segment.start_time,
+                    transcript_segment.end_time,
+                    diarization_segment.start_time,
+                    diarization_segment.end_time,
+                ),
+                default=None,
             )
-            if overlap > 0:
-                transcript_segment.speaker = best_match.speaker
+            if nearest_match is not None and self._calculate_interval_distance(
+                transcript_segment.start_time,
+                transcript_segment.end_time,
+                nearest_match.start_time,
+                nearest_match.end_time,
+            ) <= self.TIMESTAMP_TOLERANCE_SECONDS:
+                transcript_segment.speaker = nearest_match.speaker
 
         self.db.commit()
         self.db.refresh(transcript)
