@@ -12,6 +12,11 @@ from app.core.config import settings
 class DiarizationError(Exception):
     pass
 
+
+class DiarizationAssociationError(DiarizationError):
+    pass
+
+
 # Dataclass para representar um segmento de diarização e manter o serviço independente
 # frozen=true torna a classe imutável
 # slots=true permite apenas a atribuição de valores aos atributos já definidos
@@ -21,7 +26,8 @@ class DiarizationSegment:
     start_time: float
     end_time: float
 
-# Interface para provedores de diarização. 
+
+# Interface para provedores de diarização.
 # todo provedor deve implementar o método diarize.
 # recebe um caminho de arquivo de áudio e retorna um iterável de segmentos diarizados.
 class DiarizationProvider(ABC):
@@ -29,8 +35,9 @@ class DiarizationProvider(ABC):
     def diarize(self, audio_path: Path) -> Iterable[DiarizationSegment]:
         pass
 
+
 # Implementação do provedor de diarização usando a biblioteca Pyannote.
-# o modelo escolhido é "pyannote/speaker-diarization-community-1" 
+# o modelo escolhido é "pyannote/speaker-diarization-community-1"
 # e requer um token de autenticação do Hugging Face.
 class PyannoteDiarizationProvider(DiarizationProvider):
     def __init__(
@@ -121,18 +128,17 @@ class DiarizationService:
             raise DiarizationError("O provider não retornou segmentos de diarização")
 
         segments = [self._validate_segment(item) for item in provider_segments]
-        # ordena os segmentos por start_time, end_time e speaker para garantir consistência na saída
+        # ordena os segmentos por timestamp e speaker
         segments.sort(key=lambda item: (item.start_time, item.end_time, item.speaker))
 
-        # os speakers são armazenados em um dicionário 
+        # os speakers são armazenados em um dicionário
         # para garantir a unicidade e consistência dos alias associados aos falantes
         speakers: dict[str, str] = {}
-        # o resultado final é uma lista de segmentos de diarização com os 
+        # o resultado final é uma lista de segmentos de diarização com os
         # speakers renomeados para os alias SPEAKER_00, SPEAKER_01, etc.
         result: list[DiarizationSegment] = []
         for segment in segments:
-            # aqui setdefault é usado para retornar o valor existente se o speaker já estiver no dicionário
-            # ou adicionar um novo speaker com o alias SPEAKER_XX se não estiver presente
+            # reutiliza ou cria um alias consistente para o speaker
             speaker = speakers.setdefault(
                 segment.speaker,
                 f"SPEAKER_{len(speakers):02d}",
@@ -148,8 +154,8 @@ class DiarizationService:
         # retorna a lista de segmentos de diarização com os speakers renomeados
         return result
 
-    # metodo para validar os segmentos retornados pelo provider, 
-    # garantindo que sejam instâncias de DiarizationSegment e que seus campos estejam corretos.
+    # metodo para validar os segmentos retornados pelo provider,
+    # garantindo campos válidos no segmento.
     @staticmethod
     def _validate_segment(segment: object) -> DiarizationSegment:
         if not isinstance(segment, DiarizationSegment):

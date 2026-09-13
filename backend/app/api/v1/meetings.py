@@ -12,6 +12,7 @@ from app.schemas.meeting import MeetingCreate, MeetingResponse
 from app.schemas.transcription import TranscriptResponse
 from app.services.audio_storage import AudioStorageService
 from app.services.diarization import (
+    DiarizationAssociationError,
     DiarizationError,
     DiarizationService,
     PyannoteDiarizationProvider,
@@ -413,10 +414,16 @@ def diarize_meeting(
             detail=f"Falha no serviço de diarização: {exc}",
         ) from exc
 
-    updated_transcript = transcript_repo.apply_diarization(
-        transcript,
-        diarization_segments,
-    )
+    try:
+        updated_transcript = transcript_repo.apply_diarization(
+            transcript,
+            diarization_segments,
+        )
+    except DiarizationAssociationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
 
     # retorna a transcrição atualizada com locutores associados aos segmentos
     return TranscriptResponse.model_validate(updated_transcript)

@@ -119,6 +119,36 @@ def test_diarize_meeting_accepts_timestamp_difference_within_tolerance(
     assert response.json()["segments"][0]["speaker"] == "SPEAKER_00"
 
 
+def test_diarize_meeting_preserves_speakers_when_a_segment_has_no_match(
+    client: TestClient, db_session: Session
+) -> None:
+    meeting_id = create_meeting_with_audio_and_transcript(client, db_session)
+    app.dependency_overrides[get_diarization_service] = lambda: DiarizationService(
+        FakeDiarizationProvider(
+            [
+                DiarizationSegment("host", 0.0, 2.0),
+                DiarizationSegment("guest", 2.0, 4.0),
+            ]
+        )
+    )
+    assert client.post(f"/meetings/{meeting_id}/diarize").status_code == 200
+
+    app.dependency_overrides[get_diarization_service] = lambda: DiarizationService(
+        FakeDiarizationProvider([DiarizationSegment("host", 4.31, 5.0)])
+    )
+    response = client.post(f"/meetings/{meeting_id}/diarize")
+
+    assert response.status_code == 422
+    assert "associar um locutor" in response.json()["detail"]
+    transcript_response = client.get(f"/meetings/{meeting_id}/transcript")
+    assert [
+        segment["speaker"] for segment in transcript_response.json()["segments"]
+    ] == [
+        "SPEAKER_00",
+        "SPEAKER_01",
+    ]
+
+
 def test_get_transcript_returns_segments_in_chronological_order(
     client: TestClient, db_session: Session
 ) -> None:

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models.transcript import Transcript
 from app.models.transcript_segment import TranscriptSegment
+from app.services.diarization import DiarizationAssociationError
 
 if TYPE_CHECKING:
     from app.services.diarization import DiarizationSegment
@@ -105,14 +106,16 @@ class TranscriptRepository:
         diarization_segments: list[DiarizationSegment],
     ) -> Transcript:
         """Associa cada segmento transcrito ao locutor com maior sobreposição."""
+        assignments: list[tuple[TranscriptSegment, str]] = []
         for transcript_segment in transcript.segments:
-            transcript_segment.speaker = None
-
             if (
                 transcript_segment.start_time is None
                 or transcript_segment.end_time is None
+                or transcript_segment.end_time <= transcript_segment.start_time
             ):
-                continue
+                raise DiarizationAssociationError(
+                    "A transcrição contém timestamps inválidos."
+                )
 
             best_match = max(
                 diarization_segments,
@@ -131,7 +134,7 @@ class TranscriptRepository:
                 best_match.start_time,
                 best_match.end_time,
             ) > 0:
-                transcript_segment.speaker = best_match.speaker
+                assignments.append((transcript_segment, best_match.speaker))
                 continue
 
             nearest_match = min(
@@ -150,7 +153,15 @@ class TranscriptRepository:
                 nearest_match.start_time,
                 nearest_match.end_time,
             ) <= self.TIMESTAMP_TOLERANCE_SECONDS:
-                transcript_segment.speaker = nearest_match.speaker
+                assignments.append((transcript_segment, nearest_match.speaker))
+                continue
+
+            raise DiarizationAssociationError(
+                "Não foi possível associar um locutor a todos os segmentos."
+            )
+
+        for transcript_segment, speaker in assignments:
+            transcript_segment.speaker = speaker
 
         self.db.commit()
         self.db.refresh(transcript)
