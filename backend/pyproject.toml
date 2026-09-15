@@ -17,6 +17,7 @@ dependencies = [
     "asyncpg",
     "psycopg[binary]",
     "python-dotenv>=1.0.0",
+    "google-genai",
 ]
 
 [project.optional-dependencies]
