@@ -5,13 +5,13 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.core.config import settings
 
-# engine: responsável pela conexão com o PostgreSQL
+# Engine: responsável pela conexão com o PostgreSQL.
 engine = create_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,
 )
 
-# SessionLocal: responsável por criar sessões para operações no banco;
+# SessionLocal: responsável por criar sessões para operações no banco.
 SessionLocal = sessionmaker(
     bind=engine,
     autoflush=False,
@@ -24,6 +24,7 @@ class Base(DeclarativeBase):
     pass
 
 
+# Garante que a sessão seja fechada após o uso.
 def get_session() -> Generator[Session, None, None]:
     session = SessionLocal()
 

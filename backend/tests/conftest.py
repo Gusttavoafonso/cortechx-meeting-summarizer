@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 @pytest.fixture
 def db_session() -> Generator[Session, None, None]:
+    """Cria uma sessão de banco isolada para cada teste."""
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -28,6 +29,7 @@ def db_session() -> Generator[Session, None, None]:
 
 @pytest.fixture
 def client(db_session: Session) -> Generator[TestClient, None, None]:
+    """Cliente HTTP reutilizável para os testes da API, com banco isolado."""
     def override_get_session():
         try:
             yield db_session

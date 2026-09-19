@@ -10,6 +10,7 @@ from app.schemas.audio import AudioUploadResponse
 from app.schemas.meeting import MeetingCreate, MeetingResponse
 from app.schemas.transcription import TranscriptResponse
 from app.services.audio_storage import AudioStorageService
+from app.services.meeting_service import MeetingNotFoundError, MeetingService
 from app.services.transcription import (
     BaseSpeechToTextService,
     get_speech_to_text_service,
@@ -20,6 +21,12 @@ router = APIRouter()
 
 def get_meeting_repository(db: Session = Depends(get_session)) -> MeetingRepository:
     return MeetingRepository(db)
+
+
+def get_meeting_service(
+    meeting_repo: MeetingRepository = Depends(get_meeting_repository),
+) -> MeetingService:
+    return MeetingService(meeting_repo)
 
 
 def get_audio_repository(db: Session = Depends(get_session)) -> AudioRepository:
@@ -60,10 +67,22 @@ def validate_meeting_id(meeting_id: int) -> int:
 )
 def create_meeting(
     meeting_in: MeetingCreate,
-    meeting_repo: MeetingRepository = Depends(get_meeting_repository),
+    meeting_service: MeetingService = Depends(get_meeting_service),
 ) -> MeetingResponse:
-    meeting = meeting_repo.create(title=meeting_in.title)
+    meeting = meeting_service.create(meeting_in)
     return MeetingResponse.model_validate(meeting)
+
+
+@router.get(
+    "",
+    response_model=list[MeetingResponse],
+    summary="Listar reuniões",
+)
+def list_meetings(
+    meeting_service: MeetingService = Depends(get_meeting_service),
+) -> list[MeetingResponse]:
+    meetings = meeting_service.list_all()
+    return [MeetingResponse.model_validate(m) for m in meetings]
 
 
 @router.get(
@@ -73,11 +92,12 @@ def create_meeting(
 )
 def get_meeting(
     meeting_id: int,
-    meeting_repo: MeetingRepository = Depends(get_meeting_repository),
+    meeting_service: MeetingService = Depends(get_meeting_service),
 ) -> MeetingResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id(meeting_id)
-    if not meeting:
+    try:
+        meeting = meeting_service.get_by_id(meeting_id)
+    except MeetingNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Reunião com ID {meeting_id} não encontrada.",
