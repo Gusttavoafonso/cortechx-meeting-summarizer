@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 
 from app.core.database import Base
 from app.models.transcript_segment import TranscriptSegment
@@ -27,10 +27,12 @@ class Transcript(Base):
         unique=True,
     )
 
-    content: Mapped[str] = mapped_column(
+    raw_text: Mapped[str] = mapped_column(
         Text,
         nullable=False,
     )
+
+    content = synonym("raw_text")
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

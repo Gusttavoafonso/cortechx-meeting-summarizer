@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -r
 RUN pip install --no-cache-dir --upgrade pip
 
 COPY pyproject.toml .
-RUN pip install --no-cache-dir ".[dev]"
+RUN pip install --no-cache-dir .[dev]
 
 COPY . /app/
 
