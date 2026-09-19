@@ -4,6 +4,7 @@ __pycache__
 *.pyd
 .Python
 .pytest_cache
+.pytest-tmp
 .coverage
 htmlcov/
 .env

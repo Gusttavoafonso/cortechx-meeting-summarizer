@@ -21,6 +21,7 @@ from app.services.transcription import (
     get_speech_to_text_service,
 )
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import SQLAlchemyError
 
 
 @pytest.fixture(autouse=True)
@@ -83,6 +84,37 @@ def test_transcribe_meeting_success(client: TestClient, setup_test_environment) 
     assert meeting_check.json()["status"] == "transcribed"
     assert meeting_check.json()["transcript"] is not None
     assert meeting_check.json()["transcript"]["content"] == data["content"]
+
+
+def test_transcribe_rolls_back_when_persistence_fails(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.repositories.transcript_repository import TranscriptRepository
+
+    meeting_response = client.post("/meetings", json={"title": "Falha ao persistir"})
+    meeting_id = meeting_response.json()["id"]
+    client.post(
+        f"/meetings/{meeting_id}/audio",
+        files={"file": ("audio.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg")},
+    )
+
+    original_save_transcript = TranscriptRepository.save_transcript
+
+    def failing_save_transcript(self, *args, **kwargs):
+        original_save_transcript(self, *args, **kwargs)
+        raise SQLAlchemyError("Falha simulada no banco")
+
+    monkeypatch.setattr(
+        TranscriptRepository, "save_transcript", failing_save_transcript
+    )
+
+    response = client.post(f"/meetings/{meeting_id}/transcribe")
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Falha ao persistir a transcrição."
+    assert client.get(f"/meetings/{meeting_id}/transcript").status_code == 404
+    assert client.get(f"/meetings/{meeting_id}").json()["status"] == "audio_uploaded"
 
 
 def test_transcribe_meeting_not_found(client: TestClient) -> None:
@@ -169,6 +201,34 @@ def test_transcribe_stt_empty_response(client: TestClient) -> None:
     # Status revertido para permitir retentativa
     meeting_data = client.get(f"/meetings/{meeting_id}").json()
     assert meeting_data["status"] == "audio_uploaded"
+
+
+@pytest.mark.parametrize(
+    "segment",
+    [
+        SegmentData(text="   ", start=0.0, end=1.0),
+        SegmentData(text="Texto", start=2.0, end=1.0),
+    ],
+)
+def test_transcribe_rejects_invalid_segments(
+    client: TestClient, segment: SegmentData
+) -> None:
+    meeting_response = client.post("/meetings", json={"title": "Segmento inválido"})
+    meeting_id = meeting_response.json()["id"]
+    client.post(
+        f"/meetings/{meeting_id}/audio",
+        files={"file": ("audio.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg")},
+    )
+    invalid_mock = MockSpeechToTextService(
+        canned_result=TranscriptionResult(text="Texto completo", segments=[segment])
+    )
+    app.dependency_overrides[get_transcription_service] = lambda: invalid_mock
+
+    response = client.post(f"/meetings/{meeting_id}/transcribe")
+
+    assert response.status_code == 422
+    assert client.get(f"/meetings/{meeting_id}/transcript").status_code == 404
+    assert client.get(f"/meetings/{meeting_id}").json()["status"] == "audio_uploaded"
 
 
 def test_transcribe_unexpected_read_error(
