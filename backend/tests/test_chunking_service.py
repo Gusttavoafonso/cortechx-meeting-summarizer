@@ -262,7 +262,8 @@ class TestChunkingService:
         assert len(chunks) > 1
 
     def test_concurrent_overlapping_speech_end_time(self) -> None:
-        """Verifica se o end_time do chunk é o maior end_time real entre falas simultâneas."""
+        """Verifica se o end_time do chunk é o maior 
+        end_time real entre falas simultâneas."""
         service = ChunkingService()
         # Alice fala até 100s, Bob interrompe brevemente entre 70s e 80s
         segments = [
