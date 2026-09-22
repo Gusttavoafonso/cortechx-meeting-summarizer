@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     DEBUG: bool = Field(False, validation_alias="APP_DEBUG")
 
     openai_api_key: SecretStr | None = None
+    openai_model: str = "gpt-4o-mini"
+    summary_chunk_size: int = 12000
+    summary_chunk_overlap: int = 500
     gemini_api_key: SecretStr | None = None
     notion_token: SecretStr | None = None
     notion_database_id: str | None = None
