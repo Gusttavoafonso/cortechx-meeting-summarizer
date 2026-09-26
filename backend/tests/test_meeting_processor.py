@@ -13,6 +13,7 @@ def processor_dependencies() -> dict[str, MagicMock]:
         "audio_storage_service": MagicMock(),
         "speech_to_text_service": MagicMock(),
         "diarization_service": MagicMock(),
+        "chunking_service": MagicMock(),
     }
 
 
@@ -43,6 +44,7 @@ def test_process_meeting_completes_pipeline(
     audio_storage_service = processor_dependencies["audio_storage_service"]
     speech_to_text_service = processor_dependencies["speech_to_text_service"]
     diarization_service = processor_dependencies["diarization_service"]
+    chunking_service = processor_dependencies["chunking_service"]
 
     stt_result = MagicMock(text="Texto transcrito", segments=[MagicMock()])
     transcript = MagicMock()
@@ -68,6 +70,7 @@ def test_process_meeting_completes_pipeline(
         transcript,
         diarization_segments,
     )
+    chunking_service.split.assert_called_once_with(transcript)
     assert meeting_repository.update_status.call_args_list == [
         call(meeting, MeetingStatus.PROCESSING),
         call(meeting, MeetingStatus.COMPLETED),
@@ -99,6 +102,7 @@ def test_process_meeting_raises_when_audio_is_missing() -> None:
         audio_storage_service=audio_storage_service,
         speech_to_text_service=speech_to_text_service,
         diarization_service=diarization_service,
+        chunking_service=MagicMock(),
     )
     meeting = MagicMock()
     meeting.audio = None
@@ -228,6 +232,37 @@ def test_process_meeting_marks_as_failed_when_diarization_persistence_fails(
     )
 
     with pytest.raises(RuntimeError, match="Diarization persistence failed"):
+        processor.process_meeting(meeting.id)
+
+    assert meeting_repository.update_status.call_args_list == [
+        call(meeting, MeetingStatus.PROCESSING),
+        call(meeting, MeetingStatus.FAILED),
+    ]
+
+
+def test_process_meeting_marks_as_failed_when_chunking_fails(
+    processor: MeetingProcessor,
+    processor_dependencies: dict[str, MagicMock],
+    meeting: MagicMock,
+) -> None:
+    meeting_repository = processor_dependencies["meeting_repository"]
+    transcript_repository = processor_dependencies["transcript_repository"]
+    speech_to_text_service = processor_dependencies["speech_to_text_service"]
+    audio_storage_service = processor_dependencies["audio_storage_service"]
+    diarization_service = processor_dependencies["diarization_service"]
+    chunking_service = processor_dependencies["chunking_service"]
+    meeting_repository.get_by_id.return_value = meeting
+    audio_storage_service.get_file_path.return_value = "/tmp/meeting.wav"
+    speech_to_text_service.transcribe.return_value = MagicMock(
+        text="Texto transcrito",
+        segments=[MagicMock()],
+    )
+    transcript = MagicMock()
+    transcript_repository.save_transcript.return_value = transcript
+    diarization_service.diarize.return_value = [MagicMock()]
+    chunking_service.split.side_effect = RuntimeError("Chunking failed")
+
+    with pytest.raises(RuntimeError, match="Chunking failed"):
         processor.process_meeting(meeting.id)
 
     assert meeting_repository.update_status.call_args_list == [

@@ -7,6 +7,7 @@ from app.models.meeting_status import MeetingStatus
 from app.repositories.meeting_repository import MeetingRepository
 from app.repositories.transcript_repository import TranscriptRepository
 from app.services.audio_storage import AudioStorageService
+from app.services.chunking import ChunkingService
 from app.services.diarization import DiarizationService
 from app.services.transcription import BaseSpeechToTextService
 
@@ -21,12 +22,14 @@ class MeetingProcessor:
         audio_storage_service: AudioStorageService,
         speech_to_text_service: BaseSpeechToTextService,
         diarization_service: DiarizationService,
+        chunking_service: ChunkingService,
     ) -> None:
         self._meeting_repository = meeting_repository
         self._transcript_repository = transcript_repository
         self._audio_storage_service = audio_storage_service
         self._speech_to_text_service = speech_to_text_service
         self._diarization_service = diarization_service
+        self._chunking_service = chunking_service
 
     # serviço de orquestração do processamento de reuniões
     def process_meeting(self, meeting_id: int) -> None:
@@ -62,6 +65,8 @@ class MeetingProcessor:
                 transcript,
                 diarization_segments,
             )
+
+            self._chunking_service.split(transcript)
 
             self._meeting_repository.update_status(
                 meeting,
