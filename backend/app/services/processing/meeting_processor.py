@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from app.models.meeting import Meeting
 from app.models.meeting_status import MeetingStatus
 from app.repositories.meeting_repository import MeetingRepository
@@ -7,6 +9,8 @@ from app.repositories.transcript_repository import TranscriptRepository
 from app.services.audio_storage import AudioStorageService
 from app.services.diarization import DiarizationService
 from app.services.transcription import BaseSpeechToTextService
+
+logger = logging.getLogger(__name__)
 
 
 class MeetingProcessor:
@@ -65,6 +69,7 @@ class MeetingProcessor:
             )
 
         except Exception:
+            logger.exception("Falha ao processar reunião %s", meeting_id)
             self._meeting_repository.update_status(
                 meeting,
                 MeetingStatus.FAILED,
