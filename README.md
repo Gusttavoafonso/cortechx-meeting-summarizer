@@ -163,6 +163,20 @@ flowchart TD
 
 
 
+## Persistência do resumo e das tarefas
+
+O resultado da sumarização é guardado em `summaries` (1:1 com a reunião; `key_points`, `decisions`,
+`structured_result` e `generation_metadata` em JSONB) e as tarefas extraídas em `tasks` (1:N, prontas para
+integrações com Discord/Notion). Detalhes e justificativas em
+[`docs/persistencia-summary-tasks.md`](docs/persistencia-summary-tasks.md).
+
+Migrations (PostgreSQL, a partir de `backend/`):
+
+```bash
+alembic upgrade head     # aplica todas as migrations
+alembic downgrade -1     # desfaz a última
+```
+
 ## Organização do backend
 
 ```text
@@ -180,9 +194,9 @@ backend/
 │   │   ├── config.py            # Configurações com Pydantic Settings e variáveis de ambiente
 │   │   └── database.py          # Conexão com o banco SQLAlchemy e sessão
 │   │
-│   ├── models/                  # Modelos SQLAlchemy (Meeting, AudioFile, Transcript, etc.)
+│   ├── models/                  # Modelos SQLAlchemy (Meeting, AudioFile, Transcript, Summary, Task, etc.)
 │   │
-│   ├── repositories/            # Camada de persistência (MeetingRepository, AudioRepository, TranscriptRepository)
+│   ├── repositories/            # Camada de persistência (MeetingRepository, AudioRepository, TranscriptRepository, SummaryRepository)
 │   │
 │   ├── schemas/                 # Schemas Pydantic de entrada e saída
 │   │

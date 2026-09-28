@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 from app.models.meeting_status import MeetingStatus
+from app.models.task import Task
 
 if TYPE_CHECKING:
     from app.models.audio_file import AudioFile
@@ -73,4 +74,12 @@ class Meeting(Base):
         "IntegrationConfiguration",
         back_populates="meeting",
         cascade="all, delete-orphan",
+    )
+
+    tasks: Mapped[list["Task"]] = relationship(
+        "Task",
+        back_populates="meeting",
+        cascade="all, delete-orphan",
+        # ordem do pipeline, com desempate por id
+        order_by=lambda: (Task.position, Task.id),
     )
