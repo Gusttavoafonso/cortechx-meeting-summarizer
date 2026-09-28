@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 
+from app.api.v1.meetings import router as meetings_router
+
 app = FastAPI(
     title="CortechX Meeting Summarizer",
     description="API para transcrição e sumarização de reuniões.",
@@ -10,3 +12,6 @@ app = FastAPI(
 @app.get("/health", tags=["Health"])
 def health_check():
     return {"status": "ok"}
+
+
+app.include_router(meetings_router, prefix="/meetings", tags=["Meetings"])

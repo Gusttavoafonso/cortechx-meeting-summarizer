@@ -3,12 +3,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, String
+from sqlalchemy import DateTime, Enum as SqlEnum, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.meeting_status import MeetingStatus
 
 if TYPE_CHECKING:
+    from app.models.audio_file import AudioFile
     from app.models.integration_configuration import IntegrationConfiguration
     from app.models.summary import Summary
     from app.models.transcript import Transcript
@@ -27,10 +29,10 @@ class Meeting(Base):
         nullable=False,
     )
 
-    status: Mapped[str] = mapped_column(
-        String(50),
+    status: Mapped[MeetingStatus] = mapped_column(
+        SqlEnum(MeetingStatus, name="meeting_status", native_enum=False),
         nullable=False,
-        default="received",
+        default=MeetingStatus.RECEIVED,
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -44,6 +46,13 @@ class Meeting(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
+    )
+
+    audio: Mapped["AudioFile | None"] = relationship(
+        "AudioFile",
+        back_populates="meeting",
+        uselist=False,
+        cascade="all, delete-orphan",
     )
 
     transcript: Mapped["Transcript | None"] = relationship(

@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
+from sqlalchemy import BigInteger, DateTime, ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
@@ -12,8 +12,8 @@ if TYPE_CHECKING:
     from app.models.meeting import Meeting
 
 
-class Summary(Base):
-    __tablename__ = "summaries"
+class AudioFile(Base):
+    __tablename__ = "audio_files"
 
     id: Mapped[int] = mapped_column(
         primary_key=True,
@@ -26,22 +26,30 @@ class Summary(Base):
         unique=True,
     )
 
-    objective: Mapped[str | None] = mapped_column(
-        Text,
-        nullable=True,
+    original_filename: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
     )
 
-    main_ideas: Mapped[str | None] = mapped_column(
-        Text,
-        nullable=True,
+    filename: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
     )
 
-    structured_result: Mapped[dict | None] = mapped_column(
-        JSON,
-        nullable=True,
+    file_path: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
     )
 
-    content = synonym("main_ideas")
+    content_type: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+    )
+
+    file_size_bytes: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -51,5 +59,5 @@ class Summary(Base):
 
     meeting: Mapped["Meeting"] = relationship(
         "Meeting",
-        back_populates="summary",
+        back_populates="audio",
     )

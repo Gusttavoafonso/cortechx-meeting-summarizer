@@ -10,10 +10,10 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from app.core.config import settings
 from app.core.database import Base
+import app.models
 
 # Objeto de configuração do Alembic
 config = context.config
-
 
 # Passa a URL para o Alembic
 database_url = settings.DATABASE_URL
@@ -22,11 +22,9 @@ config.set_main_option(
     database_url.replace("%", "%%"),
 )
 
-
 # Configuração de logs do Alembic
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
-
 
 # Metadata dos models SQLAlchemy
 target_metadata = Base.metadata
