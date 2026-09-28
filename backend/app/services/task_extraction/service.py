@@ -150,7 +150,21 @@ class TaskExtractionService:
 
     @classmethod
     def _deduplicate_tasks(cls, tasks: list[TaskItem]) -> list[TaskItem]:
-        """Remove duplicações evidentes preservando metadados enriquecidos."""
+        """Remove duplicações evidentes preservando metadados enriquecidos.
+
+        Estratégia de Deduplicação:
+        1. Normalização de Texto: Converte a descrição para minúsculas,
+           remove pontuações extras e colapsa múltiplos espaços.
+        2. Preservação de Ordem: Mantém a ordem cronológica original da
+           primeira ocorrência da tarefa (`ordered_keys`).
+        3. Enriquecimento de Metadados: Se uma ocorrência posterior da mesma
+           tarefa (gerada por overlap entre chunks ou repetição na reunião)
+           contiver `responsible` ou `deadline` não capturados na primeira,
+           os atributos são mesclados e enriquecidos.
+        4. Preservação de Tarefas Distintas: Tarefas com ações diferentes
+           (ex: 'Revisar backend' vs 'Revisar frontend') geram chaves
+           distintas e são integralmente preservadas.
+        """
         seen: dict[str, TaskItem] = {}
         ordered_keys: list[str] = []
 
