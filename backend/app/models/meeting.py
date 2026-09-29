@@ -31,7 +31,12 @@ class Meeting(Base):
     )
 
     status: Mapped[MeetingStatus] = mapped_column(
-        SqlEnum(MeetingStatus, name="meeting_status", native_enum=False),
+        SqlEnum(
+            MeetingStatus,
+            name="meeting_status",
+            native_enum=True,
+            values_callable=lambda enum_type: [member.value for member in enum_type],
+        ),
         nullable=False,
         default=MeetingStatus.RECEIVED,
     )

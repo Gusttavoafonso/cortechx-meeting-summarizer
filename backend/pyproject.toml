@@ -9,6 +9,7 @@ description = "API para transcricao e sumarizacao de reunioes."
 requires-python = ">=3.12"
 dependencies = [
     "fastapi[standard]",
+    "openai",
     "langchain",
     "notion-client",
     "pydantic-settings",
