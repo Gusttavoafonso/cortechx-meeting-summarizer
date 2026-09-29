@@ -170,6 +170,24 @@ O resultado da sumarização é guardado em `summaries` (1:1 com a reunião; `ke
 integrações com Discord/Notion). Detalhes e justificativas em
 [`docs/persistencia-summary-tasks.md`](docs/persistencia-summary-tasks.md).
 
+### Reprocessamento
+Quando uma reunião já processada é enviada novamente para sumarização, o
+resultado existente é **substituído** (mesmo `id`, `updated_at` atualizado),
+e as tarefas antigas são removidas e recriadas. Não é mantido histórico de
+versões. Essa abordagem evita resultados duplicados ou inconsistentes no
+banco.
+
+## Endpoints de resumo
+
+| Método | Rota | Descrição |
+|---|---|---|
+| POST | `/meetings/{meeting_id}/summary` | Gera (ou reprocessa) o resumo da reunião a partir da transcrição existente |
+| GET | `/meetings/{meeting_id}/summary` | Consulta o resumo já persistido |
+
+**Pré-requisito:** a reunião precisa ter uma transcrição já gerada
+(`POST /meetings/{meeting_id}/transcribe`), senão o `POST /summary` retorna
+409.
+
 Migrations (PostgreSQL, a partir de `backend/`):
 
 ```bash
