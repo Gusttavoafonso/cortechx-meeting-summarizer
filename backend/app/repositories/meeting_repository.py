@@ -1,4 +1,5 @@
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.meeting import Meeting
@@ -56,10 +57,42 @@ class MeetingRepository:
         self.db.refresh(target)
         return target
 
-    def update_status(self, meeting: Meeting, status: str | MeetingStatus, *, commit: bool = True) -> Meeting:
+    def update_status(
+        self,
+        meeting: Meeting,
+        status: str | MeetingStatus,
+        *,
+        commit: bool = True,
+    ) -> Meeting:
         meeting.status = status
         self.db.add(meeting)
-        if commit:
-            self.db.commit()
-            self.db.refresh(meeting)
+        try:
+            if commit:
+                self.db.commit()
+                self.db.refresh(meeting)
+            else:
+                self.db.flush()
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise
         return meeting
+
+    def try_claim_processing(self, meeting_id: int) -> bool:
+        """Adquire atomicamente o lock de processamento via UPDATE condicional."""
+        stmt = (
+            update(Meeting)
+            .where(
+                Meeting.id == meeting_id,
+                Meeting.status.notin_(
+                    [MeetingStatus.PROCESSING, MeetingStatus.TRANSCRIBING]
+                ),
+            )
+            .values(status=MeetingStatus.PROCESSING)
+        )
+        try:
+            result = self.db.execute(stmt)
+            self.db.commit()
+            return bool(result.rowcount and result.rowcount > 0)
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise

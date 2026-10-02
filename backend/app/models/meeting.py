@@ -3,7 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum as SqlEnum, String
+from sqlalchemy import DateTime, String
+from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -30,7 +31,12 @@ class Meeting(Base):
     )
 
     status: Mapped[MeetingStatus] = mapped_column(
-        SqlEnum(MeetingStatus, name="meeting_status", native_enum=False),
+        SqlEnum(
+            MeetingStatus,
+            name="meeting_status",
+            native_enum=False,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
         nullable=False,
         default=MeetingStatus.RECEIVED,
     )
