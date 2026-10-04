@@ -6,6 +6,9 @@ from app.repositories.meeting_repository import MeetingRepository
 def test_create_meeting(db_session):
     repository = MeetingRepository(db_session)
 
+    status_type = Meeting.__table__.c.status.type
+    assert status_type.enums == [status.value for status in MeetingStatus]
+
     meeting = Meeting(title="Reuniao de teste")
 
     created = repository.create(meeting)

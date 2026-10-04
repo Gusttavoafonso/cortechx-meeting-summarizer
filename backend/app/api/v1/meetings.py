@@ -42,6 +42,17 @@ from app.services.transcription import (
 )
 from app.workers.meeting_job import enqueue_meeting_processing
 
+from app.repositories.summary_repository import SummaryRepository
+from app.schemas.summary import SummaryResponse
+from app.services.llm.service import get_llm_service
+from app.services.summarization.service import create_summarization_service
+from app.services.summary_service import (
+    MeetingNotFoundError as SummaryMeetingNotFoundError,
+    SummaryAlreadyProcessingError,
+    SummaryService,
+    TranscriptNotFoundError,
+)
+
 router = APIRouter()
 
 
@@ -91,6 +102,31 @@ def validate_meeting_id(meeting_id: int) -> int:
             ),
         )
     return meeting_id
+
+
+def get_summary_repository(db: Session = Depends(get_session)) -> SummaryRepository:
+    return SummaryRepository(db)
+
+
+def get_summary_service(
+    meeting_repo: MeetingRepository = Depends(get_meeting_repository),
+    transcript_repo: TranscriptRepository = Depends(get_transcript_repository),
+    summary_repo: SummaryRepository = Depends(get_summary_repository),
+) -> SummaryService:
+    try:
+        llm = get_llm_service()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Serviço de LLM não configurado ou indisponível: {exc}",
+        ) from exc
+    summarization = create_summarization_service(llm)
+    return SummaryService(
+        summarization=summarization,
+        summary_repository=summary_repo,
+        meeting_repository=meeting_repo,
+        transcript_repository=transcript_repo,
+    )
 
 
 @router.post(
@@ -522,7 +558,6 @@ def get_meeting_transcript(
 
     return TranscriptResponse.model_validate(transcript)
 
-
 @router.post(
     "/{meeting_id}/process",
     response_model=MeetingProcessResponse,
@@ -586,5 +621,72 @@ def process_meeting_async(
     return MeetingProcessResponse(
         meeting_id=meeting_id,
         status="PROCESSING",
+    )
+
+
+@router.post(
+    "/{meeting_id}/summary",
+    response_model=SummaryResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Gerar resumo da reunião",
+    description=(
+        "Execute o pipeline de sumarização(chunking + llm) sobre a "
+        "transcrição já existente e persiste o resultado. Reprocessa e "
+        "substitui o resumo caso já exista um."
+    ),
+)
+def create_summary(
+    meeting_id: int,
+    summary_service: SummaryService = Depends(get_summary_service),
+) -> SummaryResponse:
+    validate_meeting_id(meeting_id)
+    try:
+        return summary_service.generate_and_persist(meeting_id)
+    except SummaryMeetingNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reunião com ID {meeting_id} não encontrada.",
+        )
+    except TranscriptNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"A reunião com ID {meeting_id} ainda não possui transcrição "
+                "disponível para sumarização."
+            ),
+        )
+    except SummaryAlreadyProcessingError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A reunião com ID {meeting_id} já está sendo processada.",
+        )
+
+
+@router.get(
+    "/{meeting_id}/summary",
+    response_model=SummaryResponse,
+    summary="Obter resumo da reunião",
+)
+def get_summary(
+    meeting_id: int,
+    meeting_repo: MeetingRepository = Depends(get_meeting_repository),
+    summary_repo: SummaryRepository = Depends(get_summary_repository),
+) -> SummaryResponse:
+    validate_meeting_id(meeting_id)
+
+    summary = summary_repo.get_by_meeting_id(meeting_id)
+    if summary is not None:
+        return SummaryResponse.model_validate(summary)
+
+    meeting = meeting_repo.get_by_id(meeting_id)
+    if meeting is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reunião com ID {meeting_id} não encontrada.",
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Resumo ainda não gerado pra reunião com ID {meeting_id}.",
     )
 

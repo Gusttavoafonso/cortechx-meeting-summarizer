@@ -1,5 +1,6 @@
 from app.models.meeting import Meeting
 from app.models.summary import Summary
+from app.models.task import Task
 from app.models.transcript import Transcript
 from app.models.transcript_segment import TranscriptSegment
 
@@ -20,11 +21,16 @@ def test_meeting_relationships(db_session):
 
     summary = Summary(
         objective="Planejar a sprint.",
-        main_ideas="Definir as principais tarefas.",
+        summary="Definir as principais tarefas.",
+        key_points=["Escopo da sprint"],
+        decisions=["Backend fecha na sexta"],
         structured_result={
             "tasks": ["Implementar funcionalidade"]
         },
     )
+
+    task = Task(position=0, description="Implementar funcionalidade")
+    meeting.tasks.append(task)
 
     transcript.segments.append(segment)
     meeting.transcript = transcript
@@ -42,6 +48,13 @@ def test_meeting_relationships(db_session):
 
     assert meeting.summary is not None
     assert meeting.summary.objective == "Planejar a sprint."
+    assert meeting.summary.summary == "Definir as principais tarefas."
+    assert meeting.summary.key_points == ["Escopo da sprint"]
+    assert meeting.summary.decisions == ["Backend fecha na sexta"]
+    assert meeting.summary.updated_at is not None
+
+    assert len(meeting.tasks) == 1
+    assert meeting.tasks[0].meeting_id == meeting.id
 
 
 def test_meeting_cascade_delete(db_session):
@@ -60,6 +73,9 @@ def test_meeting_cascade_delete(db_session):
         objective="Resumo que deve ser removido.",
     )
 
+    task = Task(position=0, description="Tarefa que deve ser removida.")
+    meeting.tasks.append(task)
+
     transcript.segments.append(segment)
     meeting.transcript = transcript
     meeting.summary = summary
@@ -70,6 +86,7 @@ def test_meeting_cascade_delete(db_session):
     transcript_id = transcript.id
     segment_id = segment.id
     summary_id = summary.id
+    task_id = task.id
 
     db_session.delete(meeting)
     db_session.commit()
@@ -77,3 +94,4 @@ def test_meeting_cascade_delete(db_session):
     assert db_session.get(Transcript, transcript_id) is None
     assert db_session.get(TranscriptSegment, segment_id) is None
     assert db_session.get(Summary, summary_id) is None
+    assert db_session.get(Task, task_id) is None
