@@ -22,7 +22,11 @@ class SummaryRepository:
         self.db = db
 
     def get_by_meeting_id(self, meeting_id: int) -> Summary | None:
-        stmt = select(Summary).where(Summary.meeting_id == meeting_id)
+        stmt = (
+            select(Summary)
+            .where(Summary.meeting_id == meeting_id)
+            .options(selectinload(Summary.meeting).selectinload(Meeting.tasks))
+        )
         return self.db.scalars(stmt).first()
 
     def list_tasks(self, meeting_id: int) -> list[Task]:

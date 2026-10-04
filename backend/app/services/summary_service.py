@@ -1,3 +1,4 @@
+from app.core.config import settings
 from app.models.meeting_status import MeetingStatus
 from app.repositories.meeting_repository import MeetingRepository
 from app.repositories.summary_repository import SummaryRepository
@@ -48,8 +49,8 @@ class SummaryService:
                 meeting_id=meeting_id,
                 result=result,
                 generation_metadata={
-                    "provider": "gemini",
-                    "model": "gemini-3.6-flash",
+                    "provider": settings.llm_provider or "gemini",
+                    "model": settings.llm_model or "gemini-1.5-flash",
                 },
             )
 

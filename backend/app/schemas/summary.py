@@ -77,6 +77,7 @@ class SummaryResponse(BaseModel):
     summary: str | None = None
     key_points: list[str] = Field(default_factory=list)
     decisions: list[str] = Field(default_factory=list)
+    tasks: list[TaskResponse] = Field(default_factory=list)
     structured_result: dict[str, Any] | None = None
     generation_metadata: dict[str, Any] | None = None
     created_at: datetime

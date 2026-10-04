@@ -89,17 +89,23 @@ def get_summary_repository(db: Session = Depends(get_session)) -> SummaryReposit
 
 
 def get_summary_service(
-        meeting_repo: MeetingRepository = Depends(get_meeting_repository),
-        transcript_repo: TranscriptRepository = Depends(get_transcript_repository),
-        summary_repo: SummaryRepository = Depends(get_summary_repository),
+    meeting_repo: MeetingRepository = Depends(get_meeting_repository),
+    transcript_repo: TranscriptRepository = Depends(get_transcript_repository),
+    summary_repo: SummaryRepository = Depends(get_summary_repository),
 ) -> SummaryService:
-    llm = get_llm_service()
+    try:
+        llm = get_llm_service()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Serviço de LLM não configurado ou indisponível: {exc}",
+        ) from exc
     summarization = create_summarization_service(llm)
     return SummaryService(
-        summarization = summarization,
-        summary_repository = summary_repo,
-        meeting_repository = meeting_repo,
-        transcript_repository = transcript_repo,
+        summarization=summarization,
+        summary_repository=summary_repo,
+        meeting_repository=meeting_repo,
+        transcript_repository=transcript_repo,
     )
 
 
@@ -550,10 +556,10 @@ def create_summary(
         )
     except TranscriptNotFoundError:
         raise HTTPException(
-            status_code = status.HTTP_409_CONFLICT,
-            detail = (
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
                 f"A reunião com ID {meeting_id} ainda não possui transcrição "
-                "disponíveç para sumarização."
+                "disponível para sumarização."
             ),
         )
     except SummaryAlreadyProcessingError:

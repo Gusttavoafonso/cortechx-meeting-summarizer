@@ -11,6 +11,7 @@ from app.models.json_type import JSONType
 
 if TYPE_CHECKING:
     from app.models.meeting import Meeting
+    from app.models.task import Task
 
 
 class Summary(Base):
@@ -81,3 +82,7 @@ class Summary(Base):
         "Meeting",
         back_populates="summary",
     )
+
+    @property
+    def tasks(self) -> list["Task"]:
+        return self.meeting.tasks if self.meeting else []

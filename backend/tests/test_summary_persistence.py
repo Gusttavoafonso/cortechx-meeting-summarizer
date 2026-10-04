@@ -147,3 +147,49 @@ def test_summary_result_normalizes_and_validates():
 
     with pytest.raises(ValidationError):
         SummaryResult(summary="")
+
+
+def test_summary_response_includes_tasks(db_session):
+    from app.schemas.summary import SummaryResponse
+
+    meeting = _create_meeting(db_session)
+    repository = SummaryRepository(db_session)
+    summary = repository.save_result(meeting.id, _result())
+
+    response = SummaryResponse.model_validate(summary)
+    assert len(response.tasks) == 2
+    assert response.tasks[0].description == "Finalizar endpoints de resumo"
+    assert response.tasks[0].responsible == "Ana"
+    assert response.tasks[0].deadline == date(2026, 10, 2)
+    assert response.tasks[1].description == "Revisar migrations"
+    assert response.tasks[1].responsible is None
+
+
+def test_get_summary_endpoint_returns_tasks(client, db_session):
+    meeting = _create_meeting(db_session)
+    repository = SummaryRepository(db_session)
+    repository.save_result(meeting.id, _result())
+
+    resp = client.get(f"/meetings/{meeting.id}/summary")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["meeting_id"] == meeting.id
+    assert data["objective"] == "Alinhar a entrega do backend."
+    assert len(data["tasks"]) == 2
+    assert data["tasks"][0]["description"] == "Finalizar endpoints de resumo"
+    assert data["tasks"][0]["responsible"] == "Ana"
+    assert data["tasks"][0]["deadline"] == "2026-10-02"
+
+
+def test_get_summary_endpoint_not_found(client):
+    resp = client.get("/meetings/99999/summary")
+    assert resp.status_code == 404
+    assert "não encontrada" in resp.json()["detail"]
+
+
+def test_get_summary_endpoint_unprocessed(client, db_session):
+    meeting = _create_meeting(db_session)
+    resp = client.get(f"/meetings/{meeting.id}/summary")
+    assert resp.status_code == 404
+    assert "Resumo ainda não gerado" in resp.json()["detail"]
+
