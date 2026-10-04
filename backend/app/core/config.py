@@ -75,6 +75,19 @@ class Settings(BaseSettings):
         default="auto", validation_alias="WHISPER_COMPUTE_TYPE"
     )
 
+    CELERY_BROKER_URL: str = Field(
+        default="redis://localhost:6379/0",
+        validation_alias="CELERY_BROKER_URL",
+    )
+    CELERY_RESULT_BACKEND: str = Field(
+        default="redis://localhost:6379/0",
+        validation_alias="CELERY_RESULT_BACKEND",
+    )
+    CELERY_TASK_ALWAYS_EAGER: bool = Field(
+        default=False,
+        validation_alias="CELERY_TASK_ALWAYS_EAGER",
+    )
+
     @field_validator("AUDIO_STORAGE_PATH", mode="before")
     @classmethod
     def resolve_storage_path(cls, v: Any) -> Path:

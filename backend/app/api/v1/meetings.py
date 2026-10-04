@@ -1,9 +1,20 @@
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from collections.abc import Callable
+
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_session
+from app.models.meeting_status import MeetingStatus
 from app.repositories.audio_repository import AudioRepository
 from app.repositories.meeting_repository import MeetingRepository
 from app.repositories.transcript_repository import (
@@ -11,7 +22,11 @@ from app.repositories.transcript_repository import (
     TranscriptRepository,
 )
 from app.schemas.audio import AudioUploadResponse
-from app.schemas.meeting import MeetingCreate, MeetingResponse
+from app.schemas.meeting import (
+    MeetingCreate,
+    MeetingProcessResponse,
+    MeetingResponse,
+)
 from app.schemas.transcription import TranscriptResponse
 from app.services.audio_storage import AudioStorageService
 from app.services.diarization import (
@@ -25,6 +40,7 @@ from app.services.transcription import (
     BaseSpeechToTextService,
     get_speech_to_text_service,
 )
+from app.workers.meeting_job import enqueue_meeting_processing
 
 from app.repositories.summary_repository import SummaryRepository
 from app.schemas.summary import SummaryResponse
@@ -70,6 +86,10 @@ def get_transcription_service() -> BaseSpeechToTextService:
 
 def get_diarization_service() -> DiarizationService:
     return DiarizationService(PyannoteDiarizationProvider())
+
+
+def get_meeting_job_dispatcher() -> Callable[[int, BackgroundTasks | None], None]:
+    return enqueue_meeting_processing
 
 
 def validate_meeting_id(meeting_id: int) -> int:
@@ -191,13 +211,17 @@ def upload_audio(
             detail=f"Reunião com ID {meeting_id} não encontrada.",
         )
 
-    # Impede substituição de áudio durante transcrição em andamento
-    if meeting.status == "transcribing":
+    # Impede substituição de áudio durante transcrição ou processamento em andamento
+    if meeting.status in (
+        "transcribing",
+        MeetingStatus.TRANSCRIBING,
+        MeetingStatus.PROCESSING,
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
                 "Não é possível enviar ou substituir o áudio enquanto a reunião "
-                "está sendo transcrita."
+                "está sendo transcrita ou processada."
             ),
         )
 
@@ -314,10 +338,14 @@ def transcribe_meeting(
         )
 
     # Impede execuções concorrentes na mesma reunião
-    if meeting.status == "transcribing":
+    if meeting.status in (
+        "transcribing",
+        MeetingStatus.TRANSCRIBING,
+        MeetingStatus.PROCESSING,
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="A reunião já está em processo de transcrição.",
+            detail="A reunião já está em processo de transcrição ou processamento.",
         )
 
     audio_record = audio_repo.get_by_meeting_id(meeting_id)
@@ -531,17 +559,82 @@ def get_meeting_transcript(
     return TranscriptResponse.model_validate(transcript)
 
 @router.post(
+    "/{meeting_id}/process",
+    response_model=MeetingProcessResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Iniciar processamento assíncrono da reunião",
+    description=(
+        "Valida a reunião e seu áudio, reserva o estado PROCESSING para impedir "
+        "execuções duplicadas simultâneas e dispara o pipeline em background."
+    ),
+)
+def process_meeting_async(
+    meeting_id: int,
+    background_tasks: BackgroundTasks,
+    meeting_repo: MeetingRepository = Depends(get_meeting_repository),
+    audio_repo: AudioRepository = Depends(get_audio_repository),
+    storage_service: AudioStorageService = Depends(get_audio_storage_service),
+    job_dispatcher: Callable[[int, BackgroundTasks | None], None] = Depends(
+        get_meeting_job_dispatcher
+    ),
+) -> MeetingProcessResponse:
+    validate_meeting_id(meeting_id)
+    meeting = meeting_repo.get_by_id(meeting_id)
+
+    if not meeting:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reunião com ID {meeting_id} não encontrada.",
+        )
+
+    if meeting.status in (MeetingStatus.PROCESSING, MeetingStatus.TRANSCRIBING):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A reunião com ID {meeting_id} já está em processamento.",
+        )
+
+    audio_record = audio_repo.get_by_meeting_id(meeting_id)
+    if not audio_record or not storage_service.file_exists(audio_record.file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Arquivo de áudio não encontrado para a reunião com ID {meeting_id}."
+            ),
+        )
+
+    previous_status = meeting.status
+    if not meeting_repo.try_claim_processing(meeting_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A reunião com ID {meeting_id} já está em processamento.",
+        )
+
+    try:
+        job_dispatcher(meeting_id, background_tasks)
+    except Exception as exc:
+        meeting_repo.update_status(meeting, status=previous_status)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Não foi possível enfileirar o processamento da reunião: {exc}",
+        ) from exc
+
+    return MeetingProcessResponse(
+        meeting_id=meeting_id,
+        status="PROCESSING",
+    )
+
+
+@router.post(
     "/{meeting_id}/summary",
-    response_model = SummaryResponse,
-    status_code = status.HTTP_201_CREATED,
-    summary = "Gerar resumo da reunião",
-    description = (
+    response_model=SummaryResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Gerar resumo da reunião",
+    description=(
         "Execute o pipeline de sumarização(chunking + llm) sobre a "
         "transcrição já existente e persiste o resultado. Reprocessa e "
         "substitui o resumo caso já exista um."
     ),
 )
-
 def create_summary(
     meeting_id: int,
     summary_service: SummaryService = Depends(get_summary_service),
@@ -551,8 +644,8 @@ def create_summary(
         return summary_service.generate_and_persist(meeting_id)
     except SummaryMeetingNotFoundError:
         raise HTTPException(
-            status_code = status.HTTP_404_NOT_FOUND,
-            detail = f"Reunião com ID {meeting_id} não encontrada."
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reunião com ID {meeting_id} não encontrada.",
         )
     except TranscriptNotFoundError:
         raise HTTPException(
@@ -564,16 +657,16 @@ def create_summary(
         )
     except SummaryAlreadyProcessingError:
         raise HTTPException(
-            status_code = status.HTTP_409_CONFLICT,
-            detail = f"A reunião com ID {meeting_id} já está sendo processada.",
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A reunião com ID {meeting_id} já está sendo processada.",
         )
+
 
 @router.get(
     "/{meeting_id}/summary",
-    response_model = SummaryResponse,
-    summary = "Obter resumo da reunião",
+    response_model=SummaryResponse,
+    summary="Obter resumo da reunião",
 )
-
 def get_summary(
     meeting_id: int,
     meeting_repo: MeetingRepository = Depends(get_meeting_repository),
@@ -588,11 +681,12 @@ def get_summary(
     meeting = meeting_repo.get_by_id(meeting_id)
     if meeting is None:
         raise HTTPException(
-            status_code = status.HTTP_404_NOT_FOUND,
-            detail = f"Reunião com ID {meeting_id} não encontrada.", 
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reunião com ID {meeting_id} não encontrada.",
         )
 
     raise HTTPException(
-        status_code = status.HTTP_404_NOT_FOUND,
-        detail = f"Resumo ainda não gerado pra reunião com ID {meeting_id}.",
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Resumo ainda não gerado pra reunião com ID {meeting_id}.",
     )
+
