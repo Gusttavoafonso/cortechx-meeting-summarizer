@@ -163,6 +163,38 @@ flowchart TD
 
 
 
+## Persistência do resumo e das tarefas
+
+O resultado da sumarização é guardado em `summaries` (1:1 com a reunião; `key_points`, `decisions`,
+`structured_result` e `generation_metadata` em JSONB) e as tarefas extraídas em `tasks` (1:N, prontas para
+integrações com Discord/Notion). Detalhes e justificativas em
+[`docs/persistencia-summary-tasks.md`](docs/persistencia-summary-tasks.md).
+
+### Reprocessamento
+Quando uma reunião já processada é enviada novamente para sumarização, o
+resultado existente é **substituído** (mesmo `id`, `updated_at` atualizado),
+e as tarefas antigas são removidas e recriadas. Não é mantido histórico de
+versões. Essa abordagem evita resultados duplicados ou inconsistentes no
+banco.
+
+## Endpoints de resumo
+
+| Método | Rota | Descrição |
+|---|---|---|
+| POST | `/meetings/{meeting_id}/summary` | Gera (ou reprocessa) o resumo da reunião a partir da transcrição existente |
+| GET | `/meetings/{meeting_id}/summary` | Consulta o resumo já persistido |
+
+**Pré-requisito:** a reunião precisa ter uma transcrição já gerada
+(`POST /meetings/{meeting_id}/transcribe`), senão o `POST /summary` retorna
+409.
+
+Migrations (PostgreSQL, a partir de `backend/`):
+
+```bash
+alembic upgrade head     # aplica todas as migrations
+alembic downgrade -1     # desfaz a última
+```
+
 ## Organização do backend
 
 ```text
@@ -180,9 +212,9 @@ backend/
 │   │   ├── config.py            # Configurações com Pydantic Settings e variáveis de ambiente
 │   │   └── database.py          # Conexão com o banco SQLAlchemy e sessão
 │   │
-│   ├── models/                  # Modelos SQLAlchemy (Meeting, AudioFile, Transcript, etc.)
+│   ├── models/                  # Modelos SQLAlchemy (Meeting, AudioFile, Transcript, Summary, Task, etc.)
 │   │
-│   ├── repositories/            # Camada de persistência (MeetingRepository, AudioRepository, TranscriptRepository)
+│   ├── repositories/            # Camada de persistência (MeetingRepository, AudioRepository, TranscriptRepository, SummaryRepository)
 │   │
 │   ├── schemas/                 # Schemas Pydantic de entrada e saída
 │   │
