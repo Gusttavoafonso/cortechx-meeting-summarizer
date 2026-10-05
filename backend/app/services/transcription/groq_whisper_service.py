@@ -8,6 +8,13 @@ from typing import Any
 
 import numpy as np
 
+from app.core.exceptions import (
+    TranscriptionAudioCorruptedError,
+    TranscriptionAudioNotFoundError,
+    TranscriptionProviderError,
+    TranscriptionRateLimitError,
+    TranscriptionTimeoutError,
+)
 from app.services.transcription.base import (
     BaseSpeechToTextService,
     SegmentData,
@@ -165,6 +172,77 @@ class GroqWhisperService(BaseSpeechToTextService):
 
         return cuts
 
+    def _call_groq_api(self, file_tuple: tuple[str, Any], language: str) -> Any:
+        """Executa a chamada à API da Groq encapsulando exceções do provider."""
+        client = self._get_client()
+        try:
+            return client.audio.transcriptions.create(
+                file=file_tuple,
+                model=self.model,
+                response_format="verbose_json",
+                language=language,
+            )
+        except Exception as exc:
+            self._handle_groq_exception(exc)
+
+    @staticmethod
+    def _handle_groq_exception(exc: Exception) -> None:
+        """Converte erros específicos da SDK da Groq em exceções de domínio."""
+        try:
+            import groq
+
+            if isinstance(exc, groq.RateLimitError):
+                raise TranscriptionRateLimitError(
+                    f"Limite de taxa excedido na API da Groq: {exc}"
+                ) from exc
+            if isinstance(exc, groq.APITimeoutError):
+                raise TranscriptionTimeoutError(
+                    f"Timeout na comunicação com a API da Groq: {exc}"
+                ) from exc
+            if isinstance(exc, groq.AuthenticationError):
+                raise TranscriptionProviderError(
+                    f"Falha de autenticação na API da Groq: {exc}",
+                    is_retryable=False,
+                ) from exc
+            if isinstance(exc, groq.BadRequestError):
+                raise TranscriptionAudioCorruptedError(
+                    f"Requisição inválida ou áudio ilegível na API da Groq: {exc}"
+                ) from exc
+            if isinstance(exc, groq.APIStatusError):
+                is_retryable = exc.status_code in (429, 500, 502, 503, 504)
+                raise TranscriptionProviderError(
+                    f"Erro de status retornado pela Groq ({exc.status_code}): {exc}",
+                    is_retryable=is_retryable,
+                ) from exc
+        except ImportError:
+            pass
+
+        err_msg = str(exc).lower()
+        if any(token in err_msg for token in ("rate limit", "429")):
+            raise TranscriptionRateLimitError(
+                f"Limite de taxa excedido na API da Groq: {exc}"
+            ) from exc
+        if any(token in err_msg for token in ("timeout", "timed out")):
+            raise TranscriptionTimeoutError(
+                f"Timeout na comunicação com a API da Groq: {exc}"
+            ) from exc
+        if any(
+            token in err_msg
+            for token in (
+                "invalid data",
+                "corrupt",
+                "could not find codec",
+                "bad request",
+            )
+        ):
+            raise TranscriptionAudioCorruptedError(
+                f"Áudio corrompido ou formato ilegível: {exc}"
+            ) from exc
+
+        raise TranscriptionProviderError(
+            f"Falha no serviço de Speech-to-Text: {exc}"
+        ) from exc
+
     def _transcribe_chunked(
         self,
         path_obj: Path,
@@ -191,7 +269,6 @@ class GroqWhisperService(BaseSpeechToTextService):
             target_seconds=600,  # ~10 minutos por chunk
         )
 
-        client = self._get_client()
         all_segments: list[SegmentData] = []
         text_parts: list[str] = []
         detected_language = language
@@ -210,10 +287,8 @@ class GroqWhisperService(BaseSpeechToTextService):
                 f"({duration_sec:.1f}s, offset={offset_sec}s) para a Groq..."
             )
 
-            response = client.audio.transcriptions.create(
-                file=(f"chunk_{i}.wav", chunk_wav),
-                model=self.model,
-                response_format="verbose_json",
+            response = self._call_groq_api(
+                file_tuple=(f"chunk_{i}.wav", chunk_wav),
                 language=language,
             )
 
@@ -250,7 +325,7 @@ class GroqWhisperService(BaseSpeechToTextService):
         """Transcreve o arquivo de áudio utilizando a API da Groq."""
         path_obj = Path(audio_path)
         if not path_obj.is_file():
-            raise FileNotFoundError(
+            raise TranscriptionAudioNotFoundError(
                 f"Arquivo de áudio não encontrado para transcrição: {path_obj}"
             )
 
@@ -260,17 +335,14 @@ class GroqWhisperService(BaseSpeechToTextService):
         if file_size > GROQ_MAX_FILE_SIZE_BYTES:
             return self._transcribe_chunked(path_obj=path_obj, language=language)
 
-        client = self._get_client()
         logger.info(
             f"Enviando áudio '{path_obj.name}' ({file_size / (1024 * 1024):.1f} MB) "
             f"para a Groq com modelo {self.model}..."
         )
 
         with open(path_obj, "rb") as audio_file:
-            response = client.audio.transcriptions.create(
-                file=(path_obj.name, audio_file),
-                model=self.model,
-                response_format="verbose_json",
+            response = self._call_groq_api(
+                file_tuple=(path_obj.name, audio_file),
                 language=language,
             )
 

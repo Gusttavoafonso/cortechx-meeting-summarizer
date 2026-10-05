@@ -1,10 +1,15 @@
-class TaskExtractionError(Exception):
-    """Exceção base para erros durante o processo de extração de tarefas."""
+"""Exceções do serviço de extração de tarefas baseadas no domínio central."""
 
+from app.core.exceptions import (
+    ProcessingError,
+    TaskExtractionError,
+    TaskExtractionInvalidResponseError,
+    TaskExtractionLLMFailureError,
+)
 
-class TaskExtractionInvalidResponseError(TaskExtractionError):
-    """Lançada quando a resposta do LLM é inválida ou incompatível com o schema."""
-
-
-class TaskExtractionLLMFailureError(TaskExtractionError):
-    """Lançada quando ocorre uma falha na chamada ao serviço de LLM."""
+__all__ = [
+    "ProcessingError",
+    "TaskExtractionError",
+    "TaskExtractionInvalidResponseError",
+    "TaskExtractionLLMFailureError",
+]

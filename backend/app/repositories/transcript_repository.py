@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.exceptions import InvalidPersistenceDataError
 from app.models.transcript import Transcript
 from app.models.transcript_segment import TranscriptSegment
 from app.services.diarization import DiarizationAssociationError
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
     from app.services.transcription.base import SegmentData
 
 
-class InvalidTranscriptSegmentError(ValueError):
+class InvalidTranscriptSegmentError(InvalidPersistenceDataError, ValueError):
     pass
 
 
@@ -166,12 +167,16 @@ class TranscriptRepository:
                 default=None,
             )
 
-            if best_match is not None and self._calculate_overlap(
-                transcript_segment.start_time,
-                transcript_segment.end_time,
-                best_match.start_time,
-                best_match.end_time,
-            ) > 0:
+            if (
+                best_match is not None
+                and self._calculate_overlap(
+                    transcript_segment.start_time,
+                    transcript_segment.end_time,
+                    best_match.start_time,
+                    best_match.end_time,
+                )
+                > 0
+            ):
                 assignments.append((transcript_segment, best_match.speaker))
                 continue
 
@@ -185,12 +190,16 @@ class TranscriptRepository:
                 ),
                 default=None,
             )
-            if nearest_match is not None and self._calculate_interval_distance(
-                transcript_segment.start_time,
-                transcript_segment.end_time,
-                nearest_match.start_time,
-                nearest_match.end_time,
-            ) <= self.TIMESTAMP_TOLERANCE_SECONDS:
+            if (
+                nearest_match is not None
+                and self._calculate_interval_distance(
+                    transcript_segment.start_time,
+                    transcript_segment.end_time,
+                    nearest_match.start_time,
+                    nearest_match.end_time,
+                )
+                <= self.TIMESTAMP_TOLERANCE_SECONDS
+            ):
                 assignments.append((transcript_segment, nearest_match.speaker))
                 continue
 

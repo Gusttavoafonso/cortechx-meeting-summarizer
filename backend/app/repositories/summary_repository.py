@@ -5,13 +5,14 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.exceptions import EntityNotFoundError
 from app.models.meeting import Meeting
 from app.models.summary import Summary
 from app.models.task import Task
 from app.schemas.summary import SummaryResult
 
 
-class SummaryMeetingNotFoundError(LookupError):
+class SummaryMeetingNotFoundError(EntityNotFoundError, LookupError):
     """Reunião inexistente ao tentar persistir o resultado da sumarização."""
 
 

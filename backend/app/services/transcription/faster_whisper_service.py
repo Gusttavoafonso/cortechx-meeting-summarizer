@@ -4,6 +4,11 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from app.core.exceptions import (
+    TranscriptionAudioCorruptedError,
+    TranscriptionAudioNotFoundError,
+    TranscriptionProviderError,
+)
 from app.services.transcription.base import (
     BaseSpeechToTextService,
     SegmentData,
@@ -59,7 +64,7 @@ class FasterWhisperService(BaseSpeechToTextService):
         """Transcreve o arquivo local utilizando faster-whisper com Silero VAD."""
         path_str = str(audio_path)
         if not Path(path_str).is_file():
-            raise FileNotFoundError(
+            raise TranscriptionAudioNotFoundError(
                 f"Arquivo de áudio não encontrado para transcrição: {path_str}"
             )
 
@@ -71,12 +76,30 @@ class FasterWhisperService(BaseSpeechToTextService):
         logger.info(
             f"Iniciando transcrição de '{path_str}' com VAD={self.vad_filter}..."
         )
-        segments_gen, info = model.transcribe(
-            path_str,
-            language=language,
-            vad_filter=self.vad_filter,
-            vad_parameters=vad_parameters if self.vad_filter else None,
-        )
+        try:
+            segments_gen, info = model.transcribe(
+                path_str,
+                language=language,
+                vad_filter=self.vad_filter,
+                vad_parameters=vad_parameters if self.vad_filter else None,
+            )
+        except Exception as exc:
+            err_msg = str(exc).lower()
+            if any(
+                token in err_msg
+                for token in (
+                    "invalid data",
+                    "corrupt",
+                    "could not find codec",
+                    "invaliddataerror",
+                )
+            ):
+                raise TranscriptionAudioCorruptedError(
+                    f"Arquivo de áudio corrompido ou formato ilegível: {exc}"
+                ) from exc
+            raise TranscriptionProviderError(
+                f"Falha no serviço de Speech-to-Text: {exc}"
+            ) from exc
 
         segments: list[SegmentData] = []
         text_parts: list[str] = []

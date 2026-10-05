@@ -4,14 +4,21 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_session
+from app.core.exceptions import (
+    LLMError,
+    TranscriptionAudioCorruptedError,
+    TranscriptionError,
+)
 from app.repositories.audio_repository import AudioRepository
 from app.repositories.meeting_repository import MeetingRepository
+from app.repositories.summary_repository import SummaryRepository
 from app.repositories.transcript_repository import (
     InvalidTranscriptSegmentError,
     TranscriptRepository,
 )
 from app.schemas.audio import AudioUploadResponse
 from app.schemas.meeting import MeetingCreate, MeetingResponse
+from app.schemas.summary import SummaryResponse
 from app.schemas.transcription import TranscriptResponse
 from app.services.audio_storage import AudioStorageService
 from app.services.diarization import (
@@ -20,21 +27,20 @@ from app.services.diarization import (
     DiarizationService,
     PyannoteDiarizationProvider,
 )
-from app.services.meeting_service import MeetingNotFoundError, MeetingService
-from app.services.transcription import (
-    BaseSpeechToTextService,
-    get_speech_to_text_service,
-)
-
-from app.repositories.summary_repository import SummaryRepository
-from app.schemas.summary import SummaryResponse
 from app.services.llm.service import get_llm_service
+from app.services.meeting_service import MeetingNotFoundError, MeetingService
 from app.services.summarization.service import create_summarization_service
 from app.services.summary_service import (
     MeetingNotFoundError as SummaryMeetingNotFoundError,
+)
+from app.services.summary_service import (
     SummaryAlreadyProcessingError,
     SummaryService,
     TranscriptNotFoundError,
+)
+from app.services.transcription import (
+    BaseSpeechToTextService,
+    get_speech_to_text_service,
 )
 
 router = APIRouter()
@@ -95,7 +101,7 @@ def get_summary_service(
 ) -> SummaryService:
     try:
         llm = get_llm_service()
-    except Exception as exc:
+    except LLMError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Serviço de LLM não configurado ou indisponível: {exc}",
@@ -359,7 +365,13 @@ def transcribe_meeting(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erro inesperado durante a leitura do arquivo de áudio: {io_err}",
         )
-    except Exception as stt_err:
+    except TranscriptionAudioCorruptedError as corr_err:
+        meeting_repo.update_status(meeting, status="audio_uploaded")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Arquivo de áudio corrompido ou formato ilegível: {corr_err}",
+        )
+    except (TranscriptionError, Exception) as stt_err:
         meeting_repo.update_status(meeting, status="audio_uploaded")
         err_msg = str(stt_err).lower()
         if any(
@@ -530,18 +542,18 @@ def get_meeting_transcript(
 
     return TranscriptResponse.model_validate(transcript)
 
+
 @router.post(
     "/{meeting_id}/summary",
-    response_model = SummaryResponse,
-    status_code = status.HTTP_201_CREATED,
-    summary = "Gerar resumo da reunião",
-    description = (
+    response_model=SummaryResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Gerar resumo da reunião",
+    description=(
         "Execute o pipeline de sumarização(chunking + llm) sobre a "
         "transcrição já existente e persiste o resultado. Reprocessa e "
         "substitui o resumo caso já exista um."
     ),
 )
-
 def create_summary(
     meeting_id: int,
     summary_service: SummaryService = Depends(get_summary_service),
@@ -551,8 +563,8 @@ def create_summary(
         return summary_service.generate_and_persist(meeting_id)
     except SummaryMeetingNotFoundError:
         raise HTTPException(
-            status_code = status.HTTP_404_NOT_FOUND,
-            detail = f"Reunião com ID {meeting_id} não encontrada."
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reunião com ID {meeting_id} não encontrada.",
         )
     except TranscriptNotFoundError:
         raise HTTPException(
@@ -564,16 +576,16 @@ def create_summary(
         )
     except SummaryAlreadyProcessingError:
         raise HTTPException(
-            status_code = status.HTTP_409_CONFLICT,
-            detail = f"A reunião com ID {meeting_id} já está sendo processada.",
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A reunião com ID {meeting_id} já está sendo processada.",
         )
+
 
 @router.get(
     "/{meeting_id}/summary",
-    response_model = SummaryResponse,
-    summary = "Obter resumo da reunião",
+    response_model=SummaryResponse,
+    summary="Obter resumo da reunião",
 )
-
 def get_summary(
     meeting_id: int,
     meeting_repo: MeetingRepository = Depends(get_meeting_repository),
@@ -588,11 +600,11 @@ def get_summary(
     meeting = meeting_repo.get_by_id(meeting_id)
     if meeting is None:
         raise HTTPException(
-            status_code = status.HTTP_404_NOT_FOUND,
-            detail = f"Reunião com ID {meeting_id} não encontrada.", 
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reunião com ID {meeting_id} não encontrada.",
         )
 
     raise HTTPException(
-        status_code = status.HTTP_404_NOT_FOUND,
-        detail = f"Resumo ainda não gerado pra reunião com ID {meeting_id}.",
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Resumo ainda não gerado pra reunião com ID {meeting_id}.",
     )

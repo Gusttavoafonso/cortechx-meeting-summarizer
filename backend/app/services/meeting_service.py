@@ -1,17 +1,16 @@
-from app.models.meeting_status import MeetingStatus
+from app.core.exceptions import MeetingNotFoundError
 from app.models.meeting import Meeting
+from app.models.meeting_status import MeetingStatus
 from app.repositories.meeting_repository import MeetingRepository
 from app.schemas.meeting import MeetingCreate
 
-class MeetingNotFoundError(Exception):
-    """Levantada quando uma meeting não é encontrada."""
 
 class MeetingService:
     def __init__(self, repository: MeetingRepository):
         self.repository = repository
 
     def create(self, data: MeetingCreate) -> Meeting:
-        meeting = Meeting(title = data.title, status = MeetingStatus.RECEIVED)
+        meeting = Meeting(title=data.title, status=MeetingStatus.RECEIVED)
         return self.repository.create(meeting)
 
     def get_by_id(self, meeting_id: int) -> Meeting:
