@@ -1,6 +1,6 @@
-# Documentação de Padronização de Exceções e Tratamento de Erros
+# Documentação de Padronização de Exceções e Classificação de Falhas
 
-Este documento descreve a arquitetura de tratamento de erros e a estrutura hierárquica de exceções de domínio implementada no projeto **CortechX Meeting Summarizer** (Issue #26 - Etapa 1).
+Este documento descreve a arquitetura de tratamento de erros, hierarquia de exceções de domínio e os critérios de classificação de falhas implementados no projeto **CortechX Meeting Summarizer** (Issue #26 - Etapas 1 e 2).
 
 ---
 
@@ -12,67 +12,80 @@ O pipeline de processamento de reuniões integra múltiplos serviços internos e
 Storage ➔ Speech-to-Text ➔ Diarização ➔ Chunking ➔ LLM ➔ Persistência (DB)
 ```
 
-Cada etapa está sujeita a diferentes tipos de falha:
-- **Falhas Transitórias (Temporárias / Retryable):** Indisponibilidade de API de terceiros, timeouts de rede, rate limit (HTTP 429), instabilidade passageira no servidor (HTTP 5xx). Devem ser elegíveis para mecanismos controlados de retry.
-- **Falhas Definitivas (Permanentes / Non-Retryable):** Arquivo de áudio corrompido ou inexistente, credenciais ausentes ou inválidas (HTTP 401/403), reuniões inexistentes (404), esquemas de dados inválidos ou violações de integridade. Retentativas nessas falhas são inúteis e apenas desperdiçam recursos e tempo.
+Cada etapa está sujeita a falhas de diferentes naturezas. Para garantir a resiliência do sistema e evitar tanto o desperdício de recursos quanto o travamento de execuções, o sistema adota critérios estritos de classificação de falhas:
 
-Para que o sistema distinga essas situações sem depender do uso genérico de `Exception` ou inspeção manual de mensagens em string, foi introduzida uma hierarquia unificada com base em `ApplicationError`.
+- **Falha Recuperável (`FailureCategory.RECOVERABLE` / `RecoverableError`):** Falha transitória decorrente de oscilações de rede, indisponibilidade momentânea ou quotas temporárias. O sistema deve efetuar novas tentativas de execução (retry) utilizando políticas controladas (ex: backoff exponencial).
+  - *Exemplos:* timeout de requisição, HTTP 429 (rate limit), erro temporário de rede/conexão, indisponibilidade temporária de provedores (HTTP 502, 503, 504).
+- **Falha Definitiva (`FailureCategory.DEFINITIVE` / `DefinitiveError`):** Falha estrutural, de autorização ou de validação de dados. O estado não mudará com novas tentativas imediatas. O pipeline **deve abortar imediatamente sem novas tentativas**, poupando custos e tempo.
+  - *Exemplos:* formato de áudio inválido ou corrompido, arquivo ou registro ausente (HTTP 404), credenciais ausentes ou inválidas (HTTP 401/403), entrada vazia ou inválida (HTTP 400/422).
 
 ---
 
 ## 2. Hierarquia de Exceções de Domínio
 
-Todas as exceções do sistema herdam de `ApplicationError` (`app.core.exceptions`).
+Todas as exceções do sistema herdam de `ApplicationError` (`app.core.exceptions`). A classificação de falhas é estruturada diretamente na herança orientada a objetos por meio de `RecoverableError` e `DefinitiveError`.
 
 ```mermaid
 classDiagram
     class ApplicationError {
         +str message
         +bool is_retryable
+        +FailureCategory category
         +dict details
     }
 
-    class TranscriptionError {
-        +bool is_retryable
+    class RecoverableError {
+        +bool is_retryable = True
     }
-    class DiarizationError {
-        +bool is_retryable
+
+    class DefinitiveError {
+        +bool is_retryable = False
     }
-    class LLMError {
-        +bool is_retryable
-    }
-    class PersistenceError {
-        +bool is_retryable
-    }
-    class ProcessingError {
-        +bool is_retryable
-    }
+
+    ApplicationError <|-- RecoverableError
+    ApplicationError <|-- DefinitiveError
 
     ApplicationError <|-- TranscriptionError
     ApplicationError <|-- DiarizationError
     ApplicationError <|-- LLMError
-    ApplicationError <|-- PersistenceError
+    DefinitiveError <|-- PersistenceError
     ApplicationError <|-- ProcessingError
 
     TranscriptionError <|-- TranscriptionAudioNotFoundError
+    DefinitiveError <|-- TranscriptionAudioNotFoundError
     TranscriptionError <|-- TranscriptionAudioCorruptedError
+    DefinitiveError <|-- TranscriptionAudioCorruptedError
     TranscriptionError <|-- TranscriptionEmptyResponseError
+    DefinitiveError <|-- TranscriptionEmptyResponseError
     TranscriptionError <|-- TranscriptionTimeoutError
+    RecoverableError <|-- TranscriptionTimeoutError
     TranscriptionError <|-- TranscriptionRateLimitError
+    RecoverableError <|-- TranscriptionRateLimitError
     TranscriptionError <|-- TranscriptionProviderError
+    RecoverableError <|-- TranscriptionProviderError
 
     DiarizationError <|-- DiarizationConfigurationError
+    DefinitiveError <|-- DiarizationConfigurationError
     DiarizationError <|-- DiarizationAudioNotFoundError
+    DefinitiveError <|-- DiarizationAudioNotFoundError
     DiarizationError <|-- DiarizationEmptyResponseError
+    DefinitiveError <|-- DiarizationEmptyResponseError
     DiarizationError <|-- DiarizationAssociationError
+    DefinitiveError <|-- DiarizationAssociationError
     DiarizationError <|-- DiarizationProviderError
+    DefinitiveError <|-- DiarizationProviderError
 
     LLMError <|-- LLMConfigurationError
+    DefinitiveError <|-- LLMConfigurationError
     LLMError <|-- LLMAuthenticationError
+    DefinitiveError <|-- LLMAuthenticationError
     LLMError <|-- LLMTimeoutError
+    RecoverableError <|-- LLMTimeoutError
     LLMError <|-- LLMProviderError
+    RecoverableError <|-- LLMProviderError
     LLMProviderError <|-- LLMRateLimitError
     LLMError <|-- LLMEmptyResponseError
+    DefinitiveError <|-- LLMEmptyResponseError
 
     PersistenceError <|-- EntityNotFoundError
     PersistenceError <|-- EntityConflictError
@@ -86,7 +99,9 @@ classDiagram
     EntityConflictError <|-- SummaryAlreadyProcessingError
 
     ProcessingError <|-- ChunkingError
+    DefinitiveError <|-- ChunkingError
     ProcessingError <|-- SummarizationError
+    DefinitiveError <|-- SummarizationError
     ProcessingError <|-- TaskExtractionError
 
     SummarizationError <|-- SummarizationEmptyInputError
@@ -95,66 +110,119 @@ classDiagram
     SummarizationError <|-- SummarizationInvalidResponseError
 
     TaskExtractionError <|-- TaskExtractionInvalidResponseError
+    DefinitiveError <|-- TaskExtractionInvalidResponseError
     TaskExtractionError <|-- TaskExtractionLLMFailureError
+    RecoverableError <|-- TaskExtractionLLMFailureError
 ```
 
 ---
 
-## 3. Matriz de Classificação: Falhas Transitórias vs Definitivas
+## 3. Classificação de Falhas (Recuperáveis vs Definitivas)
 
-| Categoria | Classe de Exceção | `is_retryable` | Causa Comum | Ação Recomendada |
-| :--- | :--- | :---: | :--- | :--- |
-| **STT** | `TranscriptionTimeoutError` | **Sim** | Timeout de requisição HTTP na API Groq | Retry com backoff exponencial |
-| **STT** | `TranscriptionRateLimitError` | **Sim** | Rate limit excedido (HTTP 429) | Retry respeitando retry-after ou backoff |
-| **STT** | `TranscriptionProviderError` | **Sim** | Erro interno do servidor (5xx) ou rede | Retry controlado |
-| **STT** | `TranscriptionAudioNotFoundError` | Não | Áudio ausente no storage | Falhar imediatamente (HTTP 404) |
-| **STT** | `TranscriptionAudioCorruptedError` | Não | Codec inválido ou bytes corrompidos | Falhar imediatamente (HTTP 422) |
-| **STT** | `TranscriptionEmptyResponseError` | Não | Áudio mudo ou sem fala detectada | Falhar imediatamente (HTTP 422) |
-| **Diarização** | `DiarizationConfigurationError` | Não | `HUGGINGFACE_TOKEN` ausente ou vazio | Falhar imediatamente |
-| **Diarização** | `DiarizationAudioNotFoundError` | Não | Arquivo de áudio não encontrado | Falhar imediatamente (HTTP 404) |
-| **Diarização** | `DiarizationAssociationError` | Não | Falha ao correlacionar turnos a segmentos | Falhar imediatamente (HTTP 422) |
-| **Diarização** | `DiarizationProviderError` | Não | Erro de inferência no Pyannote | Falhar imediatamente (HTTP 502) |
-| **LLM** | `LLMTimeoutError` | **Sim** | Timeout na chamada ao provedor de IA | Retry com backoff |
-| **LLM** | `LLMRateLimitError` | **Sim** | Quota temporária atingida (HTTP 429) | Retry com backoff |
-| **LLM** | `LLMProviderError` | **Sim** | Erro de rede ou 5xx retornado pela IA | Retry controlado |
-| **LLM** | `LLMConfigurationError` | Não | Chave ou provedor ausente nas configs | Falhar imediatamente (HTTP 503) |
-| **LLM** | `LLMAuthenticationError` | Não | Chave de API inválida (HTTP 401/403) | Falhar imediatamente |
-| **LLM** | `LLMEmptyResponseError` | Não | LLM retornou conteúdo vazio | Falhar ou tratar prompt |
-| **Persistência** | `MeetingNotFoundError` | Não | ID inexistente na tabela `meetings` | Retornar HTTP 404 |
-| **Persistência** | `TranscriptNotFoundError` | Não | Reunião ainda não transcrita | Retornar HTTP 409 |
-| **Persistência** | `SummaryAlreadyProcessingError` | Não | Concorrência de sumarização | Retornar HTTP 409 |
-| **Processamento** | `SummarizationEmptyInputError` | Não | Transcrição vazia recebida | Retornar HTTP 400 |
-| **Processamento** | `SummarizationInvalidResponseError`| Não | Resposta do LLM não respeitou schema JSON | Falhar ou regenerar |
-| **Processamento** | `TaskExtractionLLMFailureError` | **Sim** | Chamada ao LLM falhou durante extração | Retry com base na causa do LLM |
+### 3.1 Critérios de Aceitação e Definições
+
+1. **Enum `FailureCategory`:**
+   - `RECOVERABLE = "recoverable"`
+   - `DEFINITIVE = "definitive"`
+2. **Propriedade `category` em `ApplicationError`:**
+   - Permite que qualquer erro de domínio exponha dinamicamente sua categoria (`err.category`), correspondendo a `FailureCategory.RECOVERABLE` se `is_retryable is True`, ou `FailureCategory.DEFINITIVE` caso contrário.
+3. **Regra de Aborto Imediato para Erros Definitivos:**
+   - Erros que herdam de `DefinitiveError` possuem prioridade máxima na análise de decisão. **Nenhum retry será acionado**, mesmo se a exceção definitiva encapsular uma causa com código de rede transitório.
+
+### 3.2 Funções de Classificação
+
+O módulo `app.core.exceptions` disponibiliza utilitários centralizados para inspeção determinística de falhas:
+
+```python
+from app.core.exceptions import classify_failure, is_definitive, is_recoverable
+
+# Retorna booleano para controle de loop de retry
+if is_recoverable(exc):
+    execute_retry()
+else:
+    abort_immediately()
+
+# Ou verificação explícita de erro definitivo
+if is_definitive(exc):
+    log_critical_error_and_abort()
+
+# Ou obtenção da categoria para métricas e observabilidade
+category = classify_failure(exc)  # FailureCategory.RECOVERABLE ou FailureCategory.DEFINITIVE
+```
+
+#### Ordem de Precedência na Avaliação (`is_recoverable`):
+1. **Instância de `DefinitiveError`:** Retorna imediatamente `False` (aborto estrito).
+2. **Instância de `RecoverableError`:** Retorna imediatamente `True`.
+3. **Instância de `ApplicationError`:** Retorna o valor de `bool(error.is_retryable)`.
+4. **Códigos de Status HTTP (SDKs Groq, OpenAI, httpx, requests, FastAPI):**
+   - `429`, `502`, `503`, `504` ➔ Retorna `True` (Transitório / Recuperável).
+   - `400`, `401`, `403`, `404`, `405`, `409`, `422` ➔ Retorna `False` (Definitivo).
+5. **Códigos de Status em String (gRPC / Google GenAI):**
+   - `RESOURCE_EXHAUSTED`, `UNAVAILABLE`, `DEADLINE_EXCEEDED` ➔ Retorna `True`.
+   - `INVALID_ARGUMENT`, `NOT_FOUND`, `PERMISSION_DENIED`, `UNAUTHENTICATED`, `ALREADY_EXISTS` ➔ Retorna `False`.
+6. **Exceções Nativas Embutidas do Python:**
+   - `TimeoutError`, `ConnectionError`, `ConnectionResetError` ➔ Retorna `True`.
+   - `FileNotFoundError`, `ValueError`, `TypeError`, `KeyError`, `AttributeError`, `PermissionError` ➔ Retorna `False`.
+7. **Causa Encapsulada (`__cause__`):** Avalia recursivamente a causa raiz (se a exceção principal não tiver sido marcada explicitamente como definitiva).
+8. **Fallback Conservador:** Retorna `False` para exceções desconhecidas a fim de evitar loops de retries infinitos.
+
+---
+
+### 3.3 Matriz de Classificação de Exceções de Domínio
+
+| Categoria | Classe de Exceção | Base de Classificação | `is_retryable` | Causa Comum | Ação Recomendada |
+| :--- | :--- | :---: | :---: | :--- | :--- |
+| **STT** | `TranscriptionTimeoutError` | `RecoverableError` | **Sim** | Timeout de requisição na API Groq | Retry com backoff exponencial |
+| **STT** | `TranscriptionRateLimitError` | `RecoverableError` | **Sim** | Rate limit excedido (HTTP 429) | Retry respeitando retry-after |
+| **STT** | `TranscriptionProviderError` | `RecoverableError` | **Sim** | Erro de infraestrutura/rede do provedor | Retry controlado |
+| **STT** | `TranscriptionAudioNotFoundError` | `DefinitiveError` | Não | Áudio ausente no storage | Abortar imediatamente (HTTP 404) |
+| **STT** | `TranscriptionAudioCorruptedError` | `DefinitiveError` | Não | Codec inválido ou bytes corrompidos | Abortar imediatamente (HTTP 422) |
+| **STT** | `TranscriptionEmptyResponseError` | `DefinitiveError` | Não | Áudio mudo ou inaudível | Abortar imediatamente (HTTP 422) |
+| **Diarização** | `DiarizationConfigurationError` | `DefinitiveError` | Não | `HUGGINGFACE_TOKEN` ausente ou inválido | Abortar imediatamente |
+| **Diarização** | `DiarizationAudioNotFoundError` | `DefinitiveError` | Não | Arquivo de áudio não encontrado | Abortar imediatamente (HTTP 404) |
+| **Diarização** | `DiarizationAssociationError` | `DefinitiveError` | Não | Falha ao correlacionar turnos | Abortar imediatamente (HTTP 422) |
+| **Diarização** | `DiarizationProviderError` | `DefinitiveError` | Não | Falha interna no modelo Pyannote | Abortar imediatamente (HTTP 502) |
+| **LLM** | `LLMTimeoutError` | `RecoverableError` | **Sim** | Timeout na chamada ao provedor de IA | Retry com backoff |
+| **LLM** | `LLMRateLimitError` | `RecoverableError` | **Sim** | Quota temporária atingida (HTTP 429) | Retry com backoff |
+| **LLM** | `LLMProviderError` | `RecoverableError` | **Sim** | Erro de rede ou 5xx retornado pela IA | Retry controlado |
+| **LLM** | `LLMConfigurationError` | `DefinitiveError` | Não | Chave ou provedor ausente | Abortar imediatamente (HTTP 503) |
+| **LLM** | `LLMAuthenticationError` | `DefinitiveError` | Não | Chave de API inválida (HTTP 401/403) | Abortar imediatamente |
+| **LLM** | `LLMEmptyResponseError` | `DefinitiveError` | Não | LLM retornou conteúdo vazio | Abortar imediatamente |
+| **Persistência** | `MeetingNotFoundError` | `DefinitiveError` | Não | ID inexistente na tabela `meetings` | Abortar (HTTP 404) |
+| **Persistência** | `TranscriptNotFoundError` | `DefinitiveError` | Não | Reunião ainda não transcrita | Abortar (HTTP 409) |
+| **Persistência** | `SummaryAlreadyProcessingError` | `DefinitiveError` | Não | Concorrência de sumarização | Abortar (HTTP 409) |
+| **Processamento** | `SummarizationEmptyInputError` | `DefinitiveError` | Não | Transcrição vazia recebida | Abortar (HTTP 400) |
+| **Processamento** | `SummarizationInvalidResponseError`| `DefinitiveError`| Não | Resposta do LLM não respeitou schema JSON | Abortar |
+| **Processamento** | `TaskExtractionLLMFailureError` | `RecoverableError` | **Sim** | Falha transiente na chamada ao LLM | Retry conforme causa do LLM |
 
 ---
 
 ## 4. Encapsulamento de Erros dos Providers
 
-Nenhuma camada superior (como serviços de orquestração ou rotas FastAPI) deve lidar diretamente com exceções nativas de bibliotecas externas (como `google.genai.errors`, SDK da `Groq`, ou `pyannote.audio`).
+Nenhuma camada superior (como serviços de orquestração ou rotas FastAPI) lida diretamente com exceções nativas de bibliotecas externas (como `google.genai.errors`, SDK da `Groq`, ou `pyannote.audio`).
 
 ### 4.1 Provedor Google Gemini (`GeminiProvider`)
-- `errors.ClientError` com códigos 401 e 403 ➔ `LLMAuthenticationError`.
-- `errors.ClientError` com código 429 ➔ `LLMRateLimitError` (com `is_retryable=True`).
-- `errors.ServerError` (códigos 500, 502, 503, 504) ➔ `LLMProviderError` (com `is_retryable=True`).
-- Timeouts ➔ `LLMTimeoutError` (com `is_retryable=True`).
+- `errors.ClientError` com códigos 401 e 403 ➔ `LLMAuthenticationError` (Definitiva).
+- `errors.ClientError` com código 429 ➔ `LLMRateLimitError` (Recuperável).
+- `errors.ServerError` (códigos 500, 502, 503, 504) ➔ `LLMProviderError` (Recuperável).
+- Timeouts ➔ `LLMTimeoutError` (Recuperável).
 
 ### 4.2 Provedor Groq Whisper (`GroqWhisperService`)
-- `groq.RateLimitError` ➔ `TranscriptionRateLimitError` (`is_retryable=True`).
-- `groq.APITimeoutError` ➔ `TranscriptionTimeoutError` (`is_retryable=True`).
-- `groq.AuthenticationError` ➔ `TranscriptionProviderError` (`is_retryable=False`).
-- `groq.BadRequestError` / áudio ilegível ➔ `TranscriptionAudioCorruptedError` (`is_retryable=False`).
-- `groq.APIStatusError` (5xx) ➔ `TranscriptionProviderError` (`is_retryable=True`).
+- `groq.RateLimitError` ➔ `TranscriptionRateLimitError` (Recuperável).
+- `groq.APITimeoutError` ➔ `TranscriptionTimeoutError` (Recuperável).
+- `groq.AuthenticationError` ➔ `TranscriptionProviderError` (Definitiva).
+- `groq.BadRequestError` / áudio ilegível ➔ `TranscriptionAudioCorruptedError` (Definitiva).
+- `groq.APIStatusError` (5xx) ➔ `TranscriptionProviderError` (Recuperável).
 
 ### 4.3 Provedor Local Faster-Whisper (`FasterWhisperService`)
-- Arquivo inexistente ➔ `TranscriptionAudioNotFoundError`.
-- Erros de decodificação (`InvalidDataError`, formato não reconhecido) ➔ `TranscriptionAudioCorruptedError`.
-- Falhas de execução ➔ `TranscriptionProviderError`.
+- Arquivo inexistente ➔ `TranscriptionAudioNotFoundError` (Definitiva).
+- Erros de decodificação (`InvalidDataError`, formato não reconhecido) ➔ `TranscriptionAudioCorruptedError` (Definitiva).
+- Falhas de execução ➔ `TranscriptionProviderError` (Definitiva/Recuperável dependendo da causa).
 
 ### 4.4 Provedor Pyannote (`PyannoteDiarizationProvider`)
-- Ausência de `HUGGINGFACE_TOKEN` ➔ `DiarizationConfigurationError`.
-- Falha ao carregar o modelo ou inferência ➔ `DiarizationProviderError`.
-- Segmentos vazios retornados ➔ `DiarizationEmptyResponseError`.
+- Ausência de `HUGGINGFACE_TOKEN` ➔ `DiarizationConfigurationError` (Definitiva).
+- Falha ao carregar o modelo ou inferência ➔ `DiarizationProviderError` (Definitiva).
+- Segmentos vazios retornados ➔ `DiarizationEmptyResponseError` (Definitiva).
 
 ---
 
@@ -176,6 +244,7 @@ Na camada de API (`app/api/v1/meetings.py`), as exceções de domínio são mape
 
 ## 6. Boas Práticas para o Código da Aplicação
 
-1. **Evitar `except Exception` genérico** quando o tipo de erro for conhecido. Tratar especificamente as exceções esperadas (`LLMError`, `TranscriptionError`, `ValidationError`, etc.).
-2. **Sempre encadear exceções** usando `raise NovaExcecao(...) from exc` para manter o traceback e o contexto original da falha.
-3. **Utilizar `is_retryable`** para decisões de retry nos mecanismos resilientes de orquestração.
+1. **Evitar `except Exception` genérico:** Tratar especificamente as exceções esperadas (`LLMError`, `TranscriptionError`, `DefinitiveError`, etc.).
+2. **Sempre encadear exceções:** Usar `raise NovaExcecao(...) from exc` para manter o traceback e a causa original da falha.
+3. **Utilizar `is_recoverable(exc)`:** Nas rotinas de orquestração e background workers para decidir se uma operação deve ser reenfileirada para retry ou abortada definitivamente.
+4. **Erros definitivos nunca sofrem retry:** Respeitar a regra de aborto imediato para falhas estruturais, de permissão ou de parâmetros inválidos.
