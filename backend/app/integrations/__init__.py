@@ -4,6 +4,10 @@ from app.integrations.base import (
     ProviderExecutionError,
     ProviderNotFoundError,
 )
+from app.integrations.configuration import (
+    ProviderConfigurationError,
+    ProviderConfigurationResolver,
+)
 from app.integrations.providers import ConsoleProvider
 from app.integrations.registry import (
     ProviderRegistry,
@@ -12,6 +16,7 @@ from app.integrations.registry import (
     list_providers,
     register_provider,
 )
+from app.integrations.service import IntegrationService
 from app.schemas.integration import (
     IntegrationResult,
     MeetingIntegrationPayload,
@@ -23,8 +28,11 @@ __all__ = [
     "IntegrationError",
     "IntegrationProvider",
     "IntegrationResult",
+    "IntegrationService",
     "MeetingIntegrationPayload",
     "ProviderExecutionError",
+    "ProviderConfigurationError",
+    "ProviderConfigurationResolver",
     "ProviderNotFoundError",
     "ProviderRegistry",
     "TaskIntegrationPayload",

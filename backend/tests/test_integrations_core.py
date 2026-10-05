@@ -12,13 +12,16 @@ from app.integrations.base import (
     ProviderExecutionError,
     ProviderNotFoundError,
 )
+from app.integrations.configuration import ProviderConfigurationResolver
 from app.integrations.providers.console import ConsoleProvider
 from app.integrations.registry import ProviderRegistry, default_registry
+from app.integrations.service import IntegrationService
 from app.schemas.integration import (
     IntegrationResult,
     MeetingIntegrationPayload,
     TaskIntegrationPayload,
 )
+from app.core.config import Settings
 
 
 def _sample_payload() -> MeetingIntegrationPayload:
@@ -189,3 +192,98 @@ class TestErrorIsolation:
         assert result.success is False
         assert "Connection refused" in result.error
         assert result.metadata["attempt"] == 1
+
+
+class TestIntegrationService:
+    def test_sends_payload_through_requested_provider(self):
+        stream = io.StringIO()
+        service = IntegrationService()
+
+        result = service.send("console", _sample_payload(), stream=stream)
+
+        assert result.success is True
+        assert result.provider == "console"
+        assert "Reunião de Alinhamento" in stream.getvalue()
+
+    def test_returns_standard_result_for_unknown_provider(self):
+        result = IntegrationService().send("unknown", _sample_payload())
+
+        assert result.provider == "unknown"
+        assert result.success is False
+        assert result.error == "Provider de integração não encontrado."
+
+    def test_isolates_provider_execution_failure(self):
+        registry = ProviderRegistry()
+
+        @registry.register("broken")
+        class BrokenProvider(IntegrationProvider):
+            name = "broken"
+
+            def send(self, payload: MeetingIntegrationPayload) -> IntegrationResult:
+                raise RuntimeError("token=secret-value")
+
+        result = IntegrationService(registry).send("broken", _sample_payload())
+
+        assert result.provider == "broken"
+        assert result.success is False
+        assert result.error == "Não foi possível executar a integração."
+        assert "secret-value" not in result.error
+
+    def test_uses_automatic_discord_configuration(self):
+        registry = ProviderRegistry()
+
+        @registry.register("discord")
+        class DiscordProvider(IntegrationProvider):
+            name = "discord"
+
+            def __init__(self, webhook_url: str) -> None:
+                self.webhook_url = webhook_url
+
+            def send(self, payload: MeetingIntegrationPayload) -> IntegrationResult:
+                return IntegrationResult(
+                    provider=self.name,
+                    success=True,
+                    metadata={"webhook_url": self.webhook_url},
+                )
+
+        settings = Settings(
+            _env_file=None,
+            discord_webhook_url="https://discord.com/api/webhooks/123/token",
+        )
+        service = IntegrationService(
+            registry,
+            ProviderConfigurationResolver(settings),
+        )
+
+        result = service.send("discord", _sample_payload())
+
+        assert result.success is True
+        assert result.metadata["webhook_url"] == (
+            "https://discord.com/api/webhooks/123/token"
+        )
+
+    def test_returns_safe_result_when_provider_configuration_is_missing(self):
+        registry = ProviderRegistry()
+
+        @registry.register("discord")
+        class DiscordProvider(IntegrationProvider):
+            name = "discord"
+
+            def __init__(self, webhook_url: str) -> None:
+                self.webhook_url = webhook_url
+
+            def send(self, payload: MeetingIntegrationPayload) -> IntegrationResult:
+                return IntegrationResult(provider=self.name, success=True)
+
+        service = IntegrationService(
+            registry,
+            ProviderConfigurationResolver(Settings(_env_file=None)),
+        )
+
+        result = service.send("discord", _sample_payload())
+
+        assert result.provider == "discord"
+        assert result.success is False
+        assert result.error == (
+            "A configuração do provider de integração está ausente ou inválida."
+        )
