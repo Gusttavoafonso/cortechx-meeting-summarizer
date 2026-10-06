@@ -1,3 +1,3 @@
-from app.integrations.providers.console import ConsoleProvider
+from app.integrations.providers.test_provider import ProviderTeste
 
-__all__ = ["ConsoleProvider"]
+__all__ = ["ProviderTeste"]

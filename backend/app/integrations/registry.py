@@ -18,7 +18,9 @@ class ProviderRegistry:
         """Decorator ou método para registrar uma classe de provedor."""
 
         def decorator(provider_cls: T) -> T:
-            provider_name = (name or getattr(provider_cls, "name", None) or provider_cls.__name__).lower()
+            provider_name = (
+                name or getattr(provider_cls, "name", None) or provider_cls.__name__
+            ).lower()
             self._providers[provider_name] = provider_cls
             return provider_cls
 

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.core.config import Settings, get_settings
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.models.integration_configuration import IntegrationConfiguration
 
 
 class ProviderConfigurationError(ValueError):
@@ -10,31 +13,43 @@ class ProviderConfigurationError(ValueError):
 
 
 class ProviderConfigurationResolver:
-    """Obtém a configuração de cada provider a partir das configurações da app."""
+    """Obtém a configuração de cada provider a partir da reunião."""
 
-    def __init__(self, settings: Settings | None = None) -> None:
-        self._settings = settings or get_settings()
+    def __init__(self, db: Session | None = None) -> None:
+        self._db = db
 
-    def resolve(self, provider: str) -> dict[str, Any]:
+    def resolve(
+        self,
+        provider: str,
+        *,
+        meeting_id: int | None = None,
+        overrides: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Retorna os argumentos de inicialização do provider solicitado."""
         provider_name = provider.strip().lower()
+        configuration = self._meeting_configuration(provider_name, meeting_id)
+        configuration.update(overrides or {})
+        return configuration
 
-        if provider_name == "discord":
-            webhook_url = self._settings.discord_webhook_url
-            if webhook_url is None:
-                raise ProviderConfigurationError("DISCORD_WEBHOOK_URL")
-            return {"webhook_url": str(webhook_url)}
+    def _meeting_configuration(
+        self,
+        provider: str,
+        meeting_id: int | None,
+    ) -> dict[str, Any]:
+        if self._db is None or meeting_id is None:
+            return {}
 
-        if provider_name == "notion":
-            token = self._settings.notion_token
-            database_id = self._settings.notion_database_id
-            if token is None or not database_id:
-                raise ProviderConfigurationError(
-                    "NOTION_TOKEN e NOTION_DATABASE_ID"
-                )
-            return {
-                "token": token.get_secret_value(),
-                "database_id": database_id,
-            }
-
-        return {}
+        statement = select(IntegrationConfiguration).where(
+            IntegrationConfiguration.meeting_id == meeting_id,
+            func.lower(IntegrationConfiguration.platform) == provider,
+        )
+        configuration = self._db.scalars(statement).first()
+        if configuration is None:
+            return {}
+        if not configuration.enabled:
+            raise ProviderConfigurationError("Provider desativado para esta reunião")
+        if configuration.configuration is None:
+            return {}
+        if not isinstance(configuration.configuration, dict):
+            raise ProviderConfigurationError("Configuração do provider inválida")
+        return dict(configuration.configuration)

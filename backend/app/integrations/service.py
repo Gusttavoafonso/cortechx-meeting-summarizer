@@ -8,7 +8,9 @@ from app.integrations.configuration import (
     ProviderConfigurationError,
     ProviderConfigurationResolver,
 )
+from app.integrations.payload import meeting_to_integration_payload
 from app.integrations.registry import ProviderRegistry, default_registry
+from app.models.meeting import Meeting
 from app.schemas.integration import IntegrationResult, MeetingIntegrationPayload
 
 logger = logging.getLogger(__name__)
@@ -46,8 +48,11 @@ class IntegrationService:
         provider_name = provider.strip().lower()
 
         try:
-            resolved_config = self._configuration_resolver.resolve(provider_name)
-            resolved_config.update(provider_config)
+            resolved_config = self._configuration_resolver.resolve(
+                provider_name,
+                meeting_id=meeting_result.meeting_id,
+                overrides=provider_config,
+            )
             integration_provider = self._registry.create(
                 provider_name,
                 **resolved_config,
@@ -91,3 +96,13 @@ class IntegrationService:
                 success=False,
                 error="Não foi possível executar a integração.",
             )
+
+    def send_persisted_meeting(
+        self,
+        provider: str,
+        meeting: Meeting,
+        **provider_config: Any,
+    ) -> IntegrationResult:
+        """Converte o resultado persistido e o envia ao provider solicitado."""
+        payload = meeting_to_integration_payload(meeting)
+        return self.send(provider, payload, **provider_config)
