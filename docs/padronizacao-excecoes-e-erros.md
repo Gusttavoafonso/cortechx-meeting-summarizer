@@ -376,4 +376,41 @@ Operação
 4. **Sem Duplicação de Lógica:** Toda lógica de retry, backoff e jitter reside em `app.core.retry.RetryPolicy`. O worker não implementa laços de retry ad-hoc.
 5. **Comportamento Previsível entre Providers:** Provedores de STT (Groq/Whisper) e LLM (Gemini) utilizam os mesmos critérios e contratos de recuperação, garantindo previsibilidade total ao worker.
 
+---
+
+## 8. Atualização Consistente do Estado da Reunião (Issue #26 - Etapa 8)
+
+Durante todo o ciclo de vida do pipeline e suas retentativas, o estado da reunião permanece rigorosamente consistente:
+
+1. **Estado Consistente Durante Retry:** Falhas temporárias (recuperáveis) mantêm a reunião no estado de processamento (`MeetingStatus.PROCESSING` ou ativo). Uma falha transitória em tentativa $1$ ou $2$ **nunca** transiciona o estado para `FAILED`.
+2. **Marcação de `FAILED` por Esgotamento:** Somente quando todas as retentativas configuradas (`max_attempts`) falharem consecutivamente, o processamento é considerado falho e o estado é atualizado para `MeetingStatus.FAILED`.
+3. **Marcação Imediata de `FAILED` em Falhas Definitivas:** Erros definitivos (`DefinitiveError`, falhas de autenticação, áudio corrompido ou entradas inválidas) abortam sem retentativas e marcam imediatamente o status como `MeetingStatus.FAILED`.
+4. **Prevenção Estrita de `COMPLETED` em Falhas Parciais:** Caso qualquer etapa obrigatória do pipeline (áudio, transcrição, diarização, chunking ou sumarização) falhe, a transição para `MeetingStatus.COMPLETED` é terminantemente impedida, garantindo rollback e marcação como `FAILED`.
+
+---
+
+## 9. Registro Seguro de Informações sobre Falhas (Issue #26 - Etapa 9)
+
+O módulo `app.core.failure_recorder.FailureRecorder` garante a rastreabilidade e auditoria de erros ocorridos durante o processamento sem expor informações confidenciais.
+
+### 9.1 Contexto Mínimo Estruturado (`FailureRecord`)
+
+| Campo | Tipo | Descrição |
+| :--- | :---: | :--- |
+| `stage` | `str` | Etapa em que ocorreu a falha (`speech_to_text`, `diarization`, `chunking`, `summarization`, etc.). |
+| `error_type` | `str` | Classe da exceção levantada (ex: `TranscriptionTimeoutError`, `LLMAuthenticationError`). |
+| `message` | `str` | Mensagem resumida e devidamente higienizada. |
+| `attempts` | `int` | Quantidade total de tentativas executadas antes da resolução ou falha. |
+| `timestamp` | `str` | Horário exato da falha no padrão ISO 8601 UTC. |
+| `is_recoverable`| `bool` | Classificação de recuperabilidade da falha no momento do evento. |
+
+### 9.2 Higienização de Dados Sensíveis
+
+Antes de qualquer persistência ou emissão em logs estruturados, mensagens passam pelo sanitizador `sanitize_error_message`, que ofusca:
+- **Chaves de Provedores:** `gsk_***[REDACTED]`, `AIza***[REDACTED]`, `hf_***[REDACTED]`, `sk-***[REDACTED]`.
+- **Cabeçalhos de Autorização:** `Bearer [REDACTED]`, `Basic [REDACTED]`.
+- **Credenciais e Segredos:** Pares contendo `api_key`, `token`, `secret`, `password`, `auth`.
+- **Query Params de URL:** Parâmetros de autenticação em endpoints.
+
+
 

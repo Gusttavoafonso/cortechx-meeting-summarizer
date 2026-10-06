@@ -107,6 +107,7 @@ class MeetingProcessor:
                 self._speech_to_text_service.transcribe,
                 audio_path,
                 meeting=meeting,
+                stage="speech_to_text",
             )
             if not stt.text or not stt.text.strip():
                 raise ValueError(
@@ -132,6 +133,7 @@ class MeetingProcessor:
                 self._diarization_service.diarize,
                 audio_path,
                 meeting=meeting,
+                stage="diarization",
             )
 
             if use_atomic_unit_of_work:
@@ -146,8 +148,13 @@ class MeetingProcessor:
                     diarization_segments,
                 )
 
-            # 3. Chunking
-            chunks = self._chunking_service.split(transcript)
+            # 3. Chunking via JobRunner
+            chunks = self._job_runner.execute_operation(
+                self._chunking_service.split,
+                transcript,
+                meeting=meeting,
+                stage="chunking",
+            )
 
             # 4. Operações de LLM (Sumarização e Extração de Tarefas)
             summary_result = None
@@ -156,6 +163,7 @@ class MeetingProcessor:
                     self._summarization_service.summarize,
                     chunks,
                     meeting=meeting,
+                    stage="summarization",
                 )
 
             extracted_tasks = []
@@ -164,6 +172,7 @@ class MeetingProcessor:
                     self._task_extraction_service.extract_tasks,
                     chunks,
                     meeting=meeting,
+                    stage="task_extraction",
                 )
 
             if self._summary_repository is not None and summary_result is not None:
@@ -192,9 +201,17 @@ class MeetingProcessor:
                 MeetingStatus.COMPLETED,
             )
 
-        except Exception:
+        except Exception as exc:
             logger.exception("Falha no pipeline da reunião %s", meeting_id)
             self._rollback_if_needed()
+            if self._job_runner.last_failure is None:
+                from app.core.failure_recorder import FailureRecorder
+
+                self._job_runner.last_failure = FailureRecorder.record_failure(
+                    stage="pipeline_orchestration",
+                    error=exc,
+                    attempts=1,
+                )
             try:
                 self._meeting_repository.update_status(
                     meeting,
@@ -203,6 +220,10 @@ class MeetingProcessor:
             except Exception:
                 pass
             raise
+
+    @property
+    def last_failure(self) -> Any | None:
+        return self._job_runner.last_failure
 
     def _rollback_if_needed(self) -> None:
         db = getattr(self._meeting_repository, "db", None)
