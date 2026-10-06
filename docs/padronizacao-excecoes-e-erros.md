@@ -350,3 +350,30 @@ Com os padrões (`initial_delay=1.0`, `backoff_factor=2.0`, `max_attempts=3`):
 
 Com `max_attempts=4`, a 3ª falha resultaria em espera de 4 s. Valores configuráveis via `RETRY_MAX_ATTEMPTS`, `RETRY_INITIAL_DELAY`, `RETRY_BACKOFF_FACTOR`, `RETRY_MAX_DELAY` e `RETRY_JITTER`. A progressão está coberta por `test_calculate_delay_exponential_growth` em `backend/tests/test_retry_policy.py`.
 
+### 7.7 Integração de Retry ao Processamento Assíncrono (Workers e Jobs)
+
+No fluxo em segundo plano (background tasks / workers), o orquestrador `JobRunner` e `MeetingProcessor` utilizam centralizadamente a política de retentativas.
+
+#### Fluxo do Job:
+```text
+Job
+ |
+ v
+Operação
+ |
+ |-- sucesso -> continua
+ |
+ |-- erro
+      |
+      |-- recuperável -> retry (backoff exponencial)
+      |
+      |-- definitivo -> FAILED (MeetingStatus.FAILED)
+```
+
+1. **Continuidade em Sucesso:** Cada operação concluída com êxito prossegue para o próximo estágio do pipeline.
+2. **Retry em Falha Recuperável:** Erros transitórios (`is_recoverable(err) == True`) disparam novas tentativas controladas por `RetryPolicy`.
+3. **Falha Definitiva e Transição para FAILED:** Se a operação levantar uma falha definitiva (`DefinitiveError` ou `is_recoverable(err) == False`) ou caso esgote o limite de tentativas (`max_attempts`), o job aborta imediatamente e marca a reunião com status `MeetingStatus.FAILED`.
+4. **Sem Duplicação de Lógica:** Toda lógica de retry, backoff e jitter reside em `app.core.retry.RetryPolicy`. O worker não implementa laços de retry ad-hoc.
+5. **Comportamento Previsível entre Providers:** Provedores de STT (Groq/Whisper) e LLM (Gemini) utilizam os mesmos critérios e contratos de recuperação, garantindo previsibilidade total ao worker.
+
+
