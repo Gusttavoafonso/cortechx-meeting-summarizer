@@ -332,3 +332,45 @@ def test_groq_whisper_retries_transient_and_rewinds_file():
     assert response["text"] == "Transcrito com sucesso"
     assert attempts == 2
     assert fake_file.tell() > 0  # Rebobinado e lido novamente
+
+
+def test_groq_whisper_retries_timeout_and_logs_attempts(caplog):
+    """Timeout deve sofrer retry e o número de tentativas deve ser registrado."""
+    groq_service = GroqWhisperService(api_key="fake_groq_key")
+    attempts = 0
+
+    def mock_request(*args, **kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            raise TranscriptionTimeoutError("Timeout na Groq")
+        return {"text": "ok", "segments": []}
+
+    groq_service.retry_policy = RetryPolicy(max_attempts=3, initial_delay=0.01)
+    groq_service._execute_groq_request = mock_request
+
+    with caplog.at_level("INFO"):
+        groq_service._call_groq_api(("audio.wav", io.BytesIO(b"x")), "pt")
+
+    assert attempts == 3
+    assert "concluída em 3 tentativa(s)" in caplog.text
+
+
+def test_groq_whisper_does_not_retry_invalid_file_and_logs_attempts(caplog):
+    """Arquivo inválido não sofre retry e registra 1 tentativa."""
+    groq_service = GroqWhisperService(api_key="fake_groq_key")
+    attempts = 0
+
+    def mock_request(*args, **kwargs):
+        nonlocal attempts
+        attempts += 1
+        raise TranscriptionAudioCorruptedError("Áudio corrompido")
+
+    groq_service.retry_policy = RetryPolicy(max_attempts=3, initial_delay=0.01)
+    groq_service._execute_groq_request = mock_request
+
+    with caplog.at_level("ERROR"), pytest.raises(TranscriptionAudioCorruptedError):
+        groq_service._call_groq_api(("audio.wav", io.BytesIO(b"x")), "pt")
+
+    assert attempts == 1
+    assert "falhou após 1 tentativa(s)" in caplog.text

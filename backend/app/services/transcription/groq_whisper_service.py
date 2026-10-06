@@ -177,9 +177,28 @@ class GroqWhisperService(BaseSpeechToTextService):
 
     def _call_groq_api(self, file_tuple: tuple[str, Any], language: str) -> Any:
         """Executa chamada à API da Groq aplicando política de retry configurável."""
-        return self.retry_policy.execute(
-            self._execute_groq_request, file_tuple, language
+        attempts = 0
+
+        def _counted_request(*args: Any, **kwargs: Any) -> Any:
+            nonlocal attempts
+            attempts += 1
+            return self._execute_groq_request(*args, **kwargs)
+
+        try:
+            result = self.retry_policy.execute(_counted_request, file_tuple, language)
+        except Exception:
+            logger.error(
+                "Transcrição Groq de '%s' falhou após %d tentativa(s).",
+                file_tuple[0],
+                attempts,
+            )
+            raise
+        logger.info(
+            "Transcrição Groq de '%s' concluída em %d tentativa(s).",
+            file_tuple[0],
+            attempts,
         )
+        return result
 
     def _execute_groq_request(self, file_tuple: tuple[str, Any], language: str) -> Any:
         client = self._get_client()
