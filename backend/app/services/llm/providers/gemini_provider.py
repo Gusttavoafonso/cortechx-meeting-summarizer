@@ -1,6 +1,7 @@
 from google import genai
 from google.genai import errors
 
+from app.core.retry import RetryPolicy
 from app.services.llm.base import BaseLLMProvider
 from app.services.llm.exceptions import (
     LLMAuthenticationError,
@@ -12,11 +13,20 @@ from app.services.llm.exceptions import (
 
 
 class GeminiProvider(BaseLLMProvider):
-    def __init__(self, api_key: str, model: str):
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        retry_policy: RetryPolicy | None = None,
+    ):
         self._client = genai.Client(api_key=api_key)
         self._model = model
+        self.retry_policy = retry_policy or RetryPolicy.from_settings()
 
     def generate(self, prompt: str) -> str:
+        return self.retry_policy.execute(self._generate_attempt, prompt)
+
+    def _generate_attempt(self, prompt: str) -> str:
         try:
             response = self._client.models.generate_content(
                 model=self._model,

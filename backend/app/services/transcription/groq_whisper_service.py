@@ -15,6 +15,7 @@ from app.core.exceptions import (
     TranscriptionRateLimitError,
     TranscriptionTimeoutError,
 )
+from app.core.retry import RetryPolicy
 from app.services.transcription.base import (
     BaseSpeechToTextService,
     SegmentData,
@@ -65,6 +66,7 @@ class GroqWhisperService(BaseSpeechToTextService):
         self,
         api_key: str,
         model: str = "whisper-large-v3",
+        retry_policy: RetryPolicy | None = None,
     ) -> None:
         if not api_key or not str(api_key).strip():
             raise ValueError(
@@ -73,6 +75,7 @@ class GroqWhisperService(BaseSpeechToTextService):
             )
         self.api_key = api_key.strip()
         self.model = model
+        self.retry_policy = retry_policy or RetryPolicy.from_settings()
         self._client: Any = None
 
     def _get_client(self) -> Any:
@@ -173,8 +176,22 @@ class GroqWhisperService(BaseSpeechToTextService):
         return cuts
 
     def _call_groq_api(self, file_tuple: tuple[str, Any], language: str) -> Any:
-        """Executa a chamada à API da Groq encapsulando exceções do provider."""
+        """Executa chamada à API da Groq aplicando política de retry configurável."""
+        return self.retry_policy.execute(
+            self._execute_groq_request, file_tuple, language
+        )
+
+    def _execute_groq_request(self, file_tuple: tuple[str, Any], language: str) -> Any:
         client = self._get_client()
+
+        # Reseta ponteiro caso seja stream/arquivo aberto antes da tentativa
+        file_obj = file_tuple[1]
+        if hasattr(file_obj, "seek") and callable(file_obj.seek):
+            try:
+                file_obj.seek(0)
+            except Exception:
+                pass
+
         try:
             return client.audio.transcriptions.create(
                 file=file_tuple,

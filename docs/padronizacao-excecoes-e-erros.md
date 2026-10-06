@@ -1,6 +1,6 @@
-# Documentação de Padronização de Exceções e Classificação de Falhas
+# Documentação de Padronização de Exceções, Classificação de Falhas e Política de Retry
 
-Este documento descreve a arquitetura de tratamento de erros, hierarquia de exceções de domínio e os critérios de classificação de falhas implementados no projeto **CortechX Meeting Summarizer** (Issue #26 - Etapas 1 e 2).
+Este documento descreve a arquitetura de tratamento de erros, hierarquia de exceções de domínio, critérios de classificação de falhas e a política de retry implementados no projeto **CortechX Meeting Summarizer** (Issue #26 - Etapas 1, 2 e 3).
 
 ---
 
@@ -248,3 +248,83 @@ Na camada de API (`app/api/v1/meetings.py`), as exceções de domínio são mape
 2. **Sempre encadear exceções:** Usar `raise NovaExcecao(...) from exc` para manter o traceback e a causa original da falha.
 3. **Utilizar `is_recoverable(exc)`:** Nas rotinas de orquestração e background workers para decidir se uma operação deve ser reenfileirada para retry ou abortada definitivamente.
 4. **Erros definitivos nunca sofrem retry:** Respeitar a regra de aborto imediato para falhas estruturais, de permissão ou de parâmetros inválidos.
+
+---
+
+## 7. Política de Retry para Operações Elegíveis (Issue #26 - Etapa 3)
+
+Para lidar com falhas transitórias e garantir resiliência automática sem intervenção manual, foi implementado o módulo centralizado de retentativas `app.core.retry`.
+
+### 7.1 Fluxo de Execução da Estratégia de Retry
+
+O ciclo de vida da política segue o modelo determinístico:
+
+```text
+Tentativa 1
+  ↓ erro recuperável
+espera (delay calculado)
+  ↓
+Tentativa 2
+  ↓ erro recuperável
+espera (delay com backoff)
+  ↓
+Tentativa 3
+  ↓ se falhar novamente
+re-lança exceção original (esgotamento)
+```
+
+Se em **qualquer tentativa** ocorrer uma falha definitiva (`is_recoverable(error) == False`), a política aborta imediatamente, sem novas tentativas nem tempo de espera.
+
+### 7.2 Parâmetros e Critérios da Política
+
+| Parâmetro | Padrão | Variável de Ambiente | Descrição |
+| :--- | :---: | :--- | :--- |
+| `max_attempts` | `3` | `RETRY_MAX_ATTEMPTS` | Número máximo de execuções antes do encerramento. |
+| `initial_delay` | `1.0s` | `RETRY_INITIAL_DELAY` | Tempo de espera inicial após a primeira falha. |
+| `backoff_factor` | `2.0` | `RETRY_BACKOFF_FACTOR` | Multiplicador exponencial aplicado a cada falha consecutiva. |
+| `max_delay` | `10.0s` | `RETRY_MAX_DELAY` | Teto máximo de espera entre tentativas sucessivas. |
+| `jitter` | `false` | `RETRY_JITTER` | Adição de ruído aleatório uniforme (até +50%) para mitigar thundering herd. |
+
+#### Cálculo do Intervalo entre Tentativas
+```python
+delay = min(initial_delay * (backoff_factor ** (attempt - 1)), max_delay)
+```
+- Tentativa 1 ➔ Falha ➔ Espera: $1.0 \times 2^0 = 1.0\,\text{s}$
+- Tentativa 2 ➔ Falha ➔ Espera: $1.0 \times 2^1 = 2.0\,\text{s}$
+- Tentativa 3 ➔ Falha ➔ Esgotado ($3/3$) ➔ Re-lança a exceção original.
+
+### 7.3 Garantias de Robustez
+
+1. **Prevenção Estrita de Loop Infinito:** O laço de execução é estritamente delimitado pelo contador finito `range(1, max_attempts + 1)`. É matematicamente impossível executar retentativas infinitas.
+2. **Filtragem Estrita por Recuperabilidade:** Utiliza `is_recoverable(exc)` como critério de corte. Exceções herdando de `DefinitiveError` (como `TranscriptionAudioCorruptedError`, `LLMAuthenticationError`, `FileNotFoundError`) são re-lançadas na primeira tentativa.
+3. **Rebobinamento de Streams de Áudio:** Em retentativas com arquivos abertos na API de Speech-to-Text (`GroqWhisperService`), o ponteiro do arquivo é rebobinado (`seek(0)`) antes de cada reenvio.
+
+### 7.4 Formas de Uso e Configurabilidade
+
+#### 1. Via Classe `RetryPolicy`
+```python
+from app.core.retry import RetryPolicy
+
+policy = RetryPolicy(max_attempts=3, initial_delay=0.5, backoff_factor=2.0)
+resultado = policy.execute(minha_funcao_sincrona, arg1, arg2)
+resultado_async = await policy.execute_async(minha_funcao_assincrona, arg1)
+```
+
+#### 2. Via Decorador `@retry`
+```python
+from app.core.retry import retry
+
+@retry(max_attempts=3, initial_delay=1.0)
+def chamar_servico_externo(param: str) -> str:
+    ...
+
+@retry  # Utiliza padrões do app.core.config.settings
+async def chamar_api_assincrona(dados: dict) -> dict:
+    ...
+```
+
+### 7.5 Operações Elegíveis Integradas
+
+- **Provedor LLM (`GeminiProvider.generate`):** Protegido contra limites de taxa (HTTP 429), timeouts e falhas transitórias do servidor (5xx).
+- **Provedor Speech-to-Text (`GroqWhisperService._call_groq_api`):** Protegido contra rate limits e timeouts na transcrição em nuvem, garantindo integridade de streams de áudio.
+

@@ -75,6 +75,17 @@ class Settings(BaseSettings):
         default="auto", validation_alias="WHISPER_COMPUTE_TYPE"
     )
 
+    # Configurações da Política de Retry (Issue #26)
+    RETRY_MAX_ATTEMPTS: int = Field(default=3, validation_alias="RETRY_MAX_ATTEMPTS")
+    RETRY_INITIAL_DELAY: float = Field(
+        default=1.0, validation_alias="RETRY_INITIAL_DELAY"
+    )
+    RETRY_BACKOFF_FACTOR: float = Field(
+        default=2.0, validation_alias="RETRY_BACKOFF_FACTOR"
+    )
+    RETRY_MAX_DELAY: float = Field(default=10.0, validation_alias="RETRY_MAX_DELAY")
+    RETRY_JITTER: bool = Field(default=False, validation_alias="RETRY_JITTER")
+
     @field_validator("AUDIO_STORAGE_PATH", mode="before")
     @classmethod
     def resolve_storage_path(cls, v: Any) -> Path:
