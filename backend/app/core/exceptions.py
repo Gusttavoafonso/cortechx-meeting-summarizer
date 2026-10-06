@@ -435,11 +435,15 @@ def is_recoverable(error: BaseException) -> bool:
     if isinstance(error, DefinitiveError):
         return False
 
-    # 2. RecoverableError sempre permite retry
+    # 2. ApplicationError explicitamente marcado como não recuperável (is_retryable is False)
+    if isinstance(error, ApplicationError) and error.is_retryable is False:
+        return False
+
+    # 3. RecoverableError sempre permite retry
     if isinstance(error, RecoverableError):
         return True
 
-    # 3. ApplicationError com atributo is_retryable explícito
+    # 4. ApplicationError com atributo is_retryable explícito
     if isinstance(error, ApplicationError):
         return bool(error.is_retryable)
 

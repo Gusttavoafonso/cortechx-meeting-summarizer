@@ -8,6 +8,9 @@ from unittest.mock import MagicMock
 import pytest
 from app.core.exceptions import (
     LLMAuthenticationError,
+    LLMConfigurationError,
+    LLMProviderError,
+    LLMRateLimitError,
     LLMTimeoutError,
     TranscriptionAudioCorruptedError,
     TranscriptionRateLimitError,
@@ -374,3 +377,168 @@ def test_groq_whisper_does_not_retry_invalid_file_and_logs_attempts(caplog):
 
     assert attempts == 1
     assert "falhou após 1 tentativa(s)" in caplog.text
+
+
+# =====================================================================
+# 7. Retry no Serviço de LLM (Issue #26 - Etapa 6)
+# =====================================================================
+def test_gemini_provider_retries_on_timeout(monkeypatch, caplog):
+    """Tratar timeout: Provider LLM deve aplicar retry e ter sucesso."""
+    from google.genai import errors as google_errors
+
+    client_mock = MagicMock()
+    attempts = 0
+
+    def mock_generate_content(*args, **kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            err = google_errors.ClientError.__new__(google_errors.ClientError)
+            err.code = 408
+            err.message = "Request Timeout"
+            raise err
+        return MagicMock(text="Resposta após timeout")
+
+    client_mock.models.generate_content = mock_generate_content
+    monkeypatch.setattr(
+        "app.services.llm.providers.gemini_provider.genai.Client",
+        lambda *args, **kwargs: client_mock,
+    )
+
+    policy = RetryPolicy(max_attempts=3, initial_delay=0.01)
+    provider = GeminiProvider(
+        api_key="fake", model="gemini-1.5-flash", retry_policy=policy
+    )
+
+    with caplog.at_level("INFO"):
+        result = provider.generate("prompt timeout")
+
+    assert result == "Resposta após timeout"
+    assert attempts == 3
+    assert "concluída em 3 tentativa(s)" in caplog.text
+
+
+def test_gemini_provider_retries_on_rate_limit(monkeypatch, caplog):
+    """Tratar rate limit: Provider LLM deve aplicar retry com backoff."""
+    from google.genai import errors as google_errors
+
+    client_mock = MagicMock()
+    attempts = 0
+
+    def mock_generate_content(*args, **kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            err = google_errors.ClientError.__new__(google_errors.ClientError)
+            err.code = 429
+            err.message = "Rate limit / quota exceeded"
+            raise err
+        return MagicMock(text="Resposta após 429")
+
+    client_mock.models.generate_content = mock_generate_content
+    monkeypatch.setattr(
+        "app.services.llm.providers.gemini_provider.genai.Client",
+        lambda *args, **kwargs: client_mock,
+    )
+
+    policy = RetryPolicy(max_attempts=3, initial_delay=0.01)
+    provider = GeminiProvider(
+        api_key="fake", model="gemini-1.5-flash", retry_policy=policy
+    )
+
+    with caplog.at_level("INFO"):
+        result = provider.generate("prompt quota")
+
+    assert result == "Resposta após 429"
+    assert attempts == 2
+    assert "concluída em 2 tentativa(s)" in caplog.text
+
+
+def test_gemini_provider_retries_on_temporary_unavailability(monkeypatch, caplog):
+    """Tratar indisponibilidade temporária: Erros 503/502 devem sofrer retry."""
+    from google.genai import errors as google_errors
+
+    client_mock = MagicMock()
+    attempts = 0
+
+    def mock_generate_content(*args, **kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            err = google_errors.ServerError.__new__(google_errors.ServerError)
+            err.code = 503
+            err.message = "Service Unavailable"
+            raise err
+        return MagicMock(text="Resposta após indisponibilidade")
+
+    client_mock.models.generate_content = mock_generate_content
+    monkeypatch.setattr(
+        "app.services.llm.providers.gemini_provider.genai.Client",
+        lambda *args, **kwargs: client_mock,
+    )
+
+    policy = RetryPolicy(max_attempts=3, initial_delay=0.01)
+    provider = GeminiProvider(
+        api_key="fake", model="gemini-1.5-flash", retry_policy=policy
+    )
+
+    with caplog.at_level("INFO"):
+        result = provider.generate("prompt unavailable")
+
+    assert result == "Resposta após indisponibilidade"
+    assert attempts == 2
+    assert "concluída em 2 tentativa(s)" in caplog.text
+
+
+def test_gemini_provider_avoids_retry_on_invalid_configuration():
+    """Evitar retry para configuração inválida: Validação e autenticação sem retry."""
+    with pytest.raises(LLMConfigurationError, match="Chave de API do Gemini ausente ou inválida"):
+        GeminiProvider(api_key="", model="gemini-1.5-flash")
+
+    with pytest.raises(LLMConfigurationError, match="Chave de API do Gemini ausente ou inválida"):
+        GeminiProvider(api_key="   ", model="gemini-1.5-flash")
+
+    with pytest.raises(LLMConfigurationError, match="Modelo do Gemini não informado"):
+        GeminiProvider(api_key="fake_key", model="")
+
+
+def test_gemini_provider_avoids_retry_on_invalid_inputs(monkeypatch, caplog):
+    """Evitar retry para entradas definitivamente inválidas: prompt vazio e erro 400."""
+    from google.genai import errors as google_errors
+
+    client_mock = MagicMock()
+    attempts = 0
+
+    def mock_generate_content(*args, **kwargs):
+        nonlocal attempts
+        attempts += 1
+        err = google_errors.ClientError.__new__(google_errors.ClientError)
+        err.code = 400
+        err.message = "INVALID_ARGUMENT: Bad Request"
+        raise err
+
+    client_mock.models.generate_content = mock_generate_content
+    monkeypatch.setattr(
+        "app.services.llm.providers.gemini_provider.genai.Client",
+        lambda *args, **kwargs: client_mock,
+    )
+
+    policy = RetryPolicy(max_attempts=3, initial_delay=0.01)
+    provider = GeminiProvider(
+        api_key="fake", model="gemini-1.5-flash", retry_policy=policy
+    )
+
+    # Prompt vazio rejeitado imediatamente sem chamadas ou retries
+    with pytest.raises(ValueError, match="Prompt cannot be empty"):
+        provider.generate("")
+
+    with pytest.raises(ValueError, match="Prompt cannot be empty"):
+        provider.generate("   ")
+
+    # Erro 400 Bad Request / INVALID_ARGUMENT da API não sofre retry
+    with caplog.at_level("ERROR"), pytest.raises(LLMProviderError):
+        provider.generate("entrada que causa 400")
+
+    assert attempts == 1
+    assert "falhou após 1 tentativa(s)" in caplog.text
+
