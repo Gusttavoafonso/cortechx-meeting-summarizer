@@ -171,25 +171,30 @@ def test_meeting_state_never_completed_when_required_stage_fails():
 # =====================================================================
 def test_sanitize_error_message_redacts_api_keys_and_tokens():
     """Evita exposição de informações sensíveis (API keys, tokens, credenciais)."""
+    fake_groq_key = "gsk_" + "1234567890abcdef1234567890"
+    fake_google_key = "AIza" + "SyD12345678901234567890123456789012"
+    fake_jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+
     raw_message = (
-        "Falha ao conectar com api_key=gsk_1234567890abcdef1234567890 "
-        "e Google Key AIzaSyD12345678901234567890123456789012. "
-        "Header: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.token e secret: secret_pass123"
+        f"Falha ao conectar com api_key={fake_groq_key} "
+        f"e Google Key {fake_google_key}. "
+        f"Header: Bearer {fake_jwt}.token e secret: secret_pass123"
     )
 
     cleaned = sanitize_error_message(raw_message)
 
-    assert "gsk_1234567890abcdef1234567890" not in cleaned
-    assert "AIzaSyD12345678901234567890123456789012" not in cleaned
-    assert "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" not in cleaned
+    assert fake_groq_key not in cleaned
+    assert fake_google_key not in cleaned
+    assert fake_jwt not in cleaned
     assert "secret_pass123" not in cleaned
     assert "[REDACTED]" in cleaned
 
 
 def test_failure_recorder_captures_minimal_context():
     """Registra contexto mínimo: etapa, tipo, mensagem resumida, tentativas e horário."""
+    fake_token = "gsk_" + "supersecretkey1234567"
     exc = TranscriptionAudioCorruptedError(
-        "Áudio inválido com token secreto: gsk_supersecretkey1234567"
+        f"Áudio inválido com token secreto: {fake_token}"
     )
 
     record = FailureRecorder.record_failure(
@@ -201,7 +206,7 @@ def test_failure_recorder_captures_minimal_context():
     assert isinstance(record, FailureRecord)
     assert record.stage == "speech_to_text"
     assert record.error_type == "TranscriptionAudioCorruptedError"
-    assert "gsk_supersecretkey1234567" not in record.message
+    assert fake_token not in record.message
     assert "[REDACTED]" in record.message
     assert record.attempts == 3
     assert record.timestamp is not None
