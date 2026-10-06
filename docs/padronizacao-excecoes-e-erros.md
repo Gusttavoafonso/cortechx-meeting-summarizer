@@ -328,3 +328,25 @@ async def chamar_api_assincrona(dados: dict) -> dict:
 - **Provedor LLM (`GeminiProvider.generate`):** Protegido contra limites de taxa (HTTP 429), timeouts e falhas transitórias do servidor (5xx).
 - **Provedor Speech-to-Text (`GroqWhisperService._call_groq_api`):** Protegido contra rate limits e timeouts na transcrição em nuvem, garantindo integridade de streams de áudio.
 
+### 7.6 Decisão sobre Backoff entre Tentativas
+
+**Avaliação:**
+
+| Estratégia | Avaliação |
+| :--- | :--- |
+| Sem espera (retry imediato) | Rejeitada: agrava rate limit (429) e indisponibilidades (503), pois reenvia a requisição antes de o provedor se recuperar. |
+| Espera fixa | Rejeitada: não alivia a pressão sobre o provedor em falhas prolongadas. |
+| **Backoff exponencial** | **Adotada:** dá tempo crescente de recuperação ao provedor, com custo baixo de implementação. |
+
+**Decisão:** implementado backoff exponencial em `RetryPolicy.calculate_delay`, aplicado apenas a falhas recuperáveis (`is_recoverable`), com teto `max_delay` e jitter opcional (desligado por padrão para manter o comportamento determinístico).
+
+Com os padrões (`initial_delay=1.0`, `backoff_factor=2.0`, `max_attempts=3`):
+
+```text
+1ª falha → espera 1 s
+2ª falha → espera 2 s
+3ª falha → esgotado (sem espera; exceção original re-lançada)
+```
+
+Com `max_attempts=4`, a 3ª falha resultaria em espera de 4 s. Valores configuráveis via `RETRY_MAX_ATTEMPTS`, `RETRY_INITIAL_DELAY`, `RETRY_BACKOFF_FACTOR`, `RETRY_MAX_DELAY` e `RETRY_JITTER`. A progressão está coberta por `test_calculate_delay_exponential_growth` em `backend/tests/test_retry_policy.py`.
+
