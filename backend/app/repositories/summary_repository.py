@@ -38,11 +38,17 @@ class SummaryRepository:
         )
         return list(self.db.scalars(stmt).all())
 
-    def save_result(
+    def save_summary(
         self,
         meeting_id: int,
-        result: SummaryResult,
         *,
+        objective: str | None = None,
+        summary: str | None = None,
+        main_points: list[str] | None = None,
+        key_points: list[str] | None = None,
+        decisions: list[str] | None = None,
+        tasks: list[Any] | None = None,
+        structured_result: dict[str, Any] | None = None,
         generation_metadata: dict[str, Any] | None = None,
         commit: bool = True,
     ) -> Summary:
@@ -55,32 +61,72 @@ class SummaryRepository:
         if meeting is None:
             raise SummaryMeetingNotFoundError(meeting_id)
 
-        summary = meeting.summary
-        if summary is None:
-            summary = Summary()
-            meeting.summary = summary
+        db_summary = meeting.summary
+        if db_summary is None:
+            db_summary = Summary()
+            meeting.summary = db_summary
 
-        summary.objective = result.objective
-        summary.summary = result.summary
-        summary.key_points = list(result.key_points)
-        summary.decisions = list(result.decisions)
-        summary.structured_result = result.model_dump(mode="json")
-        summary.generation_metadata = generation_metadata
+        points = key_points if key_points is not None else (main_points or [])
 
-        # delete-orphan remove as tarefas antigas no flush
-        meeting.tasks = [
-            Task(
-                position=index,
-                description=item.description,
-                responsible=item.responsible,
-                deadline=item.deadline,
-            )
-            for index, item in enumerate(result.tasks)
-        ]
+        db_summary.objective = objective
+        db_summary.summary = summary
+        db_summary.key_points = list(points)
+        db_summary.decisions = list(decisions or [])
+        db_summary.structured_result = structured_result
+        db_summary.generation_metadata = generation_metadata
+
+        task_records: list[Task] = []
+        for index, item in enumerate(tasks or []):
+            if isinstance(item, Task):
+                item.position = index
+                task_records.append(item)
+            elif isinstance(item, dict):
+                task_records.append(
+                    Task(
+                        position=index,
+                        description=item.get("description", ""),
+                        responsible=item.get("responsible"),
+                        deadline=item.get("deadline"),
+                    )
+                )
+            else:
+                desc = getattr(item, "description", str(item))
+                resp = getattr(item, "responsible", None)
+                dead = getattr(item, "deadline", None)
+                task_records.append(
+                    Task(
+                        position=index,
+                        description=desc,
+                        responsible=resp,
+                        deadline=dead,
+                    )
+                )
+
+        meeting.tasks = task_records
 
         if commit:
             self.db.commit()
-            self.db.refresh(summary)
+            self.db.refresh(db_summary)
         else:
             self.db.flush()
-        return summary
+        return db_summary
+
+    def save_result(
+        self,
+        meeting_id: int,
+        result: SummaryResult,
+        *,
+        generation_metadata: dict[str, Any] | None = None,
+        commit: bool = True,
+    ) -> Summary:
+        return self.save_summary(
+            meeting_id=meeting_id,
+            objective=result.objective,
+            summary=result.summary,
+            key_points=result.key_points,
+            decisions=result.decisions,
+            tasks=result.tasks,
+            structured_result=result.model_dump(mode="json"),
+            generation_metadata=generation_metadata,
+            commit=commit,
+        )

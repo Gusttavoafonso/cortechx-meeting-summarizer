@@ -57,9 +57,23 @@ def build_meeting_processor(
     retry_policy: RetryPolicy | None = None,
 ) -> MeetingProcessor:
     """Constrói o MeetingProcessor integrado à política centralizada de retry."""
+    from app.repositories.summary_repository import SummaryRepository
+
+    summarization_service = None
+    try:
+        from app.services.llm.service import get_llm_service
+        from app.services.summarization.service import create_summarization_service
+
+        llm = get_llm_service()
+        summarization_service = create_summarization_service(llm)
+    except Exception:
+        summarization_service = None
+
     return MeetingProcessor(
         meeting_repository=MeetingRepository(session),
         transcript_repository=TranscriptRepository(session),
+        summary_repository=SummaryRepository(session),
+        summarization_service=summarization_service,
         audio_storage_service=AudioStorageService(),
         speech_to_text_service=get_speech_to_text_service(),
         diarization_service=_get_worker_diarization_service(),

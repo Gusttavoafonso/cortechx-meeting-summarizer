@@ -143,6 +143,8 @@ class TranscriptRepository:
         self,
         transcript: Transcript,
         diarization_segments: list[DiarizationSegment],
+        *,
+        commit: bool = True,
     ) -> Transcript:
         """Associa cada segmento transcrito ao locutor com maior sobreposição."""
         assignments: list[tuple[TranscriptSegment, str]] = []
@@ -210,10 +212,13 @@ class TranscriptRepository:
         for transcript_segment, speaker in assignments:
             transcript_segment.speaker = speaker
 
-        try:
-            self.db.commit()
-        except SQLAlchemyError:
-            self.db.rollback()
-            raise
-        self.db.refresh(transcript)
+        if commit:
+            try:
+                self.db.commit()
+            except SQLAlchemyError:
+                self.db.rollback()
+                raise
+            self.db.refresh(transcript)
+        else:
+            self.db.flush()
         return transcript

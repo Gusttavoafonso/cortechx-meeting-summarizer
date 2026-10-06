@@ -176,14 +176,20 @@ class MeetingProcessor:
                 )
 
             if self._summary_repository is not None and summary_result is not None:
+                tasks_to_save = extracted_tasks or getattr(summary_result, "tasks", [])
+                main_pts = getattr(
+                    summary_result,
+                    "main_points",
+                    getattr(summary_result, "key_points", []),
+                )
                 if use_atomic_unit_of_work:
                     self._summary_repository.save_summary(
                         meeting_id=meeting_id,
                         objective=summary_result.objective,
                         summary=summary_result.summary,
-                        main_points=summary_result.main_points,
+                        main_points=main_pts,
                         decisions=summary_result.decisions,
-                        tasks=extracted_tasks,
+                        tasks=tasks_to_save,
                         commit=False,
                     )
                 else:
@@ -191,9 +197,9 @@ class MeetingProcessor:
                         meeting_id=meeting_id,
                         objective=summary_result.objective,
                         summary=summary_result.summary,
-                        main_points=summary_result.main_points,
+                        main_points=main_pts,
                         decisions=summary_result.decisions,
-                        tasks=extracted_tasks,
+                        tasks=tasks_to_save,
                     )
 
             self._meeting_repository.update_status(
@@ -203,7 +209,7 @@ class MeetingProcessor:
 
         except Exception as exc:
             logger.exception("Falha no pipeline da reunião %s", meeting_id)
-            self._rollback_if_needed()
+            self._rollback_if_needed(meeting)
             if self._job_runner.last_failure is None:
                 from app.core.failure_recorder import FailureRecorder
 
@@ -225,10 +231,17 @@ class MeetingProcessor:
     def last_failure(self) -> Any | None:
         return self._job_runner.last_failure
 
-    def _rollback_if_needed(self) -> None:
+    def _rollback_if_needed(self, meeting: Meeting | None = None) -> None:
         db = getattr(self._meeting_repository, "db", None)
         if db is not None and hasattr(db, "rollback"):
             db.rollback()
+            if meeting is not None:
+                meeting.transcript = None
+                meeting.summary = None
+                if hasattr(meeting, "tasks") and meeting.tasks:
+                    meeting.tasks.clear()
+            if hasattr(db, "expire_all"):
+                db.expire_all()
 
     def _get_meeting(self, meeting_id: int) -> Meeting:
         meeting = self._meeting_repository.get_by_id(meeting_id)

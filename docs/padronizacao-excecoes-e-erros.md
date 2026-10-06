@@ -412,5 +412,70 @@ Antes de qualquer persistência ou emissão em logs estruturados, mensagens pass
 - **Credenciais e Segredos:** Pares contendo `api_key`, `token`, `secret`, `password`, `auth`.
 - **Query Params de URL:** Parâmetros de autenticação em endpoints.
 
+---
+
+## 10. Garantia de Idempotência e Transacionalidade (Issue #26 - Etapa 10)
+
+Uma nova tentativa (retry automático ou manual) **nunca** deve produzir registros duplicados ou estados inconsistentes no banco de dados.
+
+### 10.1 Problema Evitado
+```text
+Tentativa 1:
+Transcript ou Summary persistido parcialmente
+  ↓ erro / falha de rede / abort
+Tentativa 2:
+Não pode duplicar Transcript, Summary ou Tasks (tarefas)
+```
+
+### 10.2 Mecanismos Implementados
+
+1. **Unidade de Trabalho e Rollback Atômico:**
+   - Durante a orquestração no `MeetingProcessor` e no `JobRunner`, operações intermediárias utilizam `commit=False` e `flush()` no banco de dados.
+   - Em caso de falha transitória ou definitiva em qualquer etapa, `_rollback_if_needed()` executa `db.rollback()` e desassocia objetos pendentes em memória, impedindo que dados parciais da tentativa falha sejam salvos quando a reunião for atualizada para `MeetingStatus.FAILED`.
+2. **Idempotência em Transcrições (`TranscriptRepository`):**
+   - O método `save_transcript(meeting_id, content, segments, ...)` busca se já existe transcrição para o `meeting_id` (`unique=True`).
+   - Se já existir, o conteúdo é atualizado no registro existente e a lista `existing.segments.clear()` é limpa, recriando os novos segmentos via cascade `delete-orphan`.
+   - `apply_diarization(transcript, diarization_segments, commit=...)` associa os locutores diretamente nos segmentos existentes sem duplicar linhas e aceita `commit=False` para orquestração transacional.
+3. **Idempotência em Resumos e Tarefas (`SummaryRepository`):**
+   - O método `save_summary(meeting_id, ...)` (e `save_result`) busca o `Summary` existente vinculado à reunião (`unique=True`).
+   - Se já existir, atualiza os campos (`objective`, `summary`, `key_points`, `decisions`, `structured_result`) no mesmo objeto.
+   - A relação `meeting.tasks` é substituída com o novo conjunto de tarefas; a configuração `cascade="all, delete-orphan"` no modelo `Meeting` garante a exclusão limpa das tarefas anteriores e a inserção ordenada das novas, prevenindo duplicação de tarefas em retentativas.
+
+---
+
+## 11. Estratégia de Retry Manual (Issue #26 - Etapa 11)
+
+### 11.1 Avaliação de Arquitetura: `POST /meetings/{id}/retry` vs `POST /meetings/{id}/process`
+
+Avaliamos as duas alternativas de design para reprocessamento manual:
+
+| Critério | `POST /meetings/{id}/retry` (Adotado) | Reutilizar `POST /meetings/{id}/process` |
+| :--- | :--- | :--- |
+| **Semântica REST/RPC** | Explícita e focada em recuperação de falhas (`FAILED`). | Genérica e ambígua em relação ao ciclo de vida. |
+| **Segurança e Validação** | Restringe estritamente o reprocessamento a reuniões que realmente falharam. | Risco de reinício acidental de fluxos já em andamento ou reuniões recém-criadas. |
+| **Separação de Papéis** | Clara intenção do cliente de tentar recuperar um erro. | Mescla intenção de primeiro processamento com recuperação de desastre. |
+
+**Decisão Arquitetural:**
+- Implementar **`POST /meetings/{meeting_id}/retry`** como o endpoint oficial e semântico dedicado ao retry manual de reuniões com falha (`FAILED`).
+- Disponibilizar também **`POST /meetings/{meeting_id}/process`** para iniciar o pipeline regular de ponta a ponta a partir de reuniões com áudio já carregado (`AUDIO_UPLOADED`).
+
+### 11.2 Comportamento da API e Bloqueio de Situações Inválidas
+
+O endpoint `POST /meetings/{meeting_id}/retry` valida rigorosamente o estado antes de iniciar o reprocessamento:
+
+1. **Reunião Inexistente (HTTP 404 Not Found):**
+   - O identificador não existe na base de dados.
+2. **Reunião sem Áudio (HTTP 422 Unprocessable Content):**
+   - Reunião não possui metadados de áudio associados ou o arquivo não existe no armazenamento físico.
+3. **Concorrência / Já em Processamento (HTTP 409 Conflict):**
+   - Reunião com status `PROCESSING` ou `TRANSCRIBING`. Impede execuções simultâneas ou sobreposição de workers.
+4. **Reunião Concluída com Sucesso (HTTP 409 Conflict):**
+   - Reunião com status `COMPLETED`. Evita sobrescrita indevida ou custo redundante de IA para reuniões já finalizadas.
+5. **Reunião em Estado Não Falho (HTTP 409 Conflict):**
+   - Reunião com status `RECEIVED` ou `AUDIO_UPLOADED`. O endpoint `/retry` rejeita, direcionando para o fluxo regular `/process`.
+6. **Sucesso (HTTP 200 OK):**
+   - Reunião em status `FAILED` é transicionada para `PROCESSING` e o job assíncrono é enfileirado via `BackgroundTasks` / worker (`enqueue_meeting_processing`).
+
+
 
 

@@ -134,6 +134,18 @@ class JobRunner:
                 meeting.status = MeetingStatus.FAILED
 
             if self.meeting_repository is not None:
+                db = getattr(self.meeting_repository, "db", None)
+                if db is not None and hasattr(db, "rollback"):
+                    try:
+                        db.rollback()
+                        if hasattr(meeting, "transcript"):
+                            meeting.transcript = None
+                        if hasattr(meeting, "summary"):
+                            meeting.summary = None
+                        if hasattr(meeting, "tasks") and meeting.tasks:
+                            meeting.tasks.clear()
+                    except Exception:
+                        pass
                 try:
                     self.meeting_repository.update_status(meeting, MeetingStatus.FAILED)
                     logger.info(
