@@ -28,5 +28,8 @@ class MeetingResponse(MeetingBase):
     status: MeetingStatus | str
     created_at: datetime
     updated_at: datetime
+    processing_started_at: datetime | None = None
+    processing_completed_at: datetime | None = None
+    last_error: str | None = None
     audio: AudioUploadResponse | None = None
     transcript: TranscriptResponse | None = None

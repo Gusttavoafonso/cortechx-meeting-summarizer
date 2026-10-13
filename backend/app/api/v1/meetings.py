@@ -10,6 +10,7 @@ from app.repositories.transcript_repository import (
     InvalidTranscriptSegmentError,
     TranscriptRepository,
 )
+from app.models.meeting_status import MeetingStatus
 from app.schemas.audio import AudioUploadResponse
 from app.schemas.meeting import MeetingCreate, MeetingResponse
 from app.schemas.transcription import TranscriptResponse
@@ -225,7 +226,7 @@ def upload_audio(
         # Se já existia transcrição para o áudio anterior, invalida/limpa
         transcript_repo.delete_by_meeting_id(meeting_id)
 
-        meeting_repo.update_status(meeting, status="audio_uploaded")
+        MeetingService(meeting_repo).update_status(meeting_id, MeetingStatus.AUDIO_UPLOADED)
     except Exception as db_exc:
         # Se a persistência falhar, remove o arquivo gravado para evitar arquivo órfão
         storage_service.delete_file(relative_path)
@@ -348,19 +349,19 @@ def transcribe_meeting(
         )
 
     # Atualiza status para transcrevendo
-    meeting_repo.update_status(meeting, status="transcribing")
+    MeetingService(meeting_repo).update_status(meeting_id, MeetingStatus.TRANSCRIBING)
 
     # Executa transcrição com tratamento de falha no provedor de STT
     try:
         result = stt_service.transcribe(audio_file_path, language="pt")
     except (OSError, IOError) as io_err:
-        meeting_repo.update_status(meeting, status="audio_uploaded")
+        MeetingService(meeting_repo).update_status(meeting_id, MeetingStatus.AUDIO_UPLOADED)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erro inesperado durante a leitura do arquivo de áudio: {io_err}",
         )
     except Exception as stt_err:
-        meeting_repo.update_status(meeting, status="audio_uploaded")
+        MeetingService(meeting_repo).update_status(meeting_id, MeetingStatus.AUDIO_UPLOADED)
         err_msg = str(stt_err).lower()
         if any(
             token in err_msg
@@ -382,7 +383,7 @@ def transcribe_meeting(
 
     # Tratamento de resposta vazia do STT (áudio mudo ou inaudível)
     if not result.text or not result.text.strip():
-        meeting_repo.update_status(meeting, status="audio_uploaded")
+        MeetingService(meeting_repo).update_status(meeting_id, MeetingStatus.AUDIO_UPLOADED)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
@@ -399,18 +400,18 @@ def transcribe_meeting(
             segments=result.segments,
             commit=False,
         )
-        meeting_repo.update_status(meeting, status="transcribed", commit=False)
+        MeetingService(meeting_repo).update_status(meeting_id, MeetingStatus.TRANSCRIBED)
         db.commit()
     except InvalidTranscriptSegmentError as exc:
         db.rollback()
-        meeting_repo.update_status(meeting, status="audio_uploaded")
+        MeetingService(meeting_repo).update_status(meeting_id, MeetingStatus.AUDIO_UPLOADED)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
     except SQLAlchemyError as exc:
         db.rollback()
-        meeting_repo.update_status(meeting, status="audio_uploaded")
+        MeetingService(meeting_repo).update_status(meeting_id, MeetingStatus.AUDIO_UPLOADED)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Falha ao persistir a transcrição.",
