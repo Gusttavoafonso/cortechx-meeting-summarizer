@@ -233,3 +233,27 @@ backend/
 ├── pyproject.toml               # Configuração do projeto, dependências e ferramentas de teste
 └── README.md
 ```
+
+## Disparo das integrações externas
+
+O `SummaryService` é o ponto de orquestração do pipeline. Primeiro, o resultado estruturado
+(resumo e tarefas) é persistido; em seguida a reunião recebe o status `completed`; somente
+então o `IntegrationService` tenta entregar o resultado ao Discord e ao Notion. Se a geração
+ou persistência falhar, o método encerra com erro e nenhuma integração é chamada. Erros de
+entrega externa são registrados individualmente e não revertem o resumo nem alteram o status
+principal da reunião.
+
+As integrações são opt-in e desabilitadas por padrão. Configure no `.env`:
+
+```dotenv
+DISCORD_ENABLED=true
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+NOTION_ENABLED=true
+NOTION_TOKEN=secret_...
+NOTION_DATABASE_ID=...
+```
+
+Uma integração só é executada quando estiver habilitada **e** suas credenciais/configuração
+estiverem presentes. Cada provider é independente; o resultado de `dispatch` contém `SUCCESS`
+ou `FAILED` por provider executado. Os envios são síncronos após a persistência; falhas não
+são reprocessadas automaticamente nesta versão.

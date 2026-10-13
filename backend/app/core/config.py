@@ -62,6 +62,8 @@ class Settings(BaseSettings):
     summary_chunk_size: int = 12000
     summary_chunk_overlap: int = 500
     gemini_api_key: SecretStr | None = None
+    notion_enabled: bool = Field(default=False, validation_alias="NOTION_ENABLED")
+    discord_enabled: bool = Field(default=False, validation_alias="DISCORD_ENABLED")
     notion_token: SecretStr | None = None
     notion_database_id: str | None = None
     discord_webhook_url: HttpUrl | None = None
