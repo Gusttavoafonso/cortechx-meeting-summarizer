@@ -169,30 +169,14 @@ def test_end_to_end_async_processing_pipeline_execution(
         )
     ]
 
-    summarization_service = MagicMock()
-    summarization_service.summarize.return_value = MagicMock(
-        objective="Definir entrega do processamento assíncrono",
-        summary="A equipe acordou a implementação do worker Celery com Redis.",
-        main_points=["Implementar rota POST /process", "Integrar Celery"],
-        decisions=["Usar Redis como broker de mensagens"],
-    )
-    task_extraction_service = MagicMock()
-    task_extraction_service.extract_tasks.return_value = [
-        {"description": "Implementar worker Celery", "assignee": "SPEAKER_00"}
-    ]
-    summary_repository = MagicMock()
-
     def build_test_processor(session: Session) -> MeetingProcessor:
         return MeetingProcessor(
             meeting_repository=MeetingRepository(session),
             transcript_repository=TranscriptRepository(session),
-            summary_repository=summary_repository,
             audio_storage_service=temp_storage_service,
             speech_to_text_service=stt_service,
             diarization_service=diarization_service,
             chunking_service=ChunkingService(),
-            summarization_service=summarization_service,
-            task_extraction_service=task_extraction_service,
         )
 
     non_closing_session = MagicMock(wraps=db_session)
@@ -205,7 +189,6 @@ def test_end_to_end_async_processing_pipeline_execution(
     )
 
     non_closing_session.close.assert_called_once()
-    summary_repository.save_summary.assert_called_once()
 
     meeting_resp = client.get(f"/meetings/{meeting_id}")
     assert meeting_resp.status_code == 200
@@ -344,3 +327,62 @@ def test_enqueue_meeting_processing_calls_celery_and_falls_back_to_background_ta
     meeting_job.enqueue_meeting_processing(10, background_tasks=bg_tasks)
     assert len(bg_tasks.tasks) == 1
 
+
+def test_build_meeting_processor_wires_services(db_session: Session) -> None:
+    from app.workers.meeting_job import build_meeting_processor
+
+    processor = build_meeting_processor(db_session)
+    assert isinstance(processor, MeetingProcessor)
+    assert processor._meeting_repository is not None
+    assert processor._transcript_repository is not None
+    assert processor._audio_storage_service is not None
+    assert processor._speech_to_text_service is not None
+    assert processor._diarization_service is not None
+    assert processor._chunking_service is not None
+
+
+def test_run_meeting_processing_job_marks_failed_when_factory_fails(
+    db_session: Session,
+) -> None:
+    from app.models.meeting import Meeting
+    from app.models.meeting_status import MeetingStatus
+    from app.workers.meeting_job import run_meeting_processing_job
+
+    meeting = Meeting(title="Teste Falha Fábrica", status=MeetingStatus.PROCESSING)
+    db_session.add(meeting)
+    db_session.commit()
+    db_session.refresh(meeting)
+
+    def failing_factory(_session: Session) -> MeetingProcessor:
+        raise RuntimeError("Erro ao instanciar processor")
+
+    non_closing_session = MagicMock(wraps=db_session)
+    non_closing_session.close = MagicMock()
+
+    with pytest.raises(RuntimeError, match="Erro ao instanciar processor"):
+        run_meeting_processing_job(
+            meeting.id,
+            session_factory=lambda: non_closing_session,
+            processor_factory=failing_factory,
+        )
+
+    db_session.refresh(meeting)
+    assert meeting.status == MeetingStatus.FAILED
+
+
+def test_process_meeting_task_executes_eagerly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.workers.celery_app import celery_app
+    from app.workers.meeting_job import process_meeting_task
+
+    mock_run = MagicMock()
+    monkeypatch.setattr("app.workers.meeting_job.run_meeting_processing_job", mock_run)
+
+    previous_eager = celery_app.conf.task_always_eager
+    celery_app.conf.task_always_eager = True
+    try:
+        process_meeting_task.apply(args=[42])
+        mock_run.assert_called_once_with(42)
+    finally:
+        celery_app.conf.task_always_eager = previous_eager
