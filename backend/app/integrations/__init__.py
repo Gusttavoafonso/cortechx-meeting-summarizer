@@ -13,7 +13,7 @@ from app.integrations.payload import (
     MeetingResultUnavailableError,
     meeting_to_integration_payload,
 )
-from app.integrations.providers import ProviderTeste
+from app.integrations.providers import DiscordProvider, ProviderTeste
 from app.integrations.registry import (
     ProviderRegistry,
     default_registry,
@@ -29,6 +29,7 @@ from app.schemas.integration import (
 )
 
 __all__ = [
+    "DiscordProvider",
     "IntegrationError",
     "IntegrationProvider",
     "IntegrationResult",
