@@ -72,8 +72,7 @@ services:
   worker:
     <<: *backend_base
     container_name: cortechx_worker
-    ports: []
-    command: celery -A app.workers.celery_app worker --loglevel=info
+    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
 
 volumes:
   postgres_data:

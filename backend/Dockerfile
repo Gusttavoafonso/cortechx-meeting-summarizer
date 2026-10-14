@@ -1,8 +1,7 @@
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
+    PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
@@ -11,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -r
 COPY pyproject.toml .
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --upgrade pip && \
-    pip install .[dev]
+    pip install --extra-index-url https://download.pytorch.org/whl/cpu .[dev]
 
 COPY . /app/
 

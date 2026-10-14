@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import SessionLocal
+from app.models.meeting import Meeting
+from app.models.meeting_status import MeetingStatus
 from app.repositories.meeting_repository import MeetingRepository
 from app.repositories.transcript_repository import TranscriptRepository
 from app.services.audio_storage import AudioStorageService
@@ -73,7 +75,13 @@ def run_meeting_processing_job(
     """Executa o pipeline completo em segundo plano com sessão de banco isolada."""
     session = session_factory()
     try:
-        processor = processor_factory(session)
+        try:
+            processor = processor_factory(session)
+        except Exception:
+            meeting = session.get(Meeting, meeting_id)
+            if meeting is not None:
+                MeetingRepository(session).update_status(meeting, MeetingStatus.FAILED)
+            raise
         processor.process_meeting(
             meeting_id,
             allow_already_processing=True,
