@@ -12,6 +12,10 @@ class ProviderConfigurationError(ValueError):
     """A configuração necessária para um provider não está disponível."""
 
 
+class ProviderDisabledError(ProviderConfigurationError):
+    """O provider está desativado para a reunião especificada."""
+
+
 class ProviderConfigurationResolver:
     """Obtém a configuração de cada provider a partir da reunião."""
 
@@ -47,9 +51,9 @@ class ProviderConfigurationResolver:
         if configuration is None:
             return {}
         if not configuration.enabled:
-            raise ProviderConfigurationError("Provider desativado para esta reunião")
+            raise ProviderDisabledError("Provider desativado para esta reunião.")
         if configuration.configuration is None:
             return {}
         if not isinstance(configuration.configuration, dict):
-            raise ProviderConfigurationError("Configuração do provider inválida")
+            raise ProviderConfigurationError("Configuração do provider inválida.")
         return dict(configuration.configuration)

@@ -128,3 +128,16 @@ class TestIntegrationService:
         assert result.success is False
         assert result.error == "Não foi possível executar a integração."
         assert "secret-value" not in result.error
+
+    def test_returns_fallback_result_when_provider_is_empty_or_whitespace(self):
+        service = IntegrationService()
+
+        result_empty = service.send("", _sample_payload())
+        assert result_empty.success is False
+        assert result_empty.provider == "unknown"
+        assert result_empty.error == "Provider de integração não encontrado."
+
+        result_whitespace = service.send("   ", _sample_payload())
+        assert result_whitespace.success is False
+        assert result_whitespace.provider == "unknown"
+        assert result_whitespace.error == "Provider de integração não encontrado."

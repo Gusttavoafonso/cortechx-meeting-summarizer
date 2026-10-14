@@ -7,6 +7,7 @@ from app.integrations.base import (
 from app.integrations.configuration import (
     ProviderConfigurationError,
     ProviderConfigurationResolver,
+    ProviderDisabledError,
 )
 from app.integrations.payload import (
     MeetingResultUnavailableError,
@@ -38,6 +39,7 @@ __all__ = [
     "ProviderExecutionError",
     "ProviderConfigurationError",
     "ProviderConfigurationResolver",
+    "ProviderDisabledError",
     "ProviderNotFoundError",
     "ProviderRegistry",
     "TaskIntegrationPayload",
