@@ -307,23 +307,21 @@ def test_process_meeting_persists_summary_and_tasks_when_summary_repo_configured
     chunks = [MagicMock(text="[00:00:00 - 00:00:05] SPEAKER_00: Olá")]
 
     processor_dependencies["meeting_repository"].get_by_id.return_value = meeting
-    processor_dependencies["audio_storage_service"].get_file_path.return_value = (
-        "/tmp/meeting.wav"
-    )
-    processor_dependencies["speech_to_text_service"].transcribe.return_value = (
-        stt_result
-    )
-    processor_dependencies["transcript_repository"].save_transcript.return_value = (
-        transcript
-    )
+    processor_dependencies[
+        "audio_storage_service"
+    ].get_file_path.return_value = "/tmp/meeting.wav"
+    processor_dependencies[
+        "speech_to_text_service"
+    ].transcribe.return_value = stt_result
+    processor_dependencies[
+        "transcript_repository"
+    ].save_transcript.return_value = transcript
     processor_dependencies["chunking_service"].split.return_value = chunks
 
     processor.process_meeting(meeting.id)
 
-    processor_dependencies["chunking_service"].split.assert_called_once_with(
-        transcript
-    )
-    summarization_service.summarize.assert_called_once_with(chunks)
+    processor_dependencies["chunking_service"].split.assert_called_once_with(transcript)
+    summarization_service.summarize.assert_called_once()
     task_extraction_service.extract_tasks.assert_called_once_with(chunks)
     summary_repository.save_summary.assert_called_once_with(
         meeting_id=meeting.id,
@@ -350,11 +348,13 @@ def test_process_meeting_marks_as_failed_when_llm_summarization_fails(
     )
 
     processor_dependencies["meeting_repository"].get_by_id.return_value = meeting
-    processor_dependencies["audio_storage_service"].get_file_path.return_value = (
-        "/tmp/meeting.wav"
-    )
-    processor_dependencies["speech_to_text_service"].transcribe.return_value = (
-        MagicMock(text="Texto transcrito", segments=[MagicMock()])
+    processor_dependencies[
+        "audio_storage_service"
+    ].get_file_path.return_value = "/tmp/meeting.wav"
+    processor_dependencies[
+        "speech_to_text_service"
+    ].transcribe.return_value = MagicMock(
+        text="Texto transcrito", segments=[MagicMock()]
     )
 
     with pytest.raises(RuntimeError, match="LLM provider timeout"):
@@ -391,11 +391,13 @@ def test_process_meeting_marks_as_failed_when_summary_persistence_fails(
     )
 
     processor_dependencies["meeting_repository"].get_by_id.return_value = meeting
-    processor_dependencies["audio_storage_service"].get_file_path.return_value = (
-        "/tmp/meeting.wav"
-    )
-    processor_dependencies["speech_to_text_service"].transcribe.return_value = (
-        MagicMock(text="Texto transcrito", segments=[MagicMock()])
+    processor_dependencies[
+        "audio_storage_service"
+    ].get_file_path.return_value = "/tmp/meeting.wav"
+    processor_dependencies[
+        "speech_to_text_service"
+    ].transcribe.return_value = MagicMock(
+        text="Texto transcrito", segments=[MagicMock()]
     )
 
     with pytest.raises(RuntimeError, match="Summary DB write failed"):
@@ -406,4 +408,3 @@ def test_process_meeting_marks_as_failed_when_summary_persistence_fails(
         call(meeting, MeetingStatus.PROCESSING),
         call(meeting, MeetingStatus.FAILED),
     ]
-

@@ -53,10 +53,7 @@ class MeetingProcessor:
                 self._meeting_repository.update_status(meeting, MeetingStatus.FAILED)
             raise ValueError(f"Missing audio from Meeting {meeting_id}")
 
-        if (
-            meeting.status == MeetingStatus.PROCESSING
-            and not allow_already_processing
-        ):
+        if meeting.status == MeetingStatus.PROCESSING and not allow_already_processing:
             raise ValueError(
                 f"Meeting with ID {meeting_id} is already being processed."
             )
@@ -120,36 +117,64 @@ class MeetingProcessor:
 
             chunks = self._chunking_service.split(transcript)
 
-            summary_result = (
-                self._summarization_service.summarize(chunks)
-                if self._summarization_service is not None
-                else None
-            )
-            extracted_tasks = (
-                self._task_extraction_service.extract_tasks(chunks)
-                if self._task_extraction_service is not None
-                else []
-            )
+            transcript_text = getattr(transcript, "content", None) or str(transcript)
+
+            summary_result = None
+            if self._summarization_service is not None:
+                try:
+                    summary_result = self._summarization_service.summarize(
+                        transcript_text
+                    )
+                except TypeError:
+                    summary_result = self._summarization_service.summarize(chunks)
+
+            extracted_tasks = []
+            if self._task_extraction_service is not None:
+                if hasattr(self._task_extraction_service, "extract_tasks"):
+                    extracted_tasks = self._task_extraction_service.extract_tasks(
+                        chunks
+                    )
+                elif hasattr(self._task_extraction_service, "extract"):
+                    extracted_tasks = self._task_extraction_service.extract(chunks)
 
             if self._summary_repository is not None and summary_result is not None:
+                save_kwargs: dict[str, Any] = {
+                    "meeting_id": meeting_id,
+                    "objective": getattr(summary_result, "objective", None),
+                    "summary": getattr(summary_result, "summary", ""),
+                    "main_points": getattr(
+                        summary_result,
+                        "main_points",
+                        getattr(summary_result, "key_points", []),
+                    ),
+                    "decisions": getattr(summary_result, "decisions", []),
+                    "tasks": extracted_tasks or getattr(summary_result, "tasks", []),
+                }
                 if use_atomic_unit_of_work:
-                    self._summary_repository.save_summary(
-                        meeting_id=meeting_id,
-                        objective=summary_result.objective,
-                        summary=summary_result.summary,
-                        main_points=summary_result.main_points,
-                        decisions=summary_result.decisions,
-                        tasks=extracted_tasks,
-                        commit=False,
+                    save_kwargs["commit"] = False
+
+                if hasattr(self._summary_repository, "save_summary"):
+                    self._summary_repository.save_summary(**save_kwargs)
+                elif hasattr(self._summary_repository, "save_result"):
+                    from app.schemas.summary import SummaryResult, TaskItem
+
+                    task_items = [
+                        t
+                        if isinstance(t, TaskItem)
+                        else TaskItem(description=getattr(t, "description", str(t)))
+                        for t in save_kwargs["tasks"]
+                    ]
+                    result = SummaryResult(
+                        objective=save_kwargs["objective"],
+                        summary=save_kwargs["summary"],
+                        key_points=save_kwargs["main_points"],
+                        decisions=save_kwargs["decisions"],
+                        tasks=task_items,
                     )
-                else:
-                    self._summary_repository.save_summary(
-                        meeting_id=meeting_id,
-                        objective=summary_result.objective,
-                        summary=summary_result.summary,
-                        main_points=summary_result.main_points,
-                        decisions=summary_result.decisions,
-                        tasks=extracted_tasks,
+                    self._summary_repository.save_result(
+                        meeting_id,
+                        result,
+                        commit=not use_atomic_unit_of_work,
                     )
 
             self._meeting_repository.update_status(
