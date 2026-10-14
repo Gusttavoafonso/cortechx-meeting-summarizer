@@ -53,6 +53,7 @@ class TranscriptRepository:
             # Substitui o conteúdo e limpa segmentos antigos
             existing.content = content
             existing.segments.clear()
+            self.db.flush()
             transcript = existing
         else:
             transcript = Transcript(
@@ -63,7 +64,6 @@ class TranscriptRepository:
 
         for seg in segments:
             segment_model = TranscriptSegment(
-                transcript=transcript,
                 speaker=seg.speaker,
                 start_time=seg.start,
                 end_time=seg.end,
@@ -71,11 +71,15 @@ class TranscriptRepository:
             )
             transcript.segments.append(segment_model)
 
-        if commit:
-            self.db.commit()
-            self.db.refresh(transcript)
-        else:
-            self.db.flush()
+        try:
+            if commit:
+                self.db.commit()
+                self.db.refresh(transcript)
+            else:
+                self.db.flush()
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise
         return transcript
 
     @staticmethod
@@ -142,6 +146,8 @@ class TranscriptRepository:
         self,
         transcript: Transcript,
         diarization_segments: list[DiarizationSegment],
+        *,
+        commit: bool = True,
     ) -> Transcript:
         """Associa cada segmento transcrito ao locutor com maior sobreposição."""
         assignments: list[tuple[TranscriptSegment, str]] = []
@@ -202,9 +208,12 @@ class TranscriptRepository:
             transcript_segment.speaker = speaker
 
         try:
-            self.db.commit()
+            if commit:
+                self.db.commit()
+                self.db.refresh(transcript)
+            else:
+                self.db.flush()
         except SQLAlchemyError:
             self.db.rollback()
             raise
-        self.db.refresh(transcript)
         return transcript
