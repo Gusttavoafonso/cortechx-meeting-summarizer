@@ -30,3 +30,8 @@ class MeetingResponse(MeetingBase):
     updated_at: datetime
     audio: AudioUploadResponse | None = None
     transcript: TranscriptResponse | None = None
+
+
+class MeetingProcessResponse(BaseModel):
+    meeting_id: int
+    status: str = "PROCESSING"
