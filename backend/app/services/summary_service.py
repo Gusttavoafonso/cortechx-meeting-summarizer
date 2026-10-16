@@ -1,5 +1,5 @@
 from app.core.config import settings
-from app.models.meeting_status import MeetingStatus
+from app.models.meeting_status import MeetingStatus, IN_PROGRESS_STATUSES
 from app.repositories.meeting_repository import MeetingRepository
 from app.repositories.summary_repository import SummaryRepository
 from app.repositories.transcript_repository import TranscriptRepository
@@ -42,6 +42,9 @@ class SummaryService:
         if transcript is None or not transcript.raw_text.strip():
             raise TranscriptNotFoundError(meeting_id)
 
+        if MeetingStatus(meeting.status) in IN_PROGRESS_STATUSES:
+            raise SummaryAlreadyProcessingError(meeting_id)
+
         self.meeting_service.update_status(meeting_id, MeetingStatus.PROCESSING)
 
         try:
@@ -56,6 +59,7 @@ class SummaryService:
             )
 
         except Exception as exc:
+            self.meeting_repository.db.rollback()
             self.meeting_service.update_status(
                 meeting_id,
                 MeetingStatus.FAILED,

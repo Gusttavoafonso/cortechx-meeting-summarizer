@@ -25,7 +25,7 @@ class MeetingResponse(MeetingBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    status: MeetingStatus | str
+    status: MeetingStatus
     created_at: datetime
     updated_at: datetime
     processing_started_at: datetime | None = None
@@ -33,3 +33,15 @@ class MeetingResponse(MeetingBase):
     last_error: str | None = None
     audio: AudioUploadResponse | None = None
     transcript: TranscriptResponse | None = None
+
+
+class MeetingProcessResponse(BaseModel):
+    meeting_id: int
+    status: MeetingStatus = MeetingStatus.PROCESSING
+
+
+class MeetingStatusResponse(BaseModel):
+    meeting_id: int
+    status: MeetingStatus
+    updated_at: datetime
+    last_error: str | None = None
