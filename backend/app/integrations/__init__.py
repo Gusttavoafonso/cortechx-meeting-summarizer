@@ -12,7 +12,11 @@ from app.integrations.payload import (
     MeetingResultUnavailableError,
     meeting_to_integration_payload,
 )
-from app.integrations.providers import DiscordProvider, ProviderTeste
+from app.integrations.providers import (
+    DiscordProvider,
+    NotionProvider,
+    ProviderTeste,
+)
 from app.integrations.registry import (
     ProviderRegistry,
     default_registry,
@@ -35,6 +39,7 @@ __all__ = [
     "IntegrationService",
     "MeetingIntegrationPayload",
     "MeetingResultUnavailableError",
+    "NotionProvider",
     "ProviderExecutionError",
     "ProviderConfigurationError",
     "ProviderConfigurationResolver",
