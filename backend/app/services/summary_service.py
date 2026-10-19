@@ -1,5 +1,5 @@
 from app.core.config import settings
-from app.models.meeting_status import MeetingStatus
+from app.models.meeting_status import MeetingStatus, IN_PROGRESS_STATUSES
 from app.repositories.meeting_repository import MeetingRepository
 from app.repositories.summary_repository import SummaryRepository
 from app.repositories.transcript_repository import TranscriptRepository
@@ -9,6 +9,7 @@ from app.services.integrations.service import IntegrationService
 import logging
 
 logger = logging.getLogger(__name__)
+from app.services.meeting_service import MeetingService
 
 class MeetingNotFoundError(Exception):
     """A reunião informada não existe."""
@@ -33,6 +34,7 @@ class SummaryService:
         self.meeting_repository = meeting_repository
         self.transcript_repository = transcript_repository
         self.integration_service = integration_service or IntegrationService()
+        self.meeting_service = MeetingService(meeting_repository)
 
     def generate_and_persist(self, meeting_id: int) -> SummaryResponse:
         meeting = self.meeting_repository.get_by_id(meeting_id)
@@ -46,8 +48,10 @@ class SummaryService:
         if transcript is None or not transcript.raw_text.strip():
             raise TranscriptNotFoundError(meeting_id)
 
-        previous_status = meeting.status
-        self.meeting_repository.update_status(meeting, status=MeetingStatus.PROCESSING)
+        if MeetingStatus(meeting.status) in IN_PROGRESS_STATUSES:
+            raise SummaryAlreadyProcessingError(meeting_id)
+
+        self.meeting_service.update_status(meeting_id, MeetingStatus.PROCESSING)
 
         try:
             result = self.summarization.summarize(transcript.raw_text)
@@ -60,8 +64,13 @@ class SummaryService:
                 },
             )
 
-        except Exception:
-            self.meeting_repository.update_status(meeting, status=previous_status)
+        except Exception as exc:
+            self.meeting_repository.db.rollback()
+            self.meeting_service.update_status(
+                meeting_id,
+                MeetingStatus.FAILED,
+                error_message=str(exc) or exc.__class__.__name__,
+            )
             raise
 
         # O resumo e as tarefas já foram commitados pelo repositório; só então

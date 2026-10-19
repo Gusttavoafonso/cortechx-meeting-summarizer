@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum as SqlEnum, String
+from sqlalchemy import DateTime, Enum as SqlEnum, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -53,6 +53,16 @@ class Meeting(Base):
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+
+    processing_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    processing_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     audio: Mapped["AudioFile | None"] = relationship(
         "AudioFile",

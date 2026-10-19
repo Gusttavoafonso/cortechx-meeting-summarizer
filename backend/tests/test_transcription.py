@@ -114,7 +114,9 @@ def test_transcribe_rolls_back_when_persistence_fails(
     assert response.status_code == 500
     assert response.json()["detail"] == "Falha ao persistir a transcrição."
     assert client.get(f"/meetings/{meeting_id}/transcript").status_code == 404
-    assert client.get(f"/meetings/{meeting_id}").json()["status"] == "audio_uploaded"
+    meeting_data = client.get(f"/meetings/{meeting_id}").json()
+    assert meeting_data["status"] == "failed"
+    assert "persistir" in meeting_data["last_error"].lower()
 
 
 def test_transcribe_meeting_not_found(client: TestClient) -> None:
@@ -178,7 +180,33 @@ def test_transcribe_stt_service_failure(client: TestClient) -> None:
 
     # Valida que o status da reunião não ficou travado em "transcribing"
     meeting_data = client.get(f"/meetings/{meeting_id}").json()
-    assert meeting_data["status"] == "audio_uploaded"
+    assert meeting_data["status"] == "failed"
+    assert "Conexão interrompida" in meeting_data["last_error"]
+
+
+def test_transcribe_can_be_retried_after_failure(client: TestClient) -> None:
+    meeting_id = client.post("/meetings", json={"title": "Retentativa"}).json()["id"]
+    client.post(
+        f"/meetings/{meeting_id}/audio",
+        files={"file": ("audio.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg")},
+    )
+
+    empty_mock = MockSpeechToTextService(
+        canned_result=TranscriptionResult(text="", segments=[])
+    )
+    app.dependency_overrides[get_transcription_service] = lambda: empty_mock
+    assert client.post(f"/meetings/{meeting_id}/transcribe").status_code == 422
+    assert client.get(f"/meetings/{meeting_id}").json()["status"] == "failed"
+
+    app.dependency_overrides[get_transcription_service] = (
+        lambda: MockSpeechToTextService()
+    )
+    retry = client.post(f"/meetings/{meeting_id}/transcribe")
+
+    assert retry.status_code == 200
+    meeting_data = client.get(f"/meetings/{meeting_id}").json()
+    assert meeting_data["status"] == "transcribed"
+    assert meeting_data["last_error"] is None
 
 
 def test_transcribe_stt_empty_response(client: TestClient) -> None:
@@ -200,7 +228,8 @@ def test_transcribe_stt_empty_response(client: TestClient) -> None:
 
     # Status revertido para permitir retentativa
     meeting_data = client.get(f"/meetings/{meeting_id}").json()
-    assert meeting_data["status"] == "audio_uploaded"
+    assert meeting_data["status"] == "failed"
+    assert "vazia" in meeting_data["last_error"].lower()
 
 
 @pytest.mark.parametrize(
@@ -228,7 +257,9 @@ def test_transcribe_rejects_invalid_segments(
 
     assert response.status_code == 422
     assert client.get(f"/meetings/{meeting_id}/transcript").status_code == 404
-    assert client.get(f"/meetings/{meeting_id}").json()["status"] == "audio_uploaded"
+    meeting_data = client.get(f"/meetings/{meeting_id}").json()
+    assert meeting_data["status"] == "failed"
+    assert meeting_data["last_error"]
 
 
 def test_transcribe_unexpected_read_error(

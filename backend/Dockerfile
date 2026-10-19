@@ -7,14 +7,13 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir --upgrade pip
-
 COPY pyproject.toml .
-RUN pip install --no-cache-dir .[dev]
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip && \
+    pip install --extra-index-url https://download.pytorch.org/whl/cpu .[dev]
 
 COPY . /app/
 
 EXPOSE 8000
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-
