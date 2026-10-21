@@ -54,7 +54,9 @@ class MeetingService:
 
         if target in {MeetingStatus.TRANSCRIBING, MeetingStatus.PROCESSING}:
             if meeting.processing_started_at is None or current in {
-                MeetingStatus.COMPLETED, MeetingStatus.FAILED, MeetingStatus.TRANSCRIBED,
+                MeetingStatus.COMPLETED,
+                MeetingStatus.FAILED,
+                MeetingStatus.TRANSCRIBED,
                 MeetingStatus.AUDIO_UPLOADED,
             }:
                 meeting.processing_started_at = now

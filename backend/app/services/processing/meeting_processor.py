@@ -13,6 +13,7 @@ from app.services.diarization import DiarizationService
 from app.services.transcription import BaseSpeechToTextService
 from app.services.meeting_service import MeetingService
 from sqlalchemy.orm import Session
+from app.workers.integration_job import enqueue_integration_delivery
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ class MeetingProcessor:
         if meeting.audio is None:
             if allow_already_processing and meeting.status == MeetingStatus.PROCESSING:
                 self._meeting_service.update_status(
-                    meeting_id, MeetingStatus.FAILED, erro_message = "Missing audio from Meeting."
+                    meeting_id, MeetingStatus.FAILED, error_message = "Missing audio from Meeting."
                 )
             raise ValueError(f"Missing audio from Meeting {meeting_id}")
 
@@ -182,6 +183,9 @@ class MeetingProcessor:
                 meeting_id,
                 MeetingStatus.COMPLETED,
             )
+
+            # Dispara as integrações em background informando que é um novo resultado
+            enqueue_integration_delivery(meeting_id, reset=True)
 
         except Exception as exc:
             logger.exception("Falha ao processar reunião %s", meeting_id)

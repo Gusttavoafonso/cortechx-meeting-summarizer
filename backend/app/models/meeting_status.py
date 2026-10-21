@@ -32,13 +32,41 @@ class MeetingStatus(str, Enum):
 
 # Transições permitidas. Falhas podem ser retomadas a partir do estado apropriado.
 VALID_TRANSITIONS: dict[MeetingStatus, set[MeetingStatus]] = {
-    MeetingStatus.RECEIVED: {MeetingStatus.AUDIO_UPLOADED, MeetingStatus.FAILED},
-    MeetingStatus.AUDIO_UPLOADED: {MeetingStatus.TRANSCRIBING, MeetingStatus.PROCESSING, MeetingStatus.FAILED},
-    MeetingStatus.TRANSCRIBING: {MeetingStatus.AUDIO_UPLOADED, MeetingStatus.TRANSCRIBED, MeetingStatus.FAILED},
-    MeetingStatus.TRANSCRIBED: {MeetingStatus.PROCESSING, MeetingStatus.TRANSCRIBING, MeetingStatus.AUDIO_UPLOADED, MeetingStatus.FAILED},
-    MeetingStatus.PROCESSING: {MeetingStatus.COMPLETED, MeetingStatus.FAILED, MeetingStatus.TRANSCRIBED},
-    MeetingStatus.COMPLETED: {MeetingStatus.PROCESSING, MeetingStatus.AUDIO_UPLOADED},
-    MeetingStatus.FAILED: {MeetingStatus.AUDIO_UPLOADED, MeetingStatus.TRANSCRIBING, MeetingStatus.PROCESSING},
+    MeetingStatus.RECEIVED: {
+        MeetingStatus.AUDIO_UPLOADED,
+        MeetingStatus.FAILED,
+    },
+    MeetingStatus.AUDIO_UPLOADED: {
+        MeetingStatus.TRANSCRIBING,
+        MeetingStatus.PROCESSING,
+        MeetingStatus.FAILED,
+    },
+    MeetingStatus.TRANSCRIBING: {
+        MeetingStatus.AUDIO_UPLOADED,
+        MeetingStatus.TRANSCRIBED,
+        MeetingStatus.FAILED,
+    },
+    MeetingStatus.TRANSCRIBED: {
+        MeetingStatus.PROCESSING,
+        MeetingStatus.TRANSCRIBING,
+        MeetingStatus.AUDIO_UPLOADED,
+        MeetingStatus.FAILED,
+    },
+    MeetingStatus.PROCESSING: {
+        MeetingStatus.COMPLETED,
+        MeetingStatus.FAILED,
+        MeetingStatus.TRANSCRIBED,
+        MeetingStatus.AUDIO_UPLOADED,
+    },
+    MeetingStatus.COMPLETED: {
+        MeetingStatus.PROCESSING,
+        MeetingStatus.AUDIO_UPLOADED,
+    },
+    MeetingStatus.FAILED: {
+        MeetingStatus.AUDIO_UPLOADED,
+        MeetingStatus.TRANSCRIBING,
+        MeetingStatus.PROCESSING,
+    },
 }
 
 IN_PROGRESS_STATUSES: frozenset[MeetingStatus] = frozenset(

@@ -21,6 +21,10 @@ from app.services.diarization import (
     DiarizationService,
     PyannoteDiarizationProvider,
 )
+
+from app.repositories.summary_repository import SummaryRepository
+from app.services.llm.service import get_llm_service
+from app.services.summarization.service import create_summarization_service
 from app.services.processing.meeting_processor import MeetingProcessor
 from app.services.transcription import get_speech_to_text_service
 from app.workers.celery_app import celery_app
@@ -63,6 +67,8 @@ def build_meeting_processor(session: Session) -> MeetingProcessor:
         speech_to_text_service=get_speech_to_text_service(),
         diarization_service=_get_worker_diarization_service(),
         chunking_service=ChunkingService(),
+        summarization_service=create_summarization_service(get_llm_service()),
+        summary_repository=SummaryRepository(session),
     )
 
 

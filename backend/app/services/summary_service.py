@@ -1,15 +1,12 @@
 from app.core.config import settings
-from app.models.meeting_status import MeetingStatus, IN_PROGRESS_STATUSES
+from app.models.meeting_status import IN_PROGRESS_STATUSES, MeetingStatus
 from app.repositories.meeting_repository import MeetingRepository
 from app.repositories.summary_repository import SummaryRepository
 from app.repositories.transcript_repository import TranscriptRepository
 from app.schemas.summary import SummaryResponse
-from app.services.summarization.service import SummarizationService
-from app.services.integrations.service import IntegrationService
-import logging
-
-logger = logging.getLogger(__name__)
 from app.services.meeting_service import MeetingService
+from app.services.summarization.service import SummarizationService
+
 
 class MeetingNotFoundError(Exception):
     """A reunião informada não existe."""
@@ -27,13 +24,11 @@ class SummaryService:
             summary_repository: SummaryRepository,
             meeting_repository: MeetingRepository,
             transcript_repository: TranscriptRepository,
-            integration_service: IntegrationService | None = None,
     ) -> None:
         self.summarization = summarization
         self.summary_repository = summary_repository
         self.meeting_repository = meeting_repository
         self.transcript_repository = transcript_repository
-        self.integration_service = integration_service or IntegrationService()
         self.meeting_service = MeetingService(meeting_repository)
 
     def generate_and_persist(self, meeting_id: int) -> SummaryResponse:
@@ -73,13 +68,5 @@ class SummaryService:
             )
             raise
 
-        # O resumo e as tarefas já foram commitados pelo repositório; só então
-        # marcamos a reunião como concluída e iniciamos entregas externas.
-        self.meeting_repository.update_status(meeting, status=MeetingStatus.COMPLETED)
-        response = SummaryResponse.model_validate(summary)
-        try:
-            self.integration_service.dispatch(response)
-        except Exception:
-            # Defesa adicional: erro de integração nunca altera o resultado principal.
-            logger.exception("Falha inesperada ao despachar integrações da reunião %s", meeting_id)
-        return response
+        self.meeting_service.update_status(meeting_id, MeetingStatus.COMPLETED)
+        return SummaryResponse.model_validate(summary)

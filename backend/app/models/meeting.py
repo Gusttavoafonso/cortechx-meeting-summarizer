@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from app.models.integration_configuration import IntegrationConfiguration
     from app.models.summary import Summary
     from app.models.transcript import Transcript
+    from app.models.integration_delivery import IntegrationDelivery
 
 
 class Meeting(Base):
@@ -87,6 +88,12 @@ class Meeting(Base):
 
     integration_configurations: Mapped[list["IntegrationConfiguration"]] = relationship(
         "IntegrationConfiguration",
+        back_populates="meeting",
+        cascade="all, delete-orphan",
+    )
+
+    integration_deliveries: Mapped[list["IntegrationDelivery"]] = relationship(
+        "IntegrationDelivery",
         back_populates="meeting",
         cascade="all, delete-orphan",
     )
