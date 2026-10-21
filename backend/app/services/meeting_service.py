@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
-from app.models.meeting_status import MeetingStatus, VALID_TRANSITIONS
 from app.models.meeting import Meeting
+from app.models.meeting_status import VALID_TRANSITIONS, MeetingStatus
 from app.repositories.meeting_repository import MeetingRepository
 from app.schemas.meeting import MeetingCreate
 
@@ -54,7 +54,9 @@ class MeetingService:
 
         if target in {MeetingStatus.TRANSCRIBING, MeetingStatus.PROCESSING}:
             if meeting.processing_started_at is None or current in {
-                MeetingStatus.COMPLETED, MeetingStatus.FAILED, MeetingStatus.TRANSCRIBED,
+                MeetingStatus.COMPLETED,
+                MeetingStatus.FAILED,
+                MeetingStatus.TRANSCRIBED,
                 MeetingStatus.AUDIO_UPLOADED,
             }:
                 meeting.processing_started_at = now
