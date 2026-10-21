@@ -92,7 +92,7 @@ def test_post_process_dispatches_job_and_returns_immediately_without_waiting(
     assert response.status_code == 202
     assert response.json() == {
         "meeting_id": meeting_id,
-        "status": "PROCESSING",
+        "status": "processing",
     }
     assert dispatched_ids == [meeting_id]
     assert elapsed < 0.5
@@ -139,7 +139,7 @@ def test_end_to_end_async_processing_pipeline_execution(
 
     process_resp = client.post(f"/meetings/{meeting_id}/process")
     assert process_resp.status_code == 202
-    assert process_resp.json()["status"] == "PROCESSING"
+    assert process_resp.json()["status"] == "processing"
 
     # Antes do worker concluir, GET /transcript deve retornar 404
     early_transcript = client.get(f"/meetings/{meeting_id}/transcript")

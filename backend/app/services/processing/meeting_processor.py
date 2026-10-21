@@ -10,6 +10,7 @@ from app.repositories.transcript_repository import TranscriptRepository
 from app.services.audio_storage import AudioStorageService
 from app.services.chunking import ChunkingService
 from app.services.diarization import DiarizationService
+from app.services.meeting_service import MeetingService
 from app.services.transcription import BaseSpeechToTextService
 from sqlalchemy.orm import Session
 
@@ -38,6 +39,7 @@ class MeetingProcessor:
         self._summarization_service = summarization_service
         self._task_extraction_service = task_extraction_service
         self._summary_repository = summary_repository
+        self._meeting_service = MeetingService(meeting_repository)
 
     # serviço de orquestração do processamento de reuniões
     def process_meeting(
@@ -50,7 +52,11 @@ class MeetingProcessor:
 
         if meeting.audio is None:
             if allow_already_processing and meeting.status == MeetingStatus.PROCESSING:
-                self._meeting_repository.update_status(meeting, MeetingStatus.FAILED)
+                self._meeting_service.update_status(
+                    meeting_id,
+                    MeetingStatus.FAILED,
+                    error_message="Missing audio from Meeting.",
+                )
             raise ValueError(f"Missing audio from Meeting {meeting_id}")
 
         if meeting.status == MeetingStatus.PROCESSING and not allow_already_processing:
@@ -59,10 +65,7 @@ class MeetingProcessor:
             )
 
         if meeting.status != MeetingStatus.PROCESSING:
-            self._meeting_repository.update_status(
-                meeting,
-                MeetingStatus.PROCESSING,
-            )
+            self._meeting_service.update_status(meeting_id, MeetingStatus.PROCESSING)
 
         use_atomic_unit_of_work = isinstance(
             getattr(self._meeting_repository, "db", None), Session
@@ -177,17 +180,18 @@ class MeetingProcessor:
                         commit=not use_atomic_unit_of_work,
                     )
 
-            self._meeting_repository.update_status(
-                meeting,
+            self._meeting_service.update_status(
+                meeting_id,
                 MeetingStatus.COMPLETED,
             )
 
-        except Exception:
+        except Exception as exc:
             logger.exception("Falha ao processar reunião %s", meeting_id)
             self._rollback_if_needed()
-            self._meeting_repository.update_status(
-                meeting,
+            self._meeting_service.update_status(
+                meeting_id,
                 MeetingStatus.FAILED,
+                error_message=str(exc) or exc.__class__.__name__,
             )
             raise
 

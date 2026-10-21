@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
@@ -79,6 +81,7 @@ class MeetingRepository:
 
     def try_claim_processing(self, meeting_id: int) -> bool:
         """Adquire atomicamente o lock de processamento via UPDATE condicional."""
+        now = datetime.now(timezone.utc)
         stmt = (
             update(Meeting)
             .where(
@@ -87,7 +90,13 @@ class MeetingRepository:
                     [MeetingStatus.PROCESSING, MeetingStatus.TRANSCRIBING]
                 ),
             )
-            .values(status=MeetingStatus.PROCESSING)
+            .values(
+                status=MeetingStatus.PROCESSING,
+                processing_started_at = now,
+                processing_completed_at = None,
+                last_error = None,
+                updated_at = now,    
+            )
         )
         try:
             result = self.db.execute(stmt)
