@@ -10,8 +10,8 @@ from app.repositories.transcript_repository import TranscriptRepository
 from app.services.audio_storage import AudioStorageService
 from app.services.chunking import ChunkingService
 from app.services.diarization import DiarizationService
-from app.services.transcription import BaseSpeechToTextService
 from app.services.meeting_service import MeetingService
+from app.services.transcription import BaseSpeechToTextService
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -53,7 +53,9 @@ class MeetingProcessor:
         if meeting.audio is None:
             if allow_already_processing and meeting.status == MeetingStatus.PROCESSING:
                 self._meeting_service.update_status(
-                    meeting_id, MeetingStatus.FAILED, erro_message = "Missing audio from Meeting."
+                    meeting_id,
+                    MeetingStatus.FAILED,
+                    error_message="Missing audio from Meeting.",
                 )
             raise ValueError(f"Missing audio from Meeting {meeting_id}")
 
