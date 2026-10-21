@@ -1,11 +1,12 @@
 from app.core.config import settings
-from app.models.meeting_status import MeetingStatus, IN_PROGRESS_STATUSES
+from app.models.meeting_status import IN_PROGRESS_STATUSES, MeetingStatus
 from app.repositories.meeting_repository import MeetingRepository
 from app.repositories.summary_repository import SummaryRepository
 from app.repositories.transcript_repository import TranscriptRepository
 from app.schemas.summary import SummaryResponse
-from app.services.summarization.service import SummarizationService
 from app.services.meeting_service import MeetingService
+from app.services.summarization.service import SummarizationService
+
 
 class MeetingNotFoundError(Exception):
     """A reunião informada não existe."""
