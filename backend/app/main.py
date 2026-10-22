@@ -1,7 +1,8 @@
 from fastapi import FastAPI, Request, status
-from app.api.v1.meetings import router as meetings_router
-from app.api.v1.integrations import router as integrations_router
 from fastapi.responses import JSONResponse
+
+from app.api.v1.integrations import router as integrations_router
+from app.api.v1.meetings import router as meetings_router
 from app.services.meeting_service import InvalidMeetingTransitionError
 
 app = FastAPI(

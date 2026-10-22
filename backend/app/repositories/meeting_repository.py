@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
@@ -5,8 +7,6 @@ from sqlalchemy.orm import Session, selectinload
 from app.models.meeting import Meeting
 from app.models.meeting_status import MeetingStatus
 from app.models.transcript import Transcript
-
-from datetime import datetime, timezone
 
 
 class MeetingRepository:

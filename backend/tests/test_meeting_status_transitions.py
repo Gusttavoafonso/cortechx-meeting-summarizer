@@ -1,4 +1,4 @@
-from app.models.meeting_status import MeetingStatus, VALID_TRANSITIONS
+from app.models.meeting_status import VALID_TRANSITIONS, MeetingStatus
 
 
 def test_main_pipeline_transitions_are_valid():

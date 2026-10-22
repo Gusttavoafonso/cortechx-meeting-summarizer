@@ -12,7 +12,7 @@
 ## Fluxo
 `received -> audio_uploaded -> transcribing -> transcribed -> processing -> completed`
 
-Falhas durante transcrição podem retornar para `audio_uploaded` quando o erro é recuperável pela aplicação; falhas definitivas devem ir para `failed`. Falhas durante sumarização vão de `processing` para `failed`. Reprocessamento de resumo: `completed -> processing`. Substituir áudio invalida a transcrição e retorna para `audio_uploaded`.
+Falhas durante transcrição podem retornar para `audio_uploaded` quando o erro é recuperável pela aplicação; falhas durante sumarização vão de `processing` para `failed`. Falhas transitórias no enfileiramento ou cancelamentos em `processing` podem reverter para `audio_uploaded` ou `transcribed`. Reprocessamento de resumo: `completed -> processing`. Substituir áudio invalida a transcrição e retorna para `audio_uploaded`.
 
 ## Metadados
 `processing_started_at` registra o início da execução mais recente, `processing_completed_at` seu fim (sucesso ou falha), `updated_at` é atualizado em cada mudança e `last_error` contém a última falha, limpo ao iniciar uma nova execução ou concluir com sucesso.

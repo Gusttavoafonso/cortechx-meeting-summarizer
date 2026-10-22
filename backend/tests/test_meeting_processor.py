@@ -114,6 +114,31 @@ def test_process_meeting_raises_when_audio_is_missing() -> None:
     meeting_repository.update_status.assert_not_called()
 
 
+def test_process_meeting_marks_failed_when_audio_missing_and_processing() -> None:
+    meeting_repository = MagicMock()
+    processor = MeetingProcessor(
+        meeting_repository=meeting_repository,
+        transcript_repository=MagicMock(),
+        audio_storage_service=MagicMock(),
+        speech_to_text_service=MagicMock(),
+        diarization_service=MagicMock(),
+        chunking_service=MagicMock(),
+    )
+    meeting = MagicMock()
+    meeting.audio = None
+    meeting.status = MeetingStatus.PROCESSING
+    meeting_repository.get_by_id.return_value = meeting
+
+    with pytest.raises(ValueError, match="Missing audio"):
+        processor.process_meeting(1, allow_already_processing=True)
+
+    meeting_repository.update_status.assert_called_once_with(
+        meeting, status=MeetingStatus.FAILED
+    )
+    assert meeting.status == MeetingStatus.FAILED
+    assert meeting.last_error == "Missing audio from Meeting."
+
+
 def test_process_meeting_raises_when_already_processing(
     processor: MeetingProcessor,
     processor_dependencies: dict[str, MagicMock],

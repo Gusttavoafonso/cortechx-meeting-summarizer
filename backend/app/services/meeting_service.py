@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
-from app.models.meeting_status import MeetingStatus, VALID_TRANSITIONS
 from app.models.meeting import Meeting
+from app.models.meeting_status import VALID_TRANSITIONS, MeetingStatus
 from app.repositories.meeting_repository import MeetingRepository
 from app.schemas.meeting import MeetingCreate
 
