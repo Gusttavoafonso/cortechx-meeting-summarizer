@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
 from app.main import app
+from app.api.v1.integrations import get_enabled_providers, get_integration_dispatcher
 from app.models.meeting_status import MeetingStatus
 from app.models.integration_delivery import IntegrationDeliveryStatus
 
@@ -9,12 +10,11 @@ client = TestClient(app)
 
 BASE_URL = "/meetings"
 
-@patch("app.api.v1.integrations.get_enabled_providers", return_value=["discord", "notion"])
 @patch("app.api.v1.integrations.MeetingRepository")
 @patch("app.api.v1.integrations.IntegrationDeliveryRepository")
 @patch("app.api.v1.integrations.enqueue_integration_delivery")
 def test_retry_integrations_enqueues_task_and_returns_202(
-    mock_enqueue, mock_delivery_repo_class, mock_meeting_repo_class, mock_enabled_providers
+    mock_enqueue, mock_delivery_repo_class, mock_meeting_repo_class
 ):
     # Setup da reunião simulada (Mock do banco de dados)
     mock_meeting = MagicMock()
@@ -27,10 +27,16 @@ def test_retry_integrations_enqueues_task_and_returns_202(
         MagicMock(provider="discord", status=IntegrationDeliveryStatus.SUCCESS.value)
     ]
 
-    response = client.post(
-        f"{BASE_URL}/1/integrations/retry", 
-        json={"providers": ["notion", "discord"]}
-    )
+    app.dependency_overrides[get_enabled_providers] = lambda: ["discord", "notion"]
+    app.dependency_overrides[get_integration_dispatcher] = lambda: mock_enqueue
+    try:
+        response = client.post(
+            f"{BASE_URL}/1/integrations/retry",
+            json={"providers": ["notion", "discord"]},
+        )
+    finally:
+        app.dependency_overrides.pop(get_enabled_providers, None)
+        app.dependency_overrides.pop(get_integration_dispatcher, None)
 
     assert response.status_code == 202
     assert response.json() == {"meeting_id": 1, "providers": ["notion"]}
