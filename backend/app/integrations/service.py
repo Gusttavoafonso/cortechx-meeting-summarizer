@@ -7,8 +7,12 @@ from app.integrations.base import ProviderNotFoundError
 from app.integrations.configuration import (
     ProviderConfigurationError,
     ProviderConfigurationResolver,
+    ProviderDisabledError,
 )
-from app.integrations.payload import meeting_to_integration_payload
+from app.integrations.payload import (
+    MeetingResultUnavailableError,
+    meeting_to_integration_payload,
+)
 from app.integrations.registry import ProviderRegistry, default_registry
 from app.models.meeting import Meeting
 from app.schemas.integration import IntegrationResult, MeetingIntegrationPayload
@@ -16,11 +20,10 @@ from app.schemas.integration import IntegrationResult, MeetingIntegrationPayload
 logger = logging.getLogger(__name__)
 
 
-
 # Define uma classe generalista para qualquer provider registrado.
 
-class IntegrationService:
 
+class IntegrationService:
     def __init__(
         self,
         registry: ProviderRegistry | None = None,
@@ -31,7 +34,7 @@ class IntegrationService:
             configuration_resolver or ProviderConfigurationResolver()
         )
 
-    # o send é o método principal que executa a integração com o provider especificado, 
+    # o send é o método principal que executa a integração com o provider especificado,
     # lidando com erros inesperados e retornando um resultado seguro.
     def send(
         self,
@@ -46,6 +49,7 @@ class IntegrationService:
         restrita ao resultado retornado por este método.
         """
         provider_name = provider.strip().lower()
+        safe_provider = provider_name or "unknown"
 
         try:
             resolved_config = self._configuration_resolver.resolve(
@@ -57,18 +61,28 @@ class IntegrationService:
                 provider_name,
                 **resolved_config,
             )
-        except ProviderConfigurationError:
+        except ProviderDisabledError as exc:
             return IntegrationResult(
-                provider=provider_name or provider,
+                provider=safe_provider,
+                success=False,
+                error=str(exc) or "Provider desativado para esta reunião.",
+            )
+        except ProviderConfigurationError as exc:
+            return IntegrationResult(
+                provider=safe_provider,
                 success=False,
                 error=(
-                    "A configuração do provider de integração está ausente "
-                    "ou inválida."
+                    str(exc)
+                    if str(exc)
+                    else (
+                        "A configuração do provider de integração está ausente "
+                        "ou inválida."
+                    )
                 ),
             )
         except ProviderNotFoundError:
             return IntegrationResult(
-                provider=provider_name or provider,
+                provider=safe_provider,
                 success=False,
                 error="Provider de integração não encontrado.",
             )
@@ -77,14 +91,16 @@ class IntegrationService:
                 "Falha ao inicializar o provider de integração %s", provider_name
             )
             return IntegrationResult(
-                provider=provider_name or provider,
+                provider=safe_provider,
                 success=False,
                 error="Não foi possível inicializar o provider de integração.",
             )
 
         try:
             result = integration_provider.send(meeting_result)
-            if result.provider != provider_name:
+            if not result.provider or result.provider == "unknown":
+                result.provider = safe_provider
+            elif result.provider != provider_name and provider_name:
                 result.provider = provider_name
             return result
         except Exception:
@@ -92,7 +108,7 @@ class IntegrationService:
                 "Falha ao executar o provider de integração %s", provider_name
             )
             return IntegrationResult(
-                provider=provider_name,
+                provider=safe_provider,
                 success=False,
                 error="Não foi possível executar a integração.",
             )
@@ -104,5 +120,23 @@ class IntegrationService:
         **provider_config: Any,
     ) -> IntegrationResult:
         """Converte o resultado persistido e o envia ao provider solicitado."""
-        payload = meeting_to_integration_payload(meeting)
+        safe_provider = provider.strip().lower() or "unknown"
+        try:
+            payload = meeting_to_integration_payload(meeting)
+        except MeetingResultUnavailableError as exc:
+            return IntegrationResult(
+                provider=safe_provider,
+                success=False,
+                error=str(exc),
+            )
+        except Exception as exc:
+            logger.exception(
+                "Falha ao converter reunião para integração: %s",
+                getattr(meeting, "id", None),
+            )
+            return IntegrationResult(
+                provider=safe_provider,
+                success=False,
+                error=str(exc) or "Não foi possível preparar os dados da reunião.",
+            )
         return self.send(provider, payload, **provider_config)

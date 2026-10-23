@@ -107,5 +107,36 @@ def test_disabled_meeting_configuration_prevents_execution_without_mutation(
     db_session.refresh(meeting.summary)
 
     assert result.success is False
+    assert result.error == "Provider desativado para esta reunião."
     assert meeting.summary.summary == "A equipe definiu prioridades e responsáveis."
     assert meeting.tasks[0].description == "Implementar autenticação"
+
+
+def test_send_persisted_meeting_returns_failed_result_when_summary_unavailable(
+    db_session,
+):
+    meeting = Meeting(title="Sem resumo")
+    db_session.add(meeting)
+    db_session.commit()
+    db_session.refresh(meeting)
+
+    service = IntegrationService()
+    result = service.send_persisted_meeting("teste", meeting)
+
+    assert result.success is False
+    assert result.provider == "teste"
+    assert result.error == "A reunião não possui um resumo persistido para integração."
+
+
+def test_send_persisted_meeting_handles_empty_provider_safely(db_session):
+    meeting = Meeting(title="Sem resumo")
+    db_session.add(meeting)
+    db_session.commit()
+    db_session.refresh(meeting)
+
+    service = IntegrationService()
+    result = service.send_persisted_meeting("", meeting)
+
+    assert result.success is False
+    assert result.provider == "unknown"
+    assert result.error == "A reunião não possui um resumo persistido para integração."
