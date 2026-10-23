@@ -2,15 +2,16 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.models.integration_delivery import IntegrationDeliveryStatus
+from app.models.integration_delivery import (
+    IntegrationDelivery,
+    IntegrationDeliveryStatus,
+)
 from app.models.meeting import Meeting
 from app.repositories.integration_delivery_repository import (
     IntegrationDeliveryRepository,
 )
 from sqlalchemy import update
 from sqlalchemy.orm import Session
-
-from app.models.integration_delivery import IntegrationDelivery
 
 
 def _meeting(db_session: Session, title: str = "Reunião") -> Meeting:

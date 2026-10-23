@@ -14,9 +14,9 @@ from app.models.task import Task
 if TYPE_CHECKING:
     from app.models.audio_file import AudioFile
     from app.models.integration_configuration import IntegrationConfiguration
+    from app.models.integration_delivery import IntegrationDelivery
     from app.models.summary import Summary
     from app.models.transcript import Transcript
-    from app.models.integration_delivery import IntegrationDelivery
 
 
 class Meeting(Base):

@@ -1,4 +1,3 @@
-
 from datetime import date, datetime, timezone
 from unittest.mock import MagicMock
 
@@ -30,9 +29,7 @@ def sample_payload():
                 deadline=date(2026, 10, 20),
             )
         ],
-        created_at=datetime(
-            2026, 10, 13, 12, 0, tzinfo=timezone.utc
-        ),
+        created_at=datetime(2026, 10, 13, 12, 0, tzinfo=timezone.utc),
     )
 
 
@@ -51,6 +48,11 @@ def test_missing_configuration_returns_failure():
 
     assert result.success is False
     assert "não configurado" in result.error
+
+
+def test_supports_api_key_keyword_argument():
+    provider = NotionProvider(api_key="chave-via-api-key", database_id="db-123")
+    assert provider.token == "chave-via-api-key"
 
 
 def test_existing_meeting_is_not_created_twice():
@@ -101,15 +103,14 @@ def test_creates_page_with_meeting_content():
 
 def test_api_error_returns_safe_failure():
     client = MagicMock()
-    client.data_sources.query.side_effect = RuntimeError(
-        "token=segredo"
-    )
+    client.data_sources.query.side_effect = RuntimeError("token=segredo")
     provider = make_provider(client)
 
     result = provider.send(sample_payload())
 
     assert result.success is False
     assert "segredo" not in result.error
+
 
 def api_error(status, headers=None):
     return APIResponseError(

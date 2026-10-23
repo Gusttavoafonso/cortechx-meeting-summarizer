@@ -22,8 +22,6 @@ if TYPE_CHECKING:
 
 
 class IntegrationDeliveryStatus(str, Enum):
-
-
     PENDING = "pending"
     RUNNING = "running"
     SUCCESS = "success"
@@ -31,8 +29,6 @@ class IntegrationDeliveryStatus(str, Enum):
 
 
 class IntegrationDelivery(Base):
-
-
     __tablename__ = "integration_deliveries"
     __table_args__ = (
         UniqueConstraint(

@@ -53,9 +53,7 @@ class NotionFormatter:
         title: str,
         items: Iterable[str],
     ) -> list[dict[str, Any]]:
-        bullets = [
-            self._bullet(text) for item in items if (text := self._text(item))
-        ]
+        bullets = [self._bullet(text) for item in items if (text := self._text(item))]
         return [self._heading(title), *bullets] if bullets else []
 
     # As tarefas são agrupadas por responsável, como na issue #31.
@@ -86,10 +84,12 @@ class NotionFormatter:
     def _task_line(self, task: TaskIntegrationPayload) -> str:
         description = task.description.strip()
 
-        if task.deadline is None:
-            return description
+        if task.deadline is not None and (
+            deadline_str := self._format_deadline(task.deadline)
+        ):
+            return f"{description} — Prazo: {deadline_str}"
 
-        return f"{description} — Prazo: {self._format_deadline(task.deadline)}"
+        return description
 
     def _heading(self, text: str) -> dict[str, Any]:
         return {
@@ -153,4 +153,4 @@ class NotionFormatter:
             return deadline.date().isoformat()
         if isinstance(deadline, date):
             return deadline.isoformat()
-        return deadline.strip()
+        return str(deadline).strip()

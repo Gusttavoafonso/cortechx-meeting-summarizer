@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 
 
 class Task(Base):
-
     __tablename__ = "tasks"
 
     id: Mapped[int] = mapped_column(
@@ -44,7 +43,7 @@ class Task(Base):
         nullable=True,
     )
 
-    # Data resolvida. Prazos que o pipeline não conseguiu resolver para uma data ficam nulos
+    # Data resolvida. Prazos não resolvidos para uma data ficam nulos.
     deadline: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,

@@ -12,7 +12,6 @@ from app.models.integration_delivery import (
     IntegrationDeliveryStatus,
 )
 
-
 DEFAULT_STALE_AFTER = timedelta(minutes=15)
 
 MAX_ERROR_LENGTH = 2000
@@ -24,7 +23,6 @@ _FAILED = IntegrationDeliveryStatus.FAILED.value
 
 
 class IntegrationDeliveryRepository:
-
     def __init__(self, db: Session) -> None:
         self.db = db
 
@@ -78,7 +76,7 @@ class IntegrationDeliveryRepository:
         *,
         stale_after: timedelta = DEFAULT_STALE_AFTER,
     ) -> bool:
-    
+
         now = datetime.now(timezone.utc)
         claimable = or_(
             IntegrationDelivery.status.in_([_PENDING, _FAILED]),
@@ -137,9 +135,7 @@ class IntegrationDeliveryRepository:
             },
         )
 
-    def _finish(
-        self, meeting_id: int, provider: str, values: dict[str, Any]
-    ) -> bool:
+    def _finish(self, meeting_id: int, provider: str, values: dict[str, Any]) -> bool:
         """Finaliza somente uma tentativa que esta execução reservou (RUNNING)."""
         stmt = (
             update(IntegrationDelivery)

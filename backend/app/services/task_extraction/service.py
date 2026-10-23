@@ -5,6 +5,9 @@ import logging
 import re
 from typing import TYPE_CHECKING, Sequence
 
+from pydantic import ValidationError
+
+from app.core.exceptions import LLMError
 from app.prompts.task_extraction import build_task_extraction_prompt
 from app.schemas.chunk import Chunk
 from app.schemas.task import TaskItem, TaskList
@@ -101,8 +104,13 @@ class TaskExtractionService:
 
         try:
             raw_response = self.llm_service.generate(prompt)
-        except Exception as exc:
+        except LLMError as exc:
             logger.error("Falha ao comunicar com o serviço de LLM: %s", exc)
+            raise TaskExtractionLLMFailureError(
+                f"Erro durante chamada ao serviço de LLM: {exc}"
+            ) from exc
+        except Exception as exc:
+            logger.error("Falha inesperada ao comunicar com o serviço de LLM: %s", exc)
             raise TaskExtractionLLMFailureError(
                 f"Erro durante chamada ao serviço de LLM: {exc}"
             ) from exc
@@ -134,8 +142,13 @@ class TaskExtractionService:
         try:
             parsed = TaskList.model_validate(payload)
             return parsed.tasks
-        except Exception as exc:
+        except ValidationError as exc:
             logger.error("Erro de validação do schema TaskList: %s", exc)
+            raise TaskExtractionInvalidResponseError(
+                f"Resposta não compatível com o schema de tarefas: {exc}"
+            ) from exc
+        except (TypeError, ValueError) as exc:
+            logger.error("Erro de estrutura do schema TaskList: %s", exc)
             raise TaskExtractionInvalidResponseError(
                 f"Resposta não compatível com o schema de tarefas: {exc}"
             ) from exc

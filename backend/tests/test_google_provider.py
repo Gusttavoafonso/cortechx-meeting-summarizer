@@ -1,14 +1,15 @@
 from unittest.mock import MagicMock, patch
+
 import pytest
-from google.genai import errors
 from app.services.llm.exceptions import (
     LLMAuthenticationError,
     LLMConfigurationError,
-    LLMProviderError,
     LLMEmptyResponseError,
+    LLMProviderError,
 )
 from app.services.llm.providers.gemini_provider import GeminiProvider
 from app.services.llm.service import _build_provider
+from google.genai import errors
 
 
 def make_api_error(error_cls, code: int, message: str = "erro simulado"):
@@ -47,7 +48,7 @@ def test_gemini_provider_empty_response(mock_client_cls):
 def test_gemini_provider_authentication_error(mock_client_cls):
     mock_client = MagicMock()
     mock_client.models.generate_content.side_effect = make_api_error(
-        errors.ClientError, code = 401
+        errors.ClientError, code=401
     )
     mock_client_cls.return_value = mock_client
 
@@ -61,7 +62,7 @@ def test_gemini_provider_authentication_error(mock_client_cls):
 def test_gemini_provider_client_error_generic(mock_client_cls):
     mock_client = MagicMock()
     mock_client.models.generate_content.side_effect = make_api_error(
-        errors.ClientError, code = 429
+        errors.ClientError, code=429
     )
     mock_client_cls.return_value = mock_client
 
@@ -75,7 +76,7 @@ def test_gemini_provider_client_error_generic(mock_client_cls):
 def test_gemini_provider_server_error(mock_client_cls):
     mock_client = MagicMock()
     mock_client.models.generate_content.side_effect = make_api_error(
-        errors.ServerError, code = 500
+        errors.ServerError, code=500
     )
     mock_client_cls.return_value = mock_client
 

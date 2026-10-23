@@ -41,7 +41,8 @@ def test_dispatch_runs_all_configured_providers_even_if_one_fails():
 
     assert discord.called and notion.called
     assert [(item.provider, item.status) for item in outcomes] == [
-        ("discord", "FAILED"), ("notion", "SUCCESS")
+        ("discord", "FAILED"),
+        ("notion", "SUCCESS"),
     ]
 
 

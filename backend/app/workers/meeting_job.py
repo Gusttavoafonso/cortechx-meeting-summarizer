@@ -9,9 +9,11 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import SessionLocal
+from app.core.retry import RetryPolicy
 from app.models.meeting import Meeting
 from app.models.meeting_status import MeetingStatus
 from app.repositories.meeting_repository import MeetingRepository
+from app.repositories.summary_repository import SummaryRepository
 from app.repositories.transcript_repository import TranscriptRepository
 from app.services.audio_storage import AudioStorageService
 from app.services.chunking import ChunkingService
@@ -21,10 +23,6 @@ from app.services.diarization import (
     DiarizationService,
     PyannoteDiarizationProvider,
 )
-
-from app.repositories.summary_repository import SummaryRepository
-from app.services.llm.service import get_llm_service
-from app.services.summarization.service import create_summarization_service
 from app.services.processing.meeting_processor import MeetingProcessor
 from app.services.transcription import get_speech_to_text_service
 from app.workers.celery_app import celery_app
@@ -58,17 +56,32 @@ def _get_worker_diarization_service() -> DiarizationService:
     return DiarizationService(provider)
 
 
-def build_meeting_processor(session: Session) -> MeetingProcessor:
-    """Constrói o MeetingProcessor com dependências reais ligadas à sessão informada."""
+def build_meeting_processor(
+    session: Session,
+    retry_policy: RetryPolicy | None = None,
+) -> MeetingProcessor:
+    """Constrói o MeetingProcessor integrado à política centralizada de retry."""
+
+    summarization_service = None
+    try:
+        from app.services.llm.service import get_llm_service
+        from app.services.summarization.service import create_summarization_service
+
+        llm = get_llm_service()
+        summarization_service = create_summarization_service(llm)
+    except Exception:
+        summarization_service = None
+
     return MeetingProcessor(
         meeting_repository=MeetingRepository(session),
         transcript_repository=TranscriptRepository(session),
+        summary_repository=SummaryRepository(session),
+        summarization_service=summarization_service,
         audio_storage_service=AudioStorageService(),
         speech_to_text_service=get_speech_to_text_service(),
         diarization_service=_get_worker_diarization_service(),
         chunking_service=ChunkingService(),
-        summarization_service=create_summarization_service(get_llm_service()),
-        summary_repository=SummaryRepository(session),
+        retry_policy=retry_policy or RetryPolicy.from_settings(),
     )
 
 
@@ -83,10 +96,22 @@ def run_meeting_processing_job(
     try:
         try:
             processor = processor_factory(session)
-        except Exception:
+        except Exception as proc_exc:
             meeting = session.get(Meeting, meeting_id)
             if meeting is not None:
-                MeetingRepository(session).update_status(meeting, MeetingStatus.FAILED)
+                from app.core.failure_recorder import sanitize_error_message
+                from app.services.meeting_service import MeetingService
+
+                try:
+                    MeetingService(MeetingRepository(session)).update_status(
+                        meeting_id,
+                        MeetingStatus.FAILED,
+                        error_message=sanitize_error_message(str(proc_exc)),
+                    )
+                except Exception:
+                    MeetingRepository(session).update_status(
+                        meeting, MeetingStatus.FAILED
+                    )
             raise
         processor.process_meeting(
             meeting_id,

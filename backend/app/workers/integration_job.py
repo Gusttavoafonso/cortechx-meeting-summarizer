@@ -16,29 +16,22 @@ from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.integrations.configuration import ProviderConfigurationResolver
+from app.integrations.delivery import (
+    MAX_AUTOMATIC_ATTEMPTS,
+    DeliveryReport,
+    IntegrationDeliveryService,
+    MeetingNotDeliverableError,
+    compute_retry_delay,
+)
 
 # Os providers se registram ao serem importados: sem estas linhas o worker
 # não os conhece e toda entrega falha com "provider não encontrado".
-from app.integrations.providers import discord as _discord_provider 
-from app.integrations.providers import notion as _notion_provider  
-from app.integrations.delivery import (
-    IntegrationDeliveryService,
-    MeetingNotDeliverableError,
-)
 from app.integrations.service import IntegrationService
 from app.repositories.integration_delivery_repository import (
     IntegrationDeliveryRepository,
 )
 from app.repositories.meeting_repository import MeetingRepository
 from app.workers.celery_app import celery_app
-
-from app.integrations.delivery import (
-    IntegrationDeliveryService,
-    MeetingNotDeliverableError,
-    DeliveryReport,
-    compute_retry_delay,
-    MAX_AUTOMATIC_ATTEMPTS
-)
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +83,9 @@ def run_integration_delivery_job(
         session.close()
 
 
-@celery_app.task(bind=True, name="meetings.deliver_integrations", max_retries=MAX_AUTOMATIC_ATTEMPTS)
+@celery_app.task(
+    bind=True, name="meetings.deliver_integrations", max_retries=MAX_AUTOMATIC_ATTEMPTS
+)
 def deliver_integrations_task(
     self,
     meeting_id: int,
@@ -105,15 +100,15 @@ def deliver_integrations_task(
         delay = compute_retry_delay(attempts, report.retry_after)
 
         logger.info(
-            "Agendando retry (tentativs %s) para reunião %s nos providers: %s. Aguardando %s segundos.",
+            "Agendando retry (tentativa %s) para reunião %s nos providers: %s. "
+            "Aguardando %s segundos.",
             attempts,
             meeting_id,
             report.retryable_providers,
-            delay
+            delay,
         )
         raise self.retry(countdown=delay)
 
-    
 
 def enqueue_integration_delivery(
     meeting_id: int,
@@ -149,6 +144,4 @@ def enqueue_integration_delivery(
             exc,
             meeting_id,
         )
-        run_integration_delivery_job(
-            meeting_id, providers=provider_list, reset=reset
-        )
+        run_integration_delivery_job(meeting_id, providers=provider_list, reset=reset)

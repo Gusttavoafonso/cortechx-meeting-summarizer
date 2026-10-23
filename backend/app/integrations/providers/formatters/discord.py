@@ -42,8 +42,10 @@ class DiscordFormatter:
         details: list[str] = []
         if responsible := self._text(task.responsible):
             details.append(f"Responsável: {responsible}")
-        if task.deadline is not None:
-            details.append(f"Prazo: {self._format_deadline(task.deadline)}")
+        if task.deadline is not None and (
+            deadline_str := self._format_deadline(task.deadline)
+        ):
+            details.append(f"Prazo: {deadline_str}")
 
         suffix = f" ({' | '.join(details)})" if details else ""
         return f"- [ ] {task.description.strip()}{suffix}"
@@ -60,7 +62,7 @@ class DiscordFormatter:
             return deadline.date().isoformat()
         if isinstance(deadline, date):
             return deadline.isoformat()
-        return deadline.strip()
+        return str(deadline).strip()
 
     def _split(self, content: str) -> list[str]:
         """Divide por linhas quando possível e nunca descarta texto acima do limite."""

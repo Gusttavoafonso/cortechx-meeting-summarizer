@@ -46,6 +46,10 @@ class SummaryResult(BaseModel):
     decisions: list[str] = Field(default_factory=list)
     tasks: list[TaskItem] = Field(default_factory=list)
 
+    @property
+    def main_points(self) -> list[str]:
+        return self.key_points
+
     @field_validator("objective")
     @classmethod
     def normalize_objective(cls, v: str | None) -> str | None:

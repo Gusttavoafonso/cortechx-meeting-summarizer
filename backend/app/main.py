@@ -11,12 +11,13 @@ app = FastAPI(
     version="0.1.0",
 )
 
+
 @app.exception_handler(InvalidMeetingTransitionError)
 def invalid_transition_handler(request: Request, exc: InvalidMeetingTransitionError):
     return JSONResponse(
-        status_code = status.HTTP_409_CONFLICT,
-        content = {"detail": str(exc)}
+        status_code=status.HTTP_409_CONFLICT, content={"detail": str(exc)}
     )
+
 
 @app.get("/health", tags=["Health"])
 def health_check():

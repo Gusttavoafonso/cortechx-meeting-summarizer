@@ -1,4 +1,5 @@
 """Entrega desacoplada dos resultados persistidos para plataformas externas."""
+
 from __future__ import annotations
 
 import json
@@ -58,7 +59,9 @@ class NotionProvider:
 
     def is_configured(self, settings: Settings) -> bool:
         return bool(
-            settings.notion_enabled and settings.notion_token and settings.notion_database_id
+            settings.notion_enabled
+            and settings.notion_token
+            and settings.notion_database_id
         )
 
     def send(self, result: SummaryResponse, settings: Settings) -> None:
@@ -69,10 +72,32 @@ class NotionProvider:
         if result.objective:
             children.append(_notion_paragraph(f"Objetivo: {result.objective}"))
         children.append(_notion_paragraph(result.summary or "Resumo não informado"))
-        for heading, items in (("Principais pontos", result.key_points), ("Decisões", result.decisions)):
+        for heading, items in (
+            ("Principais pontos", result.key_points),
+            ("Decisões", result.decisions),
+        ):
             if items:
-                children.append({"type": "heading_2", "heading_2": {"rich_text": [{"type": "text", "text": {"content": heading}}]}})
-                children.extend({"type": "bulleted_list_item", "bulleted_list_item": {"rich_text": [{"type": "text", "text": {"content": item[:2000]}}]}} for item in items[:50])
+                children.append(
+                    {
+                        "type": "heading_2",
+                        "heading_2": {
+                            "rich_text": [
+                                {"type": "text", "text": {"content": heading}}
+                            ]
+                        },
+                    }
+                )
+                children.extend(
+                    {
+                        "type": "bulleted_list_item",
+                        "bulleted_list_item": {
+                            "rich_text": [
+                                {"type": "text", "text": {"content": item[:2000]}}
+                            ]
+                        },
+                    }
+                    for item in items[:50]
+                )
         Client(auth=settings.notion_token.get_secret_value()).pages.create(
             parent={"database_id": settings.notion_database_id},
             properties={"Name": {"title": [{"text": {"content": title}}]}},
@@ -81,14 +106,27 @@ class NotionProvider:
 
 
 def _notion_paragraph(text: str) -> dict[str, Any]:
-    return {"type": "paragraph", "paragraph": {"rich_text": [{"type": "text", "text": {"content": text[:2000]}}]}}
+    return {
+        "type": "paragraph",
+        "paragraph": {
+            "rich_text": [{"type": "text", "text": {"content": text[:2000]}}]
+        },
+    }
 
 
 class IntegrationService:
     """Executa todos os providers ativos sem propagar falhas externas."""
 
-    def __init__(self, providers: list[IntegrationProvider] | None = None, settings: Settings | None = None):
-        self.providers = providers if providers is not None else [DiscordProvider(), NotionProvider()]
+    def __init__(
+        self,
+        providers: list[IntegrationProvider] | None = None,
+        settings: Settings | None = None,
+    ):
+        self.providers = (
+            providers
+            if providers is not None
+            else [DiscordProvider(), NotionProvider()]
+        )
         self.settings = settings or get_settings()
 
     def dispatch(self, result: SummaryResponse) -> list[IntegrationResult]:
@@ -100,8 +138,18 @@ class IntegrationService:
                     continue
                 provider.send(result, self.settings)
                 outcomes.append(IntegrationResult(provider.name, "SUCCESS"))
-                logger.info("Integração %s concluída para a reunião %s", provider.name, result.meeting_id)
-            except Exception as exc:  # falha externa não invalida o resultado persistido
-                logger.exception("Falha na integração %s para a reunião %s", provider.name, result.meeting_id)
+                logger.info(
+                    "Integração %s concluída para a reunião %s",
+                    provider.name,
+                    result.meeting_id,
+                )
+            except (
+                Exception
+            ) as exc:  # falha externa não invalida o resultado persistido
+                logger.exception(
+                    "Falha na integração %s para a reunião %s",
+                    provider.name,
+                    result.meeting_id,
+                )
                 outcomes.append(IntegrationResult(provider.name, "FAILED", str(exc)))
         return outcomes

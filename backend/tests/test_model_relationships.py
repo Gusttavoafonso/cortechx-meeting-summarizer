@@ -24,9 +24,7 @@ def test_meeting_relationships(db_session):
         summary="Definir as principais tarefas.",
         key_points=["Escopo da sprint"],
         decisions=["Backend fecha na sexta"],
-        structured_result={
-            "tasks": ["Implementar funcionalidade"]
-        },
+        structured_result={"tasks": ["Implementar funcionalidade"]},
     )
 
     task = Task(position=0, description="Implementar funcionalidade")

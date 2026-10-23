@@ -3,6 +3,16 @@
 import json
 import re
 
+from pydantic import ValidationError
+
+from app.core.exceptions import (
+    LLMError,
+    SummarizationChunkProcessingError,
+    SummarizationConsolidationError,
+    SummarizationEmptyInputError,
+    SummarizationError,
+    SummarizationInvalidResponseError,
+)
 from app.prompts.summarization import build_summarization_prompt
 from app.schemas.chunk import ChunkingConfig
 from app.schemas.summary import SummaryResult
@@ -21,11 +31,11 @@ class SummarizationService:
 
     def summarize(self, transcript: str) -> SummaryResult:
         if not transcript or not transcript.strip():
-            raise ValueError("A transcrição não pode estar vazia")
+            raise SummarizationEmptyInputError("A transcrição não pode estar vazia")
 
         chunks = self.chunker.split(transcript)
         if not chunks:
-            raise ValueError("Não foi possível criar chunks da transcrição")
+            raise SummarizationError("Não foi possível criar chunks da transcrição")
 
         partials = [self._summarize_chunk(chunk.text) for chunk in chunks]
         if len(partials) == 1:
@@ -36,8 +46,16 @@ class SummarizationService:
         try:
             raw_text = self.llm.generate(build_summarization_prompt(chunk))
             return self._parse_result(raw_text)
+        except SummarizationInvalidResponseError:
+            raise
+        except LLMError as exc:
+            raise SummarizationChunkProcessingError(
+                "Falha ao processar um chunk com o serviço de LLM"
+            ) from exc
         except Exception as exc:
-            raise RuntimeError("Falha ao processar um chunk com o serviço de LLM") from exc
+            raise SummarizationChunkProcessingError(
+                "Falha ao processar um chunk com o serviço de LLM"
+            ) from exc
 
     def _consolidate(self, partials: list[SummaryResult]) -> SummaryResult:
         material = self._build_consolidation_material(partials)
@@ -62,8 +80,16 @@ Resultados parciais:
         try:
             raw_text = self.llm.generate(prompt)
             return self._parse_result(raw_text)
+        except SummarizationInvalidResponseError:
+            raise
+        except LLMError as exc:
+            raise SummarizationConsolidationError(
+                "Falha ao consolidar os resultados da reunião"
+            ) from exc
         except Exception as exc:
-            raise RuntimeError("Falha ao consolidar os resultados da reunião") from exc
+            raise SummarizationConsolidationError(
+                "Falha ao consolidar os resultados da reunião"
+            ) from exc
 
     @staticmethod
     def _parse_result(raw_text: str) -> SummaryResult:
@@ -73,9 +99,20 @@ Resultados parciais:
         try:
             data = json.loads(cleaned)
         except json.JSONDecodeError as exc:
-            raise ValueError("O LLM não retornou um JSON válido") from exc
+            raise SummarizationInvalidResponseError(
+                "O LLM não retornou um JSON válido"
+            ) from exc
 
-        return SummaryResult.model_validate(data)
+        try:
+            return SummaryResult.model_validate(data)
+        except ValidationError as exc:
+            raise SummarizationInvalidResponseError(
+                f"Formato inválido do resumo retornado pelo LLM: {exc}"
+            ) from exc
+        except Exception as exc:
+            raise SummarizationInvalidResponseError(
+                f"Falha de validação do resumo: {exc}"
+            ) from exc
 
     @staticmethod
     def _build_consolidation_material(partials: list[SummaryResult]) -> str:

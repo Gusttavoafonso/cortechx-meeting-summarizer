@@ -1,14 +1,15 @@
-import pytest
-from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
-from app.main import app
+from unittest.mock import MagicMock, patch
+
 from app.api.v1.integrations import get_enabled_providers, get_integration_dispatcher
-from app.models.meeting_status import MeetingStatus
+from app.main import app
 from app.models.integration_delivery import IntegrationDeliveryStatus
+from app.models.meeting_status import MeetingStatus
+from fastapi.testclient import TestClient
 
 client = TestClient(app)
 
 BASE_URL = "/meetings"
+
 
 @patch("app.api.v1.integrations.MeetingRepository")
 @patch("app.api.v1.integrations.IntegrationDeliveryRepository")
@@ -24,7 +25,7 @@ def test_retry_integrations_enqueues_task_and_returns_202(
     # Setup dos providers simulados com os seus status
     mock_delivery_repo_class.return_value.list_by_meeting.return_value = [
         MagicMock(provider="notion", status=IntegrationDeliveryStatus.FAILED.value),
-        MagicMock(provider="discord", status=IntegrationDeliveryStatus.SUCCESS.value)
+        MagicMock(provider="discord", status=IntegrationDeliveryStatus.SUCCESS.value),
     ]
 
     app.dependency_overrides[get_enabled_providers] = lambda: ["discord", "notion"]
@@ -40,13 +41,14 @@ def test_retry_integrations_enqueues_task_and_returns_202(
 
     assert response.status_code == 202
     assert response.json() == {"meeting_id": 1, "providers": ["notion"]}
-    
+
     # Verifica se a task em background foi chamada corretamente só com o Notion
     mock_enqueue.assert_called_once()
     args, kwargs = mock_enqueue.call_args
     assert args[0] == 1  # meeting_id
     assert kwargs["providers"] == ["notion"]
     assert kwargs["reset"] is False
+
 
 @patch("app.api.v1.integrations.MeetingRepository")
 def test_retry_integrations_rejects_in_progress_meeting(mock_meeting_repo_class):
@@ -60,6 +62,7 @@ def test_retry_integrations_rejects_in_progress_meeting(mock_meeting_repo_class)
 
     assert response.status_code == 409
     assert "não foi concluída" in response.json()["detail"]
+
 
 @patch("app.api.v1.integrations.MeetingRepository")
 def test_list_integrations_returns_delivery_status(mock_meeting_repo_class):

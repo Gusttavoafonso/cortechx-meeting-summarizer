@@ -21,9 +21,7 @@ def test_create_meeting(db_session):
 def test_get_meeting_by_id(db_session):
     repository = MeetingRepository(db_session)
 
-    meeting = repository.create(
-        Meeting(title="Reuniao para busca")
-    )
+    meeting = repository.create(Meeting(title="Reuniao para busca"))
 
     found = repository.get_by_id(meeting.id)
 
@@ -35,13 +33,9 @@ def test_get_meeting_by_id(db_session):
 def test_list_all_meetings(db_session):
     repository = MeetingRepository(db_session)
 
-    repository.create(
-        Meeting(title="Reuniao 1")
-    )
+    repository.create(Meeting(title="Reuniao 1"))
 
-    repository.create(
-        Meeting(title="Reuniao 2")
-    )
+    repository.create(Meeting(title="Reuniao 2"))
 
     meetings = repository.list_all()
 

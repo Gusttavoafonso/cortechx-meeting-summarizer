@@ -1,18 +1,21 @@
-class LLMError(Exception):
-    """Erro base pra qualquer falha do serviço."""
+"""Exceções do serviço de LLM baseadas no domínio central da aplicação."""
 
-class LLMConfigurationError(LLMError):
-    """Configuração obrigatória ausente ou inválida(API Key, provider, model)."""
+from app.core.exceptions import (
+    LLMAuthenticationError,
+    LLMConfigurationError,
+    LLMEmptyResponseError,
+    LLMError,
+    LLMProviderError,
+    LLMRateLimitError,
+    LLMTimeoutError,
+)
 
-class LLMAuthenticationError(LLMError):
-    """Falha de autenticação com o provider. """
-
-class LLMTimeoutError(LLMError):
-    """A chamada ao provider excedeu o tempo limite."""
-
-class LLMEmptyResponseError(LLMError):
-    """O provider retornou uma resposta vazia ou sem conteúdo utilizável."""
-
-class LLMProviderError(LLMError):
-    """Erro genérico não listado."""
-
+__all__ = [
+    "LLMError",
+    "LLMConfigurationError",
+    "LLMAuthenticationError",
+    "LLMTimeoutError",
+    "LLMRateLimitError",
+    "LLMEmptyResponseError",
+    "LLMProviderError",
+]

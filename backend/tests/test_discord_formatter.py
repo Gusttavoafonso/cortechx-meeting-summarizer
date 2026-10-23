@@ -42,16 +42,20 @@ def test_omits_optional_empty_sections_and_task_details():
             objective="  ",
             key_points=[],
             decisions=[],
-            tasks=[TaskIntegrationPayload(description="Documentar fluxo")],
+            tasks=[
+                TaskIntegrationPayload(description="Documentar fluxo"),
+                TaskIntegrationPayload(description="Criar endpoint", deadline="  "),
+            ],
         )
     )
 
     assert messages == [
         "## Reunião: Planejamento da Sprint\n\n### Resumo\n"
         "A equipe definiu as prioridades da próxima entrega.\n\n### Tarefas\n"
-        "- [ ] Documentar fluxo"
+        "- [ ] Documentar fluxo\n- [ ] Criar endpoint"
     ]
     assert "None" not in messages[0]
+    assert "Prazo:" not in messages[0]
 
 
 def test_splits_long_content_without_losing_text():
