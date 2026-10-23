@@ -14,6 +14,7 @@ from app.models.task import Task
 if TYPE_CHECKING:
     from app.models.audio_file import AudioFile
     from app.models.integration_configuration import IntegrationConfiguration
+    from app.models.integration_delivery import IntegrationDelivery
     from app.models.summary import Summary
     from app.models.transcript import Transcript
 
@@ -88,6 +89,12 @@ class Meeting(Base):
 
     integration_configurations: Mapped[list["IntegrationConfiguration"]] = relationship(
         "IntegrationConfiguration",
+        back_populates="meeting",
+        cascade="all, delete-orphan",
+    )
+
+    integration_deliveries: Mapped[list["IntegrationDelivery"]] = relationship(
+        "IntegrationDelivery",
         back_populates="meeting",
         cascade="all, delete-orphan",
     )

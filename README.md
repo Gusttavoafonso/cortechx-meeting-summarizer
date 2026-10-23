@@ -233,3 +233,21 @@ backend/
 ├── pyproject.toml               # Configuração do projeto, dependências e ferramentas de teste
 └── README.md
 ```
+
+## Disparo das integrações externas
+
+O disparo das integrações ocorre de forma assíncrona após a conclusão do pipeline de processamento da reunião (`MeetingProcessor` marca o status como `completed`). Em segundo plano, o worker Celery (`deliver_integrations_task` via `IntegrationDeliveryService`) tenta entregar o resultado persistido aos provedores habilitados (Discord e Notion).
+
+Se o processamento ou persistência da reunião falhar, o pipeline encerra em `failed` e nenhuma integração é acionada. Falhas em entregas externas são registradas individualmente na tabela `integration_deliveries` e nunca revertem o resumo nem alteram o status principal da reunião.
+
+As integrações são opt-in e desabilitadas por padrão. Configure no `.env`:
+
+```dotenv
+DISCORD_ENABLED=true
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+NOTION_ENABLED=true
+NOTION_API_KEY=secret_...
+NOTION_DATABASE_ID=...
+```
+
+Uma integração só é executada quando estiver habilitada **e** suas credenciais/configurações estiverem presentes. Cada provider opera de forma isolada (`success` ou `failed`). Falhas transitórias sofrem retry automático com backoff exponencial no Celery. Caso necessário, é possível disparar o reenvio manual via rota `POST /meetings/{meeting_id}/integrations/retry` sem reexecutar o pipeline de transcrição e IA.

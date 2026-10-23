@@ -73,6 +73,9 @@ class Settings(BaseSettings):
         validation_alias="NOTION_DATABASE_ID",
     )
 
+    discord_enabled: bool = Field(default=False, validation_alias="DISCORD_ENABLED")
+    notion_enabled: bool = Field(default=False, validation_alias="NOTION_ENABLED")
+
     discord_webhook_url: HttpUrl | None = None
     huggingface_token: SecretStr | None = None
 

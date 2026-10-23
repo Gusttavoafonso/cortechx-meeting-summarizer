@@ -1,3 +1,3 @@
-from app.api.v1 import meetings_router
+from app.api.v1 import integrations_router, meetings_router
 
-__all__ = ["meetings_router"]
+__all__ = ["meetings_router", "integrations_router"]

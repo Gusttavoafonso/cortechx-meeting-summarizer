@@ -13,6 +13,7 @@ from app.core.retry import RetryPolicy
 from app.models.meeting import Meeting
 from app.models.meeting_status import MeetingStatus
 from app.repositories.meeting_repository import MeetingRepository
+from app.repositories.summary_repository import SummaryRepository
 from app.repositories.transcript_repository import TranscriptRepository
 from app.services.audio_storage import AudioStorageService
 from app.services.chunking import ChunkingService
@@ -60,7 +61,6 @@ def build_meeting_processor(
     retry_policy: RetryPolicy | None = None,
 ) -> MeetingProcessor:
     """Constrói o MeetingProcessor integrado à política centralizada de retry."""
-    from app.repositories.summary_repository import SummaryRepository
 
     summarization_service = None
     try:
