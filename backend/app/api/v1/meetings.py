@@ -14,9 +14,10 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_session
-from app.models.meeting_status import MeetingStatus
+from app.models.meeting_status import IN_PROGRESS_STATUSES, MeetingStatus
 from app.repositories.audio_repository import AudioRepository
 from app.repositories.meeting_repository import MeetingRepository
+from app.repositories.summary_repository import SummaryRepository
 from app.repositories.transcript_repository import (
     InvalidTranscriptSegmentError,
     TranscriptRepository,
@@ -26,7 +27,9 @@ from app.schemas.meeting import (
     MeetingCreate,
     MeetingProcessResponse,
     MeetingResponse,
+    MeetingStatusResponse,
 )
+from app.schemas.summary import SummaryResponse
 from app.schemas.transcription import TranscriptResponse
 from app.services.audio_storage import AudioStorageService
 from app.services.diarization import (
@@ -35,23 +38,22 @@ from app.services.diarization import (
     DiarizationService,
     PyannoteDiarizationProvider,
 )
+from app.services.llm.service import get_llm_service
 from app.services.meeting_service import MeetingNotFoundError, MeetingService
+from app.services.summarization.service import create_summarization_service
+from app.services.summary_service import (
+    MeetingNotFoundError as SummaryMeetingNotFoundError,
+)
+from app.services.summary_service import (
+    SummaryAlreadyProcessingError,
+    SummaryService,
+    TranscriptNotFoundError,
+)
 from app.services.transcription import (
     BaseSpeechToTextService,
     get_speech_to_text_service,
 )
 from app.workers.meeting_job import enqueue_meeting_processing
-
-from app.repositories.summary_repository import SummaryRepository
-from app.schemas.summary import SummaryResponse
-from app.services.llm.service import get_llm_service
-from app.services.summarization.service import create_summarization_service
-from app.services.summary_service import (
-    MeetingNotFoundError as SummaryMeetingNotFoundError,
-    SummaryAlreadyProcessingError,
-    SummaryService,
-    TranscriptNotFoundError,
-)
 
 router = APIRouter()
 
@@ -126,6 +128,15 @@ def get_summary_service(
         summary_repository=summary_repo,
         meeting_repository=meeting_repo,
         transcript_repository=transcript_repo,
+    )
+
+
+def _mark_failed(
+    meeting_id: int, meeting_repo: MeetingRepository, message: str
+) -> None:
+    """Marca a reunião como falha no banco de dados com uma mensagem de erro."""
+    MeetingService(meeting_repo).update_status(
+        meeting_id, MeetingStatus.FAILED, error_message=message
     )
 
 
@@ -249,7 +260,9 @@ def upload_audio(
         # Se já existia transcrição para o áudio anterior, invalida/limpa
         transcript_repo.delete_by_meeting_id(meeting_id)
 
-        meeting_repo.update_status(meeting, status="audio_uploaded")
+        MeetingService(meeting_repo).update_status(
+            meeting_id, MeetingStatus.AUDIO_UPLOADED
+        )
     except Exception as db_exc:
         # Se a persistência falhar, remove o arquivo gravado para evitar arquivo órfão
         storage_service.delete_file(relative_path)
@@ -376,19 +389,23 @@ def transcribe_meeting(
         )
 
     # Atualiza status para transcrevendo
-    meeting_repo.update_status(meeting, status="transcribing")
+    MeetingService(meeting_repo).update_status(meeting_id, MeetingStatus.TRANSCRIBING)
 
     # Executa transcrição com tratamento de falha no provedor de STT
     try:
         result = stt_service.transcribe(audio_file_path, language="pt")
     except (OSError, IOError) as io_err:
-        meeting_repo.update_status(meeting, status="audio_uploaded")
+        _mark_failed(meeting_id, meeting_repo, f"Erro de leitura do áudio: {io_err}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erro inesperado durante a leitura do arquivo de áudio: {io_err}",
         )
     except Exception as stt_err:
-        meeting_repo.update_status(meeting, status="audio_uploaded")
+        _mark_failed(
+            meeting_id,
+            meeting_repo,
+            f"Falha no serviço de Speech-to-Text: {stt_err}",
+        )
         err_msg = str(stt_err).lower()
         if any(
             token in err_msg
@@ -410,7 +427,12 @@ def transcribe_meeting(
 
     # Tratamento de resposta vazia do STT (áudio mudo ou inaudível)
     if not result.text or not result.text.strip():
-        meeting_repo.update_status(meeting, status="audio_uploaded")
+        _mark_failed(
+            meeting_id,
+            meeting_repo,
+            "O serviço de transcrição retornou uma resposta vazia. "
+            "Áudio mudo ou inaudível.",
+        )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
@@ -427,18 +449,20 @@ def transcribe_meeting(
             segments=result.segments,
             commit=False,
         )
-        meeting_repo.update_status(meeting, status="transcribed", commit=False)
+        MeetingService(meeting_repo).update_status(
+            meeting_id, MeetingStatus.TRANSCRIBED
+        )
         db.commit()
     except InvalidTranscriptSegmentError as exc:
         db.rollback()
-        meeting_repo.update_status(meeting, status="audio_uploaded")
+        _mark_failed(meeting_id, meeting_repo, str(exc))
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
     except SQLAlchemyError as exc:
         db.rollback()
-        meeting_repo.update_status(meeting, status="audio_uploaded")
+        _mark_failed(meeting_id, meeting_repo, "Falha ao persistir a transcrição.")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Falha ao persistir a transcrição.",
@@ -475,6 +499,15 @@ def diarize_meeting(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Reunião com ID {meeting_id} não encontrada.",
+        )
+
+    if MeetingStatus(meeting.status) in IN_PROGRESS_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Não é possível executar a diarização enquanto a reunião "
+                "estiver em transcrição ou processamento."
+            ),
         )
 
     audio_record = audio_repo.get_by_meeting_id(meeting_id)
@@ -558,6 +591,7 @@ def get_meeting_transcript(
 
     return TranscriptResponse.model_validate(transcript)
 
+
 @router.post(
     "/{meeting_id}/process",
     response_model=MeetingProcessResponse,
@@ -612,7 +646,7 @@ def process_meeting_async(
     try:
         job_dispatcher(meeting_id, background_tasks)
     except Exception as exc:
-        meeting_repo.update_status(meeting, status=previous_status)
+        MeetingService(meeting_repo).update_status(meeting_id, previous_status)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Não foi possível enfileirar o processamento da reunião: {exc}",
@@ -620,7 +654,7 @@ def process_meeting_async(
 
     return MeetingProcessResponse(
         meeting_id=meeting_id,
-        status="PROCESSING",
+        status=MeetingStatus.PROCESSING,
     )
 
 
@@ -660,6 +694,11 @@ def create_summary(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"A reunião com ID {meeting_id} já está sendo processada.",
         )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Falha ao gerar resumo da reunião: {exc}",
+        ) from exc
 
 
 @router.get(
@@ -690,3 +729,27 @@ def get_summary(
         detail=f"Resumo ainda não gerado pra reunião com ID {meeting_id}.",
     )
 
+
+@router.get(
+    "/{meeting_id}/status",
+    response_model=MeetingStatusResponse,
+    summary="Consultar status da reunião",
+)
+def get_meeting_status(
+    meeting_id: int,
+    meeting_service: MeetingService = Depends(get_meeting_service),
+) -> MeetingStatusResponse:
+    validate_meeting_id(meeting_id)
+    try:
+        meeting = meeting_service.get_by_id(meeting_id)
+    except MeetingNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reunião com id {meeting_id} não encontrada.",
+        )
+    return MeetingStatusResponse(
+        meeting_id=meeting.id,
+        status=meeting.status,
+        updated_at=meeting.updated_at,
+        last_error=meeting.last_error,
+    )
