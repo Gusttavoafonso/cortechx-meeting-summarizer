@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.retry import RetryPolicy
+from app.models.meeting import Meeting
+from app.models.meeting_status import MeetingStatus
 from app.repositories.meeting_repository import MeetingRepository
 from app.repositories.transcript_repository import TranscriptRepository
 from app.services.audio_storage import AudioStorageService
@@ -22,6 +24,7 @@ from app.services.diarization import (
 )
 from app.services.processing.meeting_processor import MeetingProcessor
 from app.services.transcription import get_speech_to_text_service
+from app.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -88,10 +91,16 @@ def run_meeting_processing_job(
     session_factory: Callable[[], Session] = SessionLocal,
     processor_factory: Callable[[Session], MeetingProcessor] = build_meeting_processor,
 ) -> None:
-    """Executa o pipeline completo em segundo plano sob política de retry."""
+    """Executa o pipeline completo em segundo plano com sessão de banco isolada."""
     session = session_factory()
     try:
-        processor = processor_factory(session)
+        try:
+            processor = processor_factory(session)
+        except Exception:
+            meeting = session.get(Meeting, meeting_id)
+            if meeting is not None:
+                MeetingRepository(session).update_status(meeting, MeetingStatus.FAILED)
+            raise
         processor.process_meeting(
             meeting_id,
             allow_already_processing=True,
@@ -100,28 +109,27 @@ def run_meeting_processing_job(
         session.close()
 
 
+@celery_app.task(name="meetings.process_meeting")
+def process_meeting_task(meeting_id: int) -> None:
+    """Task Celery que delega a execução para run_meeting_processing_job."""
+    run_meeting_processing_job(meeting_id)
+
+
 def enqueue_meeting_processing(
     meeting_id: int,
     background_tasks: BackgroundTasks | None = None,
 ) -> None:
-    """Enfileira o job assíncrono para a reunião informada."""
-    # Tenta usar Celery caso esteja disponível
+    """Publica o job no Celery (com fallback local se indisponível)."""
     try:
-        from app.workers.celery_app import celery_app  # type: ignore
-
-        if celery_app is not None:
-            celery_app.send_task("meetings.process_meeting", args=[meeting_id])
-            return
+        process_meeting_task.delay(meeting_id)
     except Exception as exc:
-        logger.debug("Celery indisponível (%s). Usando fallback assíncrono.", exc)
-
-    if background_tasks is not None:
-        logger.info(
-            "Executando processamento da reunião %s via BackgroundTasks.",
-            meeting_id,
-        )
-        background_tasks.add_task(run_meeting_processing_job, meeting_id)
-        return
-
-    logger.info("Executando processamento direto da reunião %s.", meeting_id)
-    run_meeting_processing_job(meeting_id)
+        if background_tasks is not None:
+            logger.warning(
+                "Broker Celery indisponível (%s). Executando reunião %s "
+                "via BackgroundTasks.",
+                exc,
+                meeting_id,
+            )
+            background_tasks.add_task(run_meeting_processing_job, meeting_id)
+            return
+        raise

@@ -4,7 +4,6 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
 
-from app.core.exceptions import is_recoverable
 from app.core.failure_recorder import FailureRecord, FailureRecorder
 from app.core.retry import RetryPolicy
 from app.models.meeting_status import MeetingStatus
@@ -20,8 +19,8 @@ class JobRunner:
     Implementa o fluxo determinístico:
     Job -> Operação:
       - sucesso -> continua
-      - erro recuperável -> retry (com backoff exponencial; estado permanece consistente)
-      - erro definitivo ou esgotamento -> registra falha sanitizada, marca FAILED e encerra.
+      - erro recuperável -> retry com backoff exponencial
+      - erro definitivo ou esgotamento -> registra falha e marca FAILED
 
     Evita duplicação da lógica de retry entre serviços através do uso centralizado
     de `app.core.retry.RetryPolicy` e garante previsibilidade de comportamento
@@ -155,9 +154,8 @@ class JobRunner:
                     )
                 except Exception as repo_exc:
                     logger.error(
-                        "Falha ao persistir status FAILED no repositório de reuniões: %s",
+                        "Falha ao persistir status FAILED no repositório: %s",
                         repo_exc,
                     )
 
         return record
-

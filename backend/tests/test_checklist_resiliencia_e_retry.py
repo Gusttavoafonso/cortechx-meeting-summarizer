@@ -16,24 +16,19 @@ Validação dos 11 requisitos da matriz de testes:
 
 from __future__ import annotations
 
-import io
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-from sqlalchemy import select
-
 from app.core.exceptions import (
     ApplicationError,
     DefinitiveError,
     FailureCategory,
+    LLMProviderError,
     LLMRateLimitError,
     LLMTimeoutError,
-    LLMProviderError,
     RecoverableError,
     TranscriptionAudioCorruptedError,
     TranscriptionAudioNotFoundError,
-    TranscriptionEmptyResponseError,
     TranscriptionProviderError,
     TranscriptionRateLimitError,
     TranscriptionTimeoutError,
@@ -42,7 +37,6 @@ from app.core.exceptions import (
 )
 from app.core.retry import RetryPolicy
 from app.models.audio_file import AudioFile
-from app.models.meeting import Meeting
 from app.models.meeting_status import MeetingStatus
 from app.models.summary import Summary
 from app.models.task import Task
@@ -50,18 +44,17 @@ from app.models.transcript import Transcript
 from app.repositories.meeting_repository import MeetingRepository
 from app.repositories.summary_repository import SummaryRepository
 from app.repositories.transcript_repository import TranscriptRepository
-from app.schemas.summary import SummaryResult, TaskItem
-from app.services.diarization import DiarizationSegment
 from app.services.processing.meeting_processor import MeetingProcessor
 from app.services.transcription.base import SegmentData, TranscriptionResult
 from app.workers.job_runner import JobRunner
+from sqlalchemy import select
 
 
 # ==============================================================================
 # 1. Falha temporária no STT
 # ==============================================================================
 def test_1_falha_temporaria_no_stt(db_session, tmp_path):
-    """Falha temporária no STT (ex: timeout de rede) é recuperável e dispara retry com sucesso."""
+    """Falha temporária no STT é recuperável e dispara retry com sucesso."""
     meeting_repo = MeetingRepository(db_session)
     meeting = meeting_repo.create("Reunião Falha Temporária STT")
 
@@ -74,7 +67,9 @@ def test_1_falha_temporaria_no_stt(db_session, tmp_path):
         nonlocal attempts
         attempts += 1
         if attempts == 1:
-            raise TranscriptionTimeoutError("Timeout temporário ao conectar à API de STT")
+            raise TranscriptionTimeoutError(
+                "Timeout temporário ao conectar à API de STT"
+            )
         return TranscriptionResult(text="Transcrição recuperada", segments=[])
 
     result = runner.execute_operation(
@@ -93,7 +88,7 @@ def test_1_falha_temporaria_no_stt(db_session, tmp_path):
 # 2. Falha definitiva no STT
 # ==============================================================================
 def test_2_falha_definitiva_no_stt(db_session, tmp_path):
-    """Falha definitiva no STT (áudio corrompido ou vazio) aborta imediatamente sem retry e marca FAILED."""
+    """Falha definitiva no STT aborta imediatamente sem retry e marca FAILED."""
     meeting_repo = MeetingRepository(db_session)
     meeting = meeting_repo.create("Reunião Áudio Corrompido STT")
 
@@ -105,7 +100,9 @@ def test_2_falha_definitiva_no_stt(db_session, tmp_path):
     def mock_stt_corrupted(audio_file):
         nonlocal attempts
         attempts += 1
-        raise TranscriptionAudioCorruptedError("Arquivo de áudio com cabeçalho inválido ou corrompido")
+        raise TranscriptionAudioCorruptedError(
+            "Arquivo de áudio com cabeçalho inválido ou corrompido"
+        )
 
     with pytest.raises(TranscriptionAudioCorruptedError):
         runner.execute_operation(
@@ -125,7 +122,7 @@ def test_2_falha_definitiva_no_stt(db_session, tmp_path):
 # 3. Timeout do LLM
 # ==============================================================================
 def test_3_timeout_do_llm():
-    """Timeout do LLM é classificado como recuperável e herda de LLMError e RecoverableError."""
+    """Timeout do LLM é classificado como recuperável e herda de LLMError."""
     err = LLMTimeoutError("Tempo limite de geração excedido pelo provedor Gemini")
 
     assert err.is_retryable is True
@@ -153,7 +150,7 @@ def test_3_timeout_do_llm():
 # 4. Rate limit
 # ==============================================================================
 def test_4_rate_limit():
-    """Erros de Rate Limit (HTTP 429) tanto em STT quanto em LLM são recuperáveis e retentam."""
+    """Erros de Rate Limit (HTTP 429) em STT e LLM são recuperáveis e retentam."""
     stt_rate = TranscriptionRateLimitError("Rate limit de STT excedido (HTTP 429)")
     llm_rate = LLMRateLimitError("Rate limit de LLM excedido (HTTP 429)")
 
@@ -180,7 +177,9 @@ def test_4_rate_limit():
 # ==============================================================================
 def test_5_provider_temporariamente_indisponivel():
     """Erros transitórios de infraestrutura (HTTP 502/503/504) são recuperáveis."""
-    stt_503 = TranscriptionProviderError("Serviço Groq indisponível temporariamente (503 Service Unavailable)")
+    stt_503 = TranscriptionProviderError(
+        "Serviço Groq indisponível temporariamente (503 Service Unavailable)"
+    )
     llm_502 = LLMProviderError("Bad Gateway no provedor Gemini (502 Bad Gateway)")
 
     assert is_recoverable(stt_503) is True
@@ -205,7 +204,7 @@ def test_5_provider_temporariamente_indisponivel():
 # 6. Sucesso após uma tentativa falha
 # ==============================================================================
 def test_6_sucesso_apos_uma_tentativa_falha(db_session):
-    """Execução que falha na tentativa 1 com erro transitório tem sucesso na tentativa 2."""
+    """Execução que falha na tentativa 1 tem sucesso na tentativa 2."""
     meeting_repo = MeetingRepository(db_session)
     meeting = meeting_repo.create("Reunião Sucesso Após Falha")
 
@@ -223,7 +222,9 @@ def test_6_sucesso_apos_uma_tentativa_falha(db_session):
             raise LLMTimeoutError("Falha na 1ª tentativa")
         return {"objective": "Alinhamento", "summary": "Resumo concluído"}
 
-    output = runner.execute_operation(flaky_task, meeting=meeting, stage="summarization")
+    output = runner.execute_operation(
+        flaky_task, meeting=meeting, stage="summarization"
+    )
     assert count == 2
     assert output["objective"] == "Alinhamento"
     # Status não foi marcado como FAILED
@@ -234,7 +235,7 @@ def test_6_sucesso_apos_uma_tentativa_falha(db_session):
 # 7. Falha após esgotar tentativas
 # ==============================================================================
 def test_7_falha_apos_esgotar_tentativas(db_session):
-    """Quando o número máximo de tentativas é esgotado, o job marca FAILED e registra a falha."""
+    """Ao esgotar tentativas, o job marca FAILED e registra a falha."""
     meeting_repo = MeetingRepository(db_session)
     meeting = meeting_repo.create("Reunião Esgotamento Retries")
 
@@ -268,10 +269,12 @@ def test_7_falha_apos_esgotar_tentativas(db_session):
 # 8. Atualização correta do status
 # ==============================================================================
 def test_8_atualizacao_correta_do_status(db_session, tmp_path):
-    """O status permanece PROCESSING durante retry transitório, nunca COMPLETED em erro e FAILED ao falhar."""
+    """Status permanece PROCESSING no retry e transiciona para FAILED ao falhar."""
     meeting_repo = MeetingRepository(db_session)
     transcript_repo = TranscriptRepository(db_session)
-    meeting = meeting_repo.create("Reunião Ciclo de Status", status=MeetingStatus.PROCESSING)
+    meeting = meeting_repo.create(
+        "Reunião Ciclo de Status", status=MeetingStatus.PROCESSING
+    )
 
     audio = AudioFile(
         meeting_id=meeting.id,
@@ -289,7 +292,9 @@ def test_8_atualizacao_correta_do_status(db_session, tmp_path):
     storage_mock.get_file_path.return_value = tmp_path / "meeting.mp3"
 
     stt_mock = MagicMock()
-    stt_mock.transcribe.return_value = TranscriptionResult(text="Transcrição ok", segments=[])
+    stt_mock.transcribe.return_value = TranscriptionResult(
+        text="Transcrição ok", segments=[]
+    )
 
     diar_mock = MagicMock()
     diar_mock.diarize.return_value = []
@@ -324,7 +329,7 @@ def test_8_atualizacao_correta_do_status(db_session, tmp_path):
 # 9. Retry manual
 # ==============================================================================
 def test_9_retry_manual(client, db_session, monkeypatch):
-    """POST /meetings/{id}/retry permite reprocessar reunião FAILED e bloqueia estados inválidos."""
+    """POST /meetings/{id}/retry permite reprocessar reunião FAILED."""
     meeting_repo = MeetingRepository(db_session)
     failed_meeting = meeting_repo.create("Reunião Falhada", status=MeetingStatus.FAILED)
 
@@ -358,7 +363,9 @@ def test_9_retry_manual(client, db_session, monkeypatch):
     assert res_404.status_code == 404
 
     # 3. Bloqueio de reunião já em processamento (409)
-    proc_meeting = meeting_repo.create("Reunião Processando", status=MeetingStatus.PROCESSING)
+    proc_meeting = meeting_repo.create(
+        "Reunião Processando", status=MeetingStatus.PROCESSING
+    )
     audio_proc = AudioFile(
         meeting_id=proc_meeting.id,
         filename="test.mp3",
@@ -379,21 +386,27 @@ def test_9_retry_manual(client, db_session, monkeypatch):
 # 10. Ausência de registros duplicados
 # ==============================================================================
 def test_10_ausencia_de_registros_duplicados(db_session):
-    """Múltiplas tentativas de persistência de Transcript, Summary e Tarefas não produzem duplicatas."""
+    """Tentativas de persistência de Transcript, Summary e Tarefas não duplicam."""
     meeting_repo = MeetingRepository(db_session)
     meeting = meeting_repo.create("Reunião Anti Duplicação")
     transcript_repo = TranscriptRepository(db_session)
     summary_repo = SummaryRepository(db_session)
 
     # 1. Transcrição repetida
-    transcript_repo.save_transcript(meeting.id, "Tentativa 1", [
-        SegmentData(start=0.0, end=1.0, text="Fala 1", speaker=None)
-    ])
-    transcript_repo.save_transcript(meeting.id, "Tentativa 2 (Sobrescrita)", [
-        SegmentData(start=0.0, end=2.0, text="Fala Atualizada", speaker="Alice")
-    ])
+    transcript_repo.save_transcript(
+        meeting.id,
+        "Tentativa 1",
+        [SegmentData(start=0.0, end=1.0, text="Fala 1", speaker=None)],
+    )
+    transcript_repo.save_transcript(
+        meeting.id,
+        "Tentativa 2 (Sobrescrita)",
+        [SegmentData(start=0.0, end=2.0, text="Fala Atualizada", speaker="Alice")],
+    )
 
-    transcripts = db_session.scalars(select(Transcript).where(Transcript.meeting_id == meeting.id)).all()
+    transcripts = db_session.scalars(
+        select(Transcript).where(Transcript.meeting_id == meeting.id)
+    ).all()
     assert len(transcripts) == 1
     assert transcripts[0].content == "Tentativa 2 (Sobrescrita)"
 
@@ -411,7 +424,9 @@ def test_10_ausencia_de_registros_duplicados(db_session):
         tasks=[{"description": "Task Substituta", "responsible": "B"}],
     )
 
-    summaries = db_session.scalars(select(Summary).where(Summary.meeting_id == meeting.id)).all()
+    summaries = db_session.scalars(
+        select(Summary).where(Summary.meeting_id == meeting.id)
+    ).all()
     tasks = db_session.scalars(select(Task).where(Task.meeting_id == meeting.id)).all()
 
     assert len(summaries) == 1
@@ -424,7 +439,7 @@ def test_10_ausencia_de_registros_duplicados(db_session):
 # 11. Exceções padronizadas
 # ==============================================================================
 def test_11_excecoes_padronizadas():
-    """Todas as exceções do domínio herdam de ApplicationError e possuem contratos estruturados."""
+    """Todas as exceções do domínio herdam de ApplicationError."""
     exceptions_to_check = [
         TranscriptionAudioNotFoundError("Áudio não encontrado"),
         TranscriptionAudioCorruptedError("Áudio corrompido"),

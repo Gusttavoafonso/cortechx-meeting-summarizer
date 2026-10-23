@@ -435,7 +435,8 @@ def is_recoverable(error: BaseException) -> bool:
     if isinstance(error, DefinitiveError):
         return False
 
-    # 2. ApplicationError explicitamente marcado como não recuperável (is_retryable is False)
+    # 2. ApplicationError explicitamente marcado como não recuperável
+    # (is_retryable is False)
     if isinstance(error, ApplicationError) and error.is_retryable is False:
         return False
 

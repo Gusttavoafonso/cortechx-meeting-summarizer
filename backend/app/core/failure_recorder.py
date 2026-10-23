@@ -47,7 +47,7 @@ def sanitize_error_message(message: str) -> str:
 
 @dataclass(frozen=True)
 class FailureRecord:
-    """Registro estruturado de falha de processamento de reunião (Issue #26 - Etapa 9)."""
+    """Registro estruturado de falha de processamento de reunião."""
 
     stage: str
     error_type: str
@@ -85,7 +85,8 @@ class FailureRecorder:
         )
 
         logger.error(
-            "Falha registrada no pipeline [etapa=%s | tipo=%s | tentativas=%d | recuperavel=%s | horario=%s]: %s",
+            "Falha registrada no pipeline [etapa=%s | tipo=%s | "
+            "tentativas=%d | recuperavel=%s | horario=%s]: %s",
             record.stage,
             record.error_type,
             record.attempts,

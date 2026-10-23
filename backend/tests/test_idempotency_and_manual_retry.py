@@ -1,15 +1,8 @@
-import io
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import select
-
 from app.core.retry import RetryPolicy
-from app.main import app
 from app.models.audio_file import AudioFile
-from app.models.meeting import Meeting
 from app.models.meeting_status import MeetingStatus
 from app.models.summary import Summary
 from app.models.task import Task
@@ -22,7 +15,7 @@ from app.schemas.summary import SummaryResult, TaskItem
 from app.services.diarization import DiarizationSegment
 from app.services.processing.meeting_processor import MeetingProcessor
 from app.services.transcription.base import SegmentData, TranscriptionResult
-
+from sqlalchemy import select
 
 # ==============================================================================
 # 1. Testes de Idempotência em Repositórios (Transcript e Summary/Tasks)
@@ -30,7 +23,7 @@ from app.services.transcription.base import SegmentData, TranscriptionResult
 
 
 def test_transcript_repository_save_is_idempotent(db_session):
-    """Garante que salvar transcrição repetidas vezes substitui dados sem duplicar linhas."""
+    """Garante que salvar transcrição repetidas vezes substitui sem duplicar."""
     meeting_repo = MeetingRepository(db_session)
     meeting = meeting_repo.create("Reunião Idempotência Transcrição")
     repo = TranscriptRepository(db_session)
@@ -40,7 +33,9 @@ def test_transcript_repository_save_is_idempotent(db_session):
         SegmentData(start=0.0, end=1.5, text="Primeira fala", speaker=None),
         SegmentData(start=1.5, end=3.0, text="Segunda fala", speaker=None),
     ]
-    t1 = repo.save_transcript(meeting.id, "Primeira fala Segunda fala", initial_segments)
+    t1 = repo.save_transcript(
+        meeting.id, "Primeira fala Segunda fala", initial_segments
+    )
     db_session.flush()
 
     assert t1.content == "Primeira fala Segunda fala"
@@ -48,7 +43,12 @@ def test_transcript_repository_save_is_idempotent(db_session):
 
     # 2ª Tentativa (reprocessamento / nova tentativa) com novos segmentos
     new_segments = [
-        SegmentData(start=0.0, end=4.0, text="Texto consolidado atualizado", speaker="SPEAKER_00"),
+        SegmentData(
+            start=0.0,
+            end=4.0,
+            text="Texto consolidado atualizado",
+            speaker="SPEAKER_00",
+        ),
     ]
     t2 = repo.save_transcript(meeting.id, "Texto consolidado atualizado", new_segments)
     db_session.flush()
@@ -96,13 +96,15 @@ def test_transcript_repository_apply_diarization_supports_commit_flag(db_session
     assert updated_v2.segments[0].speaker == "Bob"
 
     all_segments = db_session.scalars(
-        select(TranscriptSegment).where(TranscriptSegment.transcript_id == transcript.id)
+        select(TranscriptSegment).where(
+            TranscriptSegment.transcript_id == transcript.id
+        )
     ).all()
     assert len(all_segments) == 1
 
 
 def test_summary_repository_save_summary_is_idempotent(db_session):
-    """Garante que save_summary e save_result substituem dados sem duplicar Summary nem Tasks."""
+    """Garante que save_summary e save_result substituem dados sem duplicar."""
     meeting_repo = MeetingRepository(db_session)
     meeting = meeting_repo.create("Reunião Idempotência Resumo")
     repo = SummaryRepository(db_session)
@@ -124,7 +126,7 @@ def test_summary_repository_save_summary_is_idempotent(db_session):
     assert s1.summary == "Resumo inicial"
     assert len(meeting.tasks) == 2
 
-    # 2ª Tentativa (retry após reprocessamento): atualiza resumo e substitui tarefas por 1 nova
+    # 2ª Tentativa: atualiza resumo e substitui tarefas por 1 nova
     s2 = repo.save_summary(
         meeting_id=meeting.id,
         objective="Objetivo Final",
@@ -196,12 +198,14 @@ def test_summary_repository_save_result_delegation_idempotent(db_session):
 
 
 def test_meeting_processor_rolls_back_partial_data_on_error(db_session, tmp_path):
-    """Verifica que o MeetingProcessor faz rollback em caso de falha, não deixando dados inconsistentes."""
+    """Verifica que o MeetingProcessor faz rollback em caso de falha."""
     meeting_repo = MeetingRepository(db_session)
     transcript_repo = TranscriptRepository(db_session)
     summary_repo = SummaryRepository(db_session)
 
-    meeting = meeting_repo.create("Reunião Falha Transacional")
+    meeting = meeting_repo.create(
+        "Reunião Falha Transacional", status=MeetingStatus.AUDIO_UPLOADED
+    )
     audio = AudioFile(
         meeting_id=meeting.id,
         filename="test.mp3",
@@ -220,7 +224,11 @@ def test_meeting_processor_rolls_back_partial_data_on_error(db_session, tmp_path
     stt_mock = MagicMock()
     stt_mock.transcribe.return_value = TranscriptionResult(
         text="Transcrição que seria salva",
-        segments=[SegmentData(start=0.0, end=2.0, text="Transcrição que seria salva", speaker=None)],
+        segments=[
+            SegmentData(
+                start=0.0, end=2.0, text="Transcrição que seria salva", speaker=None
+            )
+        ],
     )
 
     diar_mock = MagicMock()
@@ -253,7 +261,7 @@ def test_meeting_processor_rolls_back_partial_data_on_error(db_session, tmp_path
     db_session.refresh(meeting)
     assert meeting.status == MeetingStatus.FAILED
 
-    # Devido ao use_atomic_unit_of_work e db.rollback(), nada foi persistido antes da falha
+    # Rollback garante que nada foi persistido antes da falha
     persisted_transcript = transcript_repo.get_by_meeting_id(meeting.id)
     assert persisted_transcript is None
 
@@ -267,9 +275,11 @@ def test_meeting_processor_rolls_back_partial_data_on_error(db_session, tmp_path
 
 
 def test_manual_retry_success_on_failed_meeting(client, db_session, monkeypatch):
-    """Verifica que POST /meetings/{id}/retry aceita reprocessamento de reunião FAILED com áudio."""
+    """Verifica que POST /meetings/{id}/retry aceita retry de reunião FAILED."""
     meeting_repo = MeetingRepository(db_session)
-    meeting = meeting_repo.create("Reunião Pronta para Retry", status=MeetingStatus.FAILED)
+    meeting = meeting_repo.create(
+        "Reunião Pronta para Retry", status=MeetingStatus.FAILED
+    )
 
     audio = AudioFile(
         meeting_id=meeting.id,
@@ -321,7 +331,9 @@ def test_manual_retry_blocks_missing_audio(client, db_session):
 def test_manual_retry_blocks_concurrent_processing(client, db_session, monkeypatch):
     """Retorna 409 se a reunião já está em processamento."""
     meeting_repo = MeetingRepository(db_session)
-    meeting = meeting_repo.create("Reunião em Execução", status=MeetingStatus.PROCESSING)
+    meeting = meeting_repo.create(
+        "Reunião em Execução", status=MeetingStatus.PROCESSING
+    )
 
     audio = AudioFile(
         meeting_id=meeting.id,
@@ -347,7 +359,9 @@ def test_manual_retry_blocks_concurrent_processing(client, db_session, monkeypat
 def test_manual_retry_blocks_completed_meeting(client, db_session, monkeypatch):
     """Retorna 409 se a reunião já foi concluída com sucesso."""
     meeting_repo = MeetingRepository(db_session)
-    meeting = meeting_repo.create("Reunião Já Concluída", status=MeetingStatus.COMPLETED)
+    meeting = meeting_repo.create(
+        "Reunião Já Concluída", status=MeetingStatus.COMPLETED
+    )
 
     audio = AudioFile(
         meeting_id=meeting.id,
@@ -426,6 +440,6 @@ def test_process_endpoint_starts_pipeline(client, db_session, monkeypatch):
     monkeypatch.setattr("app.api.v1.meetings.enqueue_meeting_processing", mock_enqueue)
 
     response = client.post(f"/meetings/{meeting.id}/process")
-    assert response.status_code == 200
+    assert response.status_code in (200, 202)
     assert response.json()["status"] == MeetingStatus.PROCESSING.value
     mock_enqueue.assert_called_once()

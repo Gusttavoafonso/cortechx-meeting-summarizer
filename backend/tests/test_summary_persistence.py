@@ -192,4 +192,3 @@ def test_get_summary_endpoint_unprocessed(client, db_session):
     resp = client.get(f"/meetings/{meeting.id}/summary")
     assert resp.status_code == 404
     assert "Resumo ainda não gerado" in resp.json()["detail"]
-

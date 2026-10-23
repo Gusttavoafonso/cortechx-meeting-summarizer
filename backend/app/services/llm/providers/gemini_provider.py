@@ -79,12 +79,14 @@ class GeminiProvider(BaseLLMProvider):
                 raise LLMAuthenticationError(str(exc)) from exc
 
             if code == 429 or any(
-                token in err_msg for token in ("rate limit", "resource_exhausted", "quota")
+                token in err_msg
+                for token in ("rate limit", "resource_exhausted", "quota")
             ):
                 raise LLMRateLimitError(str(exc)) from exc
 
             if code in (408, 504) or any(
-                token in err_msg for token in ("timeout", "timed out", "deadline_exceeded")
+                token in err_msg
+                for token in ("timeout", "timed out", "deadline_exceeded")
             ):
                 raise LLMTimeoutError(f"Timeout na chamada ao Gemini: {exc}") from exc
 
@@ -96,7 +98,8 @@ class GeminiProvider(BaseLLMProvider):
             err_msg = str(getattr(exc, "message", None) or exc).lower()
 
             if code == 504 or any(
-                token in err_msg for token in ("timeout", "timed out", "deadline_exceeded")
+                token in err_msg
+                for token in ("timeout", "timed out", "deadline_exceeded")
             ):
                 raise LLMTimeoutError(f"Timeout no servidor do Gemini: {exc}") from exc
 
@@ -122,17 +125,20 @@ class GeminiProvider(BaseLLMProvider):
             err_msg = str(exc).lower()
 
             if isinstance(exc, (TimeoutError, asyncio.TimeoutError)) or any(
-                token in err_msg for token in ("timeout", "timed out", "deadline_exceeded")
+                token in err_msg
+                for token in ("timeout", "timed out", "deadline_exceeded")
             ):
                 raise LLMTimeoutError(f"Timeout na chamada ao Gemini: {exc}") from exc
 
             if any(
-                token in err_msg for token in ("rate limit", "resource_exhausted", "quota", "429")
+                token in err_msg
+                for token in ("rate limit", "resource_exhausted", "quota", "429")
             ):
                 raise LLMRateLimitError(str(exc)) from exc
 
             if isinstance(exc, ConnectionError) or any(
-                token in err_msg for token in ("connection", "unavailable", "502", "503")
+                token in err_msg
+                for token in ("connection", "unavailable", "502", "503")
             ):
                 raise LLMProviderError(
                     f"Indisponibilidade temporária do provedor Gemini: {exc}",
@@ -149,4 +155,3 @@ class GeminiProvider(BaseLLMProvider):
             raise LLMEmptyResponseError("O provider retornou uma resposta vazia.")
 
         return text
-

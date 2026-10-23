@@ -54,6 +54,7 @@ class TranscriptRepository:
             # Substitui o conteúdo e limpa segmentos antigos
             existing.content = content
             existing.segments.clear()
+            self.db.flush()
             transcript = existing
         else:
             transcript = Transcript(
@@ -64,7 +65,6 @@ class TranscriptRepository:
 
         for seg in segments:
             segment_model = TranscriptSegment(
-                transcript=transcript,
                 speaker=seg.speaker,
                 start_time=seg.start,
                 end_time=seg.end,
@@ -72,11 +72,15 @@ class TranscriptRepository:
             )
             transcript.segments.append(segment_model)
 
-        if commit:
-            self.db.commit()
-            self.db.refresh(transcript)
-        else:
-            self.db.flush()
+        try:
+            if commit:
+                self.db.commit()
+                self.db.refresh(transcript)
+            else:
+                self.db.flush()
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise
         return transcript
 
     @staticmethod
@@ -212,13 +216,13 @@ class TranscriptRepository:
         for transcript_segment, speaker in assignments:
             transcript_segment.speaker = speaker
 
-        if commit:
-            try:
+        try:
+            if commit:
                 self.db.commit()
-            except SQLAlchemyError:
-                self.db.rollback()
-                raise
-            self.db.refresh(transcript)
-        else:
-            self.db.flush()
+                self.db.refresh(transcript)
+            else:
+                self.db.flush()
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise
         return transcript

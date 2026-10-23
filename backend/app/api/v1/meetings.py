@@ -1,4 +1,14 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from collections.abc import Callable
+
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -7,9 +17,8 @@ from app.core.database import get_session
 from app.core.exceptions import (
     LLMError,
     TranscriptionAudioCorruptedError,
-    TranscriptionError,
 )
-from app.models.meeting_status import MeetingStatus
+from app.models.meeting_status import IN_PROGRESS_STATUSES, MeetingStatus
 from app.repositories.audio_repository import AudioRepository
 from app.repositories.meeting_repository import MeetingRepository
 from app.repositories.summary_repository import SummaryRepository
@@ -18,7 +27,12 @@ from app.repositories.transcript_repository import (
     TranscriptRepository,
 )
 from app.schemas.audio import AudioUploadResponse
-from app.schemas.meeting import MeetingCreate, MeetingResponse
+from app.schemas.meeting import (
+    MeetingCreate,
+    MeetingProcessResponse,
+    MeetingResponse,
+    MeetingStatusResponse,
+)
 from app.schemas.summary import SummaryResponse
 from app.schemas.transcription import TranscriptResponse
 from app.services.audio_storage import AudioStorageService
@@ -80,6 +94,10 @@ def get_diarization_service() -> DiarizationService:
     return DiarizationService(PyannoteDiarizationProvider())
 
 
+def get_meeting_job_dispatcher() -> Callable[[int, BackgroundTasks | None], None]:
+    return enqueue_meeting_processing
+
+
 def validate_meeting_id(meeting_id: int) -> int:
     if meeting_id <= 0:
         raise HTTPException(
@@ -114,6 +132,15 @@ def get_summary_service(
         summary_repository=summary_repo,
         meeting_repository=meeting_repo,
         transcript_repository=transcript_repo,
+    )
+
+
+def _mark_failed(
+    meeting_id: int, meeting_repo: MeetingRepository, message: str
+) -> None:
+    """Marca a reunião como falha no banco de dados com uma mensagem de erro."""
+    MeetingService(meeting_repo).update_status(
+        meeting_id, MeetingStatus.FAILED, error_message=message
     )
 
 
@@ -199,13 +226,17 @@ def upload_audio(
             detail=f"Reunião com ID {meeting_id} não encontrada.",
         )
 
-    # Impede substituição de áudio durante transcrição em andamento
-    if meeting.status == "transcribing":
+    # Impede substituição de áudio durante transcrição ou processamento em andamento
+    if meeting.status in (
+        "transcribing",
+        MeetingStatus.TRANSCRIBING,
+        MeetingStatus.PROCESSING,
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
                 "Não é possível enviar ou substituir o áudio enquanto a reunião "
-                "está sendo transcrita."
+                "está sendo transcrita ou processada."
             ),
         )
 
@@ -233,7 +264,9 @@ def upload_audio(
         # Se já existia transcrição para o áudio anterior, invalida/limpa
         transcript_repo.delete_by_meeting_id(meeting_id)
 
-        meeting_repo.update_status(meeting, status="audio_uploaded")
+        MeetingService(meeting_repo).update_status(
+            meeting_id, MeetingStatus.AUDIO_UPLOADED
+        )
     except Exception as db_exc:
         # Se a persistência falhar, remove o arquivo gravado para evitar arquivo órfão
         storage_service.delete_file(relative_path)
@@ -322,10 +355,14 @@ def transcribe_meeting(
         )
 
     # Impede execuções concorrentes na mesma reunião
-    if meeting.status == "transcribing":
+    if meeting.status in (
+        "transcribing",
+        MeetingStatus.TRANSCRIBING,
+        MeetingStatus.PROCESSING,
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="A reunião já está em processo de transcrição.",
+            detail="A reunião já está em processo de transcrição ou processamento.",
         )
 
     audio_record = audio_repo.get_by_meeting_id(meeting_id)
@@ -356,25 +393,33 @@ def transcribe_meeting(
         )
 
     # Atualiza status para transcrevendo
-    meeting_repo.update_status(meeting, status="transcribing")
+    MeetingService(meeting_repo).update_status(meeting_id, MeetingStatus.TRANSCRIBING)
 
     # Executa transcrição com tratamento de falha no provedor de STT
     try:
         result = stt_service.transcribe(audio_file_path, language="pt")
     except (OSError, IOError) as io_err:
-        meeting_repo.update_status(meeting, status="audio_uploaded")
+        _mark_failed(meeting_id, meeting_repo, f"Erro de leitura do áudio: {io_err}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erro inesperado durante a leitura do arquivo de áudio: {io_err}",
         )
     except TranscriptionAudioCorruptedError as corr_err:
-        meeting_repo.update_status(meeting, status="audio_uploaded")
+        _mark_failed(
+            meeting_id,
+            meeting_repo,
+            f"Arquivo de áudio corrompido ou formato ilegível: {corr_err}",
+        )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"Arquivo de áudio corrompido ou formato ilegível: {corr_err}",
         )
-    except (TranscriptionError, Exception) as stt_err:
-        meeting_repo.update_status(meeting, status="audio_uploaded")
+    except Exception as stt_err:
+        _mark_failed(
+            meeting_id,
+            meeting_repo,
+            f"Falha no serviço de Speech-to-Text: {stt_err}",
+        )
         err_msg = str(stt_err).lower()
         if any(
             token in err_msg
@@ -396,7 +441,12 @@ def transcribe_meeting(
 
     # Tratamento de resposta vazia do STT (áudio mudo ou inaudível)
     if not result.text or not result.text.strip():
-        meeting_repo.update_status(meeting, status="audio_uploaded")
+        _mark_failed(
+            meeting_id,
+            meeting_repo,
+            "O serviço de transcrição retornou uma resposta vazia. "
+            "Áudio mudo ou inaudível.",
+        )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
@@ -413,18 +463,20 @@ def transcribe_meeting(
             segments=result.segments,
             commit=False,
         )
-        meeting_repo.update_status(meeting, status="transcribed", commit=False)
+        MeetingService(meeting_repo).update_status(
+            meeting_id, MeetingStatus.TRANSCRIBED
+        )
         db.commit()
     except InvalidTranscriptSegmentError as exc:
         db.rollback()
-        meeting_repo.update_status(meeting, status="audio_uploaded")
+        _mark_failed(meeting_id, meeting_repo, str(exc))
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
     except SQLAlchemyError as exc:
         db.rollback()
-        meeting_repo.update_status(meeting, status="audio_uploaded")
+        _mark_failed(meeting_id, meeting_repo, "Falha ao persistir a transcrição.")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Falha ao persistir a transcrição.",
@@ -461,6 +513,15 @@ def diarize_meeting(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Reunião com ID {meeting_id} não encontrada.",
+        )
+
+    if MeetingStatus(meeting.status) in IN_PROGRESS_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Não é possível executar a diarização enquanto a reunião "
+                "estiver em transcrição ou processamento."
+            ),
         )
 
     audio_record = audio_repo.get_by_meeting_id(meeting_id)
@@ -546,6 +607,72 @@ def get_meeting_transcript(
 
 
 @router.post(
+    "/{meeting_id}/process",
+    response_model=MeetingProcessResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Iniciar processamento assíncrono da reunião",
+    description=(
+        "Valida a reunião e seu áudio, reserva o estado PROCESSING para impedir "
+        "execuções duplicadas simultâneas e dispara o pipeline em background."
+    ),
+)
+def process_meeting_async(
+    meeting_id: int,
+    background_tasks: BackgroundTasks,
+    meeting_repo: MeetingRepository = Depends(get_meeting_repository),
+    audio_repo: AudioRepository = Depends(get_audio_repository),
+    storage_service: AudioStorageService = Depends(get_audio_storage_service),
+    job_dispatcher: Callable[[int, BackgroundTasks | None], None] = Depends(
+        get_meeting_job_dispatcher
+    ),
+) -> MeetingProcessResponse:
+    validate_meeting_id(meeting_id)
+    meeting = meeting_repo.get_by_id(meeting_id)
+
+    if not meeting:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reunião com ID {meeting_id} não encontrada.",
+        )
+
+    if meeting.status in (MeetingStatus.PROCESSING, MeetingStatus.TRANSCRIBING):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A reunião com ID {meeting_id} já está em processamento.",
+        )
+
+    audio_record = audio_repo.get_by_meeting_id(meeting_id)
+    if not audio_record or not storage_service.file_exists(audio_record.file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Arquivo de áudio não encontrado para a reunião com ID {meeting_id}."
+            ),
+        )
+
+    previous_status = meeting.status
+    if not meeting_repo.try_claim_processing(meeting_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A reunião com ID {meeting_id} já está em processamento.",
+        )
+
+    try:
+        job_dispatcher(meeting_id, background_tasks)
+    except Exception as exc:
+        MeetingService(meeting_repo).update_status(meeting_id, previous_status)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Não foi possível enfileirar o processamento da reunião: {exc}",
+        ) from exc
+
+    return MeetingProcessResponse(
+        meeting_id=meeting_id,
+        status=MeetingStatus.PROCESSING,
+    )
+
+
+@router.post(
     "/{meeting_id}/summary",
     response_model=SummaryResponse,
     status_code=status.HTTP_201_CREATED,
@@ -581,6 +708,11 @@ def create_summary(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"A reunião com ID {meeting_id} já está sendo processada.",
         )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Falha ao gerar resumo da reunião: {exc}",
+        ) from exc
 
 
 @router.get(
@@ -622,7 +754,8 @@ def get_summary(
         "### Regras e Bloqueios:\n"
         "- **404 Not Found:** Reunião não encontrada.\n"
         "- **422 Unprocessable Content:** Áudio ausente no banco ou no disco.\n"
-        "- **409 Conflict:** Reunião já em processamento (`processing` ou `transcribing`).\n"
+        "- **409 Conflict:** Reunião já em processamento "
+        "(`processing` ou `transcribing`).\n"
         "- **409 Conflict:** Reunião já concluída com sucesso (`completed`).\n"
         "- **409 Conflict:** Reunião em estado que não seja falha (`failed`)."
     ),
@@ -646,7 +779,9 @@ def retry_meeting(
     if not audio_record or not storage_service.file_exists(audio_record.file_path):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"Arquivo de áudio não encontrado para a reunião com ID {meeting_id}.",
+            detail=(
+                f"Arquivo de áudio não encontrado para a reunião com ID {meeting_id}."
+            ),
         )
 
     current_status = (
@@ -654,7 +789,10 @@ def retry_meeting(
         if hasattr(meeting.status, "value")
         else str(meeting.status).lower()
     )
-    if current_status in (MeetingStatus.PROCESSING.value, MeetingStatus.TRANSCRIBING.value):
+    if current_status in (
+        MeetingStatus.PROCESSING.value,
+        MeetingStatus.TRANSCRIBING.value,
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="A reunião já está em processamento.",
@@ -675,65 +813,31 @@ def retry_meeting(
             ),
         )
 
-    meeting_repo.update_status(meeting, MeetingStatus.PROCESSING)
+    MeetingService(meeting_repo).update_status(meeting_id, MeetingStatus.PROCESSING)
     enqueue_meeting_processing(meeting_id, background_tasks)
     return MeetingResponse.model_validate(meeting)
 
 
-@router.post(
-    "/{meeting_id}/process",
-    response_model=MeetingResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Processar reunião de ponta a ponta",
-    description=(
-        "Inicia o pipeline completo de processamento em segundo plano para uma reunião.\n\n"
-        "### Regras e Bloqueios:\n"
-        "- **404 Not Found:** Reunião não encontrada.\n"
-        "- **422 Unprocessable Content:** Áudio ausente no banco ou no disco.\n"
-        "- **409 Conflict:** Reunião já em processamento (`processing` ou `transcribing`).\n"
-        "- **409 Conflict:** Reunião já concluída com sucesso (`completed`)."
-    ),
+@router.get(
+    "/{meeting_id}/status",
+    response_model=MeetingStatusResponse,
+    summary="Consultar status da reunião",
 )
-def process_meeting(
+def get_meeting_status(
     meeting_id: int,
-    background_tasks: BackgroundTasks,
-    meeting_repo: MeetingRepository = Depends(get_meeting_repository),
-    audio_repo: AudioRepository = Depends(get_audio_repository),
-    storage_service: AudioStorageService = Depends(get_audio_storage_service),
-) -> MeetingResponse:
+    meeting_service: MeetingService = Depends(get_meeting_service),
+) -> MeetingStatusResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id(meeting_id)
-    if not meeting:
+    try:
+        meeting = meeting_service.get_by_id(meeting_id)
+    except MeetingNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Reunião com ID {meeting_id} não encontrada.",
+            detail=f"Reunião com id {meeting_id} não encontrada.",
         )
-
-    audio_record = audio_repo.get_by_meeting_id(meeting_id)
-    if not audio_record or not storage_service.file_exists(audio_record.file_path):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"Arquivo de áudio não encontrado para a reunião com ID {meeting_id}.",
-        )
-
-    current_status = (
-        meeting.status.value
-        if hasattr(meeting.status, "value")
-        else str(meeting.status).lower()
+    return MeetingStatusResponse(
+        meeting_id=meeting.id,
+        status=meeting.status,
+        updated_at=meeting.updated_at,
+        last_error=meeting.last_error,
     )
-    if current_status in (MeetingStatus.PROCESSING.value, MeetingStatus.TRANSCRIBING.value):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="A reunião já está em processamento.",
-        )
-
-    if current_status == MeetingStatus.COMPLETED.value:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="A reunião já foi processada com sucesso.",
-        )
-
-    meeting_repo.update_status(meeting, MeetingStatus.PROCESSING)
-    enqueue_meeting_processing(meeting_id, background_tasks)
-    return MeetingResponse.model_validate(meeting)
-

@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import MagicMock
 
 import pytest
-
 from app.core.exceptions import (
     LLMAuthenticationError,
     LLMTimeoutError,
@@ -18,7 +16,9 @@ from app.workers.job_runner import JobRunner
 
 
 class FakeMeeting:
-    def __init__(self, id: int = 1, status: MeetingStatus = MeetingStatus.AUDIO_UPLOADED):
+    def __init__(
+        self, id: int = 1, status: MeetingStatus = MeetingStatus.AUDIO_UPLOADED
+    ):
         self.id = id
         self.status = status
         self.audio = MagicMock(file_path="audio/meeting_1.wav")

@@ -10,7 +10,6 @@ from app.core.exceptions import (
     LLMAuthenticationError,
     LLMConfigurationError,
     LLMProviderError,
-    LLMRateLimitError,
     LLMTimeoutError,
     TranscriptionAudioCorruptedError,
     TranscriptionRateLimitError,
@@ -492,10 +491,14 @@ def test_gemini_provider_retries_on_temporary_unavailability(monkeypatch, caplog
 
 def test_gemini_provider_avoids_retry_on_invalid_configuration():
     """Evitar retry para configuração inválida: Validação e autenticação sem retry."""
-    with pytest.raises(LLMConfigurationError, match="Chave de API do Gemini ausente ou inválida"):
+    with pytest.raises(
+        LLMConfigurationError, match="Chave de API do Gemini ausente ou inválida"
+    ):
         GeminiProvider(api_key="", model="gemini-1.5-flash")
 
-    with pytest.raises(LLMConfigurationError, match="Chave de API do Gemini ausente ou inválida"):
+    with pytest.raises(
+        LLMConfigurationError, match="Chave de API do Gemini ausente ou inválida"
+    ):
         GeminiProvider(api_key="   ", model="gemini-1.5-flash")
 
     with pytest.raises(LLMConfigurationError, match="Modelo do Gemini não informado"):
@@ -541,4 +544,3 @@ def test_gemini_provider_avoids_retry_on_invalid_inputs(monkeypatch, caplog):
 
     assert attempts == 1
     assert "falhou após 1 tentativa(s)" in caplog.text
-

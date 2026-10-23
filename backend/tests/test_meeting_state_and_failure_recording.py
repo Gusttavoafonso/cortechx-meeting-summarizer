@@ -3,14 +3,17 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
-
 from app.core.exceptions import (
     LLMAuthenticationError,
     LLMTimeoutError,
     TranscriptionAudioCorruptedError,
     TranscriptionTimeoutError,
 )
-from app.core.failure_recorder import FailureRecord, FailureRecorder, sanitize_error_message
+from app.core.failure_recorder import (
+    FailureRecord,
+    FailureRecorder,
+    sanitize_error_message,
+)
 from app.core.retry import RetryPolicy
 from app.models.meeting_status import MeetingStatus
 from app.services.processing.meeting_processor import MeetingProcessor
@@ -84,7 +87,9 @@ def test_meeting_state_marked_failed_when_all_attempts_exhausted():
     runner = JobRunner(retry_policy=policy, meeting_repository=meeting_repo)
 
     with pytest.raises(TranscriptionTimeoutError):
-        runner.execute_operation(always_failing, meeting=meeting, stage="speech_to_text")
+        runner.execute_operation(
+            always_failing, meeting=meeting, stage="speech_to_text"
+        )
 
     assert attempts == 3
     assert meeting.status == MeetingStatus.FAILED
@@ -112,7 +117,9 @@ def test_meeting_state_marked_failed_immediately_on_definitive_error():
     runner = JobRunner(retry_policy=policy, meeting_repository=meeting_repo)
 
     with pytest.raises(LLMAuthenticationError):
-        runner.execute_operation(definitive_fail, meeting=meeting, stage="summarization")
+        runner.execute_operation(
+            definitive_fail, meeting=meeting, stage="summarization"
+        )
 
     assert attempts == 1
     assert meeting.status == MeetingStatus.FAILED
@@ -138,7 +145,9 @@ def test_meeting_state_never_completed_when_required_stage_fails():
 
     # STT sucede
     stt_service = MagicMock()
-    stt_service.transcribe.return_value = MagicMock(text="Texto transcrito", segments=[])
+    stt_service.transcribe.return_value = MagicMock(
+        text="Texto transcrito", segments=[]
+    )
 
     # Diarização sucede
     diarization_service = MagicMock()
@@ -163,7 +172,11 @@ def test_meeting_state_never_completed_when_required_stage_fails():
 
     # Reunião nunca foi marcada como COMPLETED; terminou como FAILED
     assert meeting.status == MeetingStatus.FAILED
-    assert meeting_repo.update_status.call_args_list[-1][0][1] == MeetingStatus.FAILED
+    last_call = meeting_repo.update_status.call_args
+    status_passed = last_call.kwargs.get("status") or (
+        last_call.args[1] if len(last_call.args) > 1 else None
+    )
+    assert status_passed == MeetingStatus.FAILED
 
 
 # =====================================================================
@@ -191,7 +204,7 @@ def test_sanitize_error_message_redacts_api_keys_and_tokens():
 
 
 def test_failure_recorder_captures_minimal_context():
-    """Registra contexto mínimo: etapa, tipo, mensagem resumida, tentativas e horário."""
+    """Registra contexto mínimo: etapa, tipo, mensagem, tentativas e horário."""
     fake_token = "gsk_" + "supersecretkey1234567"
     exc = TranscriptionAudioCorruptedError(
         f"Áudio inválido com token secreto: {fake_token}"
@@ -243,6 +256,8 @@ def test_job_runner_records_failure_identifying_stage_and_attempts():
     assert runner.last_failure is not None
     assert runner.last_failure.stage == "diarization"
     assert runner.last_failure.error_type == "RuntimeError"
-    assert runner.last_failure.attempts == 1  # RuntimeError não é recuperável -> 1 tentativa
+    assert (
+        runner.last_failure.attempts == 1
+    )  # RuntimeError não é recuperável -> 1 tentativa
     assert runner.last_failure.is_recoverable is False
     assert meeting.status == MeetingStatus.FAILED
