@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field, HttpUrl, SecretStr, field_validator
+from pydantic import AliasChoices, Field, HttpUrl, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -61,9 +61,18 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     summary_chunk_size: int = 12000
     summary_chunk_overlap: int = 500
+    
     gemini_api_key: SecretStr | None = None
-    notion_token: SecretStr | None = None
-    notion_database_id: str | None = None
+
+    notion_token: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices("NOTION_API_KEY", "NOTION_TOKEN"),
+    )
+    notion_database_id: str | None = Field(
+        default=None,
+        validation_alias="NOTION_DATABASE_ID",
+    )
+
     discord_webhook_url: HttpUrl | None = None
     huggingface_token: SecretStr | None = None
 
