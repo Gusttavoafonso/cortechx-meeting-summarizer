@@ -236,12 +236,9 @@ backend/
 
 ## Disparo das integrações externas
 
-O `SummaryService` é o ponto de orquestração do pipeline. Primeiro, o resultado estruturado
-(resumo e tarefas) é persistido; em seguida a reunião recebe o status `completed`; somente
-então o `IntegrationService` tenta entregar o resultado ao Discord e ao Notion. Se a geração
-ou persistência falhar, o método encerra com erro e nenhuma integração é chamada. Erros de
-entrega externa são registrados individualmente e não revertem o resumo nem alteram o status
-principal da reunião.
+O disparo das integrações ocorre de forma assíncrona após a conclusão do pipeline de processamento da reunião (`MeetingProcessor` marca o status como `completed`). Em segundo plano, o worker Celery (`deliver_integrations_task` via `IntegrationDeliveryService`) tenta entregar o resultado persistido aos provedores habilitados (Discord e Notion).
+
+Se o processamento ou persistência da reunião falhar, o pipeline encerra em `failed` e nenhuma integração é acionada. Falhas em entregas externas são registradas individualmente na tabela `integration_deliveries` e nunca revertem o resumo nem alteram o status principal da reunião.
 
 As integrações são opt-in e desabilitadas por padrão. Configure no `.env`:
 
@@ -249,11 +246,8 @@ As integrações são opt-in e desabilitadas por padrão. Configure no `.env`:
 DISCORD_ENABLED=true
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 NOTION_ENABLED=true
-NOTION_TOKEN=secret_...
+NOTION_API_KEY=secret_...
 NOTION_DATABASE_ID=...
 ```
 
-Uma integração só é executada quando estiver habilitada **e** suas credenciais/configuração
-estiverem presentes. Cada provider é independente; o resultado de `dispatch` contém `SUCCESS`
-ou `FAILED` por provider executado. Os envios são síncronos após a persistência; falhas não
-são reprocessadas automaticamente nesta versão.
+Uma integração só é executada quando estiver habilitada **e** suas credenciais/configurações estiverem presentes. Cada provider opera de forma isolada (`success` ou `failed`). Falhas transitórias sofrem retry automático com backoff exponencial no Celery. Caso necessário, é possível disparar o reenvio manual via rota `POST /meetings/{meeting_id}/integrations/retry` sem reexecutar o pipeline de transcrição e IA.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -46,6 +47,7 @@ class MeetingProcessor:
         task_extraction_service: Any | None = None,
         summary_repository: Any | None = None,
         retry_policy: RetryPolicy | None = None,
+        integration_dispatcher: Callable[..., Any] | None = None,
     ) -> None:
         self._meeting_repository = meeting_repository
         self._transcript_repository = transcript_repository
@@ -60,6 +62,9 @@ class MeetingProcessor:
         self._retry_policy = retry_policy or RetryPolicy.from_settings()
         self._job_runner = JobRunner(
             retry_policy=self._retry_policy,
+        )
+        self._integration_dispatcher = (
+            integration_dispatcher or enqueue_integration_delivery
         )
 
     def process_meeting(
@@ -235,8 +240,17 @@ class MeetingProcessor:
                 MeetingStatus.COMPLETED,
             )
 
-            # Dispara as integrações em background informando que é um novo resultado
-            enqueue_integration_delivery(meeting_id, reset=True)
+            # Dispara as integrações em background informando que é um novo resultado.
+            # Falhas no agendamento/disparo externo não devem abortar o pipeline já
+            # concluído.
+            try:
+                self._integration_dispatcher(meeting_id, reset=True)
+            except Exception:
+                logger.exception(
+                    "Falha ao agendar integrações para a reunião %s; "
+                    "o status da reunião permanece COMPLETED.",
+                    meeting_id,
+                )
 
         except Exception as exc:
             logger.exception("Falha no pipeline da reunião %s", meeting_id)

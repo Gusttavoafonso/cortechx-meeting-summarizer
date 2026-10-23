@@ -16,6 +16,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from app.core.exceptions import DefinitiveError
 from app.integrations.configuration import (
     ProviderConfigurationError,
     ProviderDisabledError,
@@ -65,7 +66,7 @@ class ConfigurationResolver(Protocol):
     ) -> dict[str, Any]: ...
 
 
-class MeetingNotDeliverableError(ValueError):
+class MeetingNotDeliverableError(DefinitiveError, ValueError):
     """A reunião não existe ou ainda não está COMPLETED (resultado persistido)."""
 
 

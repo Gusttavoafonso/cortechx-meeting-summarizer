@@ -433,3 +433,39 @@ def test_process_meeting_marks_as_failed_when_summary_persistence_fails(
         call(meeting, status=MeetingStatus.PROCESSING),
         call(meeting, status=MeetingStatus.FAILED),
     ]
+
+
+def test_process_meeting_keeps_completed_status_when_integration_dispatcher_fails(
+    processor_dependencies: dict[str, MagicMock],
+    meeting: MagicMock,
+) -> None:
+    failing_dispatcher = MagicMock(
+        side_effect=RuntimeError("Celery/Broker connection error")
+    )
+
+    processor = MeetingProcessor(
+        **processor_dependencies,
+        integration_dispatcher=failing_dispatcher,
+    )
+
+    processor_dependencies["meeting_repository"].get_by_id.return_value = meeting
+    processor_dependencies[
+        "audio_storage_service"
+    ].get_file_path.return_value = "/tmp/meeting.wav"
+    processor_dependencies[
+        "speech_to_text_service"
+    ].transcribe.return_value = MagicMock(text="Texto", segments=[MagicMock()])
+    processor_dependencies[
+        "transcript_repository"
+    ].save_transcript.return_value = MagicMock()
+    processor_dependencies["chunking_service"].split.return_value = []
+
+    # Não deve propagar a exceção do dispatcher de integrações
+    processor.process_meeting(meeting.id)
+
+    meeting_repo = processor_dependencies["meeting_repository"]
+    assert meeting_repo.update_status.call_args_list == [
+        call(meeting, status=MeetingStatus.PROCESSING),
+        call(meeting, status=MeetingStatus.COMPLETED),
+    ]
+    failing_dispatcher.assert_called_once_with(meeting.id, reset=True)

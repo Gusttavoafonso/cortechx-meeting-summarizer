@@ -285,3 +285,31 @@ def test_discord_failure_does_not_prevent_notion_delivery(
     assert outcomes == {"discord": OUTCOME_FAILED, "notion": OUTCOME_SUCCESS}
     db_session.refresh(meeting)
     assert MeetingStatus(meeting.status) == MeetingStatus.COMPLETED
+
+
+def test_deliver_integrations_task_retries_only_failed_providers_without_reset():
+    from unittest.mock import MagicMock, patch
+    from celery.exceptions import Retry
+
+    from app.integrations.delivery import DeliveryReport, ProviderOutcome
+    from app.workers.integration_job import deliver_integrations_task
+
+    mock_report = DeliveryReport(
+        meeting_id=42,
+        outcomes=[
+            ProviderOutcome(provider="discord", status="success"),
+            ProviderOutcome(provider="notion", status="failed", retryable=True),
+        ],
+    )
+
+    with patch.object(deliver_integrations_task, "retry", side_effect=Retry()) as mock_retry, patch(
+        "app.workers.integration_job.run_integration_delivery_job",
+        return_value=mock_report,
+    ):
+        with pytest.raises(Retry):
+            deliver_integrations_task(42, providers=None, reset=True)
+
+    mock_retry.assert_called_once()
+    _, kwargs = mock_retry.call_args
+    assert kwargs["kwargs"] == {"providers": ["notion"], "reset": False}
+    assert kwargs["countdown"] > 0

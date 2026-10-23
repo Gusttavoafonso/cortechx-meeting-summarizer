@@ -107,7 +107,14 @@ def deliver_integrations_task(
             report.retryable_providers,
             delay,
         )
-        raise self.retry(countdown=delay)
+        raise self.retry(
+            args=[meeting_id],
+            kwargs={
+                "providers": list(report.retryable_providers),
+                "reset": False,
+            },
+            countdown=delay,
+        )
 
 
 def enqueue_integration_delivery(
