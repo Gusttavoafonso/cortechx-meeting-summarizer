@@ -58,7 +58,9 @@ class TestDiscordProviderConfiguration:
     def test_supports_secret_str_and_http_url(self):
         secret_url = SecretStr("https://discord.com/api/webhooks/123/secret_token")
         provider = DiscordProvider(webhook_url=secret_url)
-        assert provider.webhook_url == "https://discord.com/api/webhooks/123/secret_token"
+        assert (
+            provider.webhook_url == "https://discord.com/api/webhooks/123/secret_token"
+        )
 
         http_url = HttpUrl("https://discord.com/api/webhooks/123/http_url")
         provider2 = DiscordProvider(webhook_url=http_url)

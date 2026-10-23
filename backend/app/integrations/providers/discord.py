@@ -314,13 +314,13 @@ class DiscordProvider(IntegrationProvider):
         header_val = response.headers.get("Retry-After")
         if header_val:
             try:
-                return min(max(float(header_val), 0.1), 10.0)
+                return min(max(float(header_val), 0.1), 60.0)
             except (ValueError, TypeError):
                 pass
         try:
             data = response.json()
             if isinstance(data, dict) and "retry_after" in data:
-                return min(max(float(data["retry_after"]), 0.1), 10.0)
+                return min(max(float(data["retry_after"]), 0.1), 60.0)
         except Exception:
             pass
         return 1.0

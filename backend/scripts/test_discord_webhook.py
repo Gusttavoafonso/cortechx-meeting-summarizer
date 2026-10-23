@@ -65,11 +65,14 @@ def main() -> None:
         print("\n❌ Nenhuma URL de webhook foi fornecida ou configurada.")
         print("Você pode fornecer a URL de duas formas:")
         print("  1. Passando o argumento --url:")
-        print("     docker compose exec backend python -m "
-              "scripts.test_discord_webhook --url 'SUA_URL'")
+        print(
+            "     docker compose exec backend python -m "
+            "scripts.test_discord_webhook --url 'SUA_URL'"
+        )
         print("  2. Configurando DISCORD_WEBHOOK_URL no .env e executando:")
-        print("     docker compose exec backend python -m "
-              "scripts.test_discord_webhook\n")
+        print(
+            "     docker compose exec backend python -m scripts.test_discord_webhook\n"
+        )
         sys.exit(1)
 
     print("\n🚀 Enviando reunião de demonstração para o Discord...")
