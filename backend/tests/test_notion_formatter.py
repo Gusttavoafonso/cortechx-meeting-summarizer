@@ -31,10 +31,7 @@ def payload(**overrides):
 
 def texts(blocks):
     return [
-        "".join(
-            item["text"]["content"]
-            for item in block[block["type"]]["rich_text"]
-        )
+        "".join(item["text"]["content"] for item in block[block["type"]]["rich_text"])
         for block in blocks
     ]
 
@@ -164,12 +161,26 @@ def test_task_deadline_accepts_text():
     assert "Revisar backend — Prazo: sexta-feira" in texts(blocks)
 
 
+def test_task_deadline_empty_or_whitespace_omits_suffix():
+    blocks = NotionFormatter().blocks(
+        payload(
+            tasks=[
+                TaskIntegrationPayload(
+                    description="Revisar backend",
+                    deadline="   ",
+                )
+            ]
+        )
+    )
+
+    assert "Revisar backend" in texts(blocks)
+    assert "Prazo:" not in " ".join(texts(blocks))
+
+
 def test_long_summary_is_split_without_loss():
     summary = "a" * 5_000
     blocks = NotionFormatter().blocks(payload(summary=summary))
-    paragraphs = [
-        block for block in blocks if block["type"] == "paragraph"
-    ]
+    paragraphs = [block for block in blocks if block["type"] == "paragraph"]
 
     rebuilt = "".join(
         item["text"]["content"]
@@ -192,6 +203,5 @@ def test_long_title_is_not_truncated():
 
     assert "".join(item["text"]["content"] for item in items) == title
     assert all(
-        len(item["text"]["content"]) <= NotionFormatter.text_limit
-        for item in items
+        len(item["text"]["content"]) <= NotionFormatter.text_limit for item in items
     )

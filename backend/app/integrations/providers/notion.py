@@ -65,25 +65,24 @@ class NotionProvider(IntegrationProvider):
         formatter: NotionFormatter | None = None,
         **kwargs: Any,
     ) -> None:
+        candidate_token = (
+            token
+            if token is not None
+            else (kwargs.get("api_key") or kwargs.get("notion_api_key"))
+        )
         raw_token = (
-            settings.notion_token
-            if token is None
-            else token
+            settings.notion_token if candidate_token is None else candidate_token
         )
 
         if isinstance(raw_token, SecretStr):
             raw_token = raw_token.get_secret_value()
 
         raw_database_id = (
-            settings.notion_database_id
-            if database_id is None
-            else database_id
+            settings.notion_database_id if database_id is None else database_id
         )
 
         self.token = _plain_text(raw_token)
-        self.database_id = _normalize_database_id(
-            _plain_text(raw_database_id)
-        )
+        self.database_id = _normalize_database_id(_plain_text(raw_database_id))
         self.timeout = timeout
         self.max_retries = max(0, max_retries)
         self._client = client
@@ -339,15 +338,10 @@ class NotionProvider(IntegrationProvider):
                 return "Token do Notion inválido ou sem autenticação."
 
             if status == 403:
-                return (
-                    "A integração não tem permissão para acessar "
-                    "a database."
-                )
+                return "A integração não tem permissão para acessar a database."
 
             if status == 404:
-                return (
-                    "Database do Notion não encontrada ou não compartilhada."
-                )
+                return "Database do Notion não encontrada ou não compartilhada."
 
             if status == 429:
                 return "Limite de requisições do Notion excedido."
