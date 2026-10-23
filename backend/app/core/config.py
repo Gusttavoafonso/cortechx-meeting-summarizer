@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     summary_chunk_size: int = 12000
     summary_chunk_overlap: int = 500
-    
+
     gemini_api_key: SecretStr | None = None
 
     notion_token: SecretStr | None = Field(
@@ -83,6 +83,17 @@ class Settings(BaseSettings):
     WHISPER_COMPUTE_TYPE: str = Field(
         default="auto", validation_alias="WHISPER_COMPUTE_TYPE"
     )
+
+    # Configurações da Política de Retry (Issue #26)
+    RETRY_MAX_ATTEMPTS: int = Field(default=3, validation_alias="RETRY_MAX_ATTEMPTS")
+    RETRY_INITIAL_DELAY: float = Field(
+        default=1.0, validation_alias="RETRY_INITIAL_DELAY"
+    )
+    RETRY_BACKOFF_FACTOR: float = Field(
+        default=2.0, validation_alias="RETRY_BACKOFF_FACTOR"
+    )
+    RETRY_MAX_DELAY: float = Field(default=10.0, validation_alias="RETRY_MAX_DELAY")
+    RETRY_JITTER: bool = Field(default=False, validation_alias="RETRY_JITTER")
 
     CELERY_BROKER_URL: str = Field(
         default="redis://localhost:6379/0",

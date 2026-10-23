@@ -1,4 +1,5 @@
 """Alias para app.api.v1.meetings mantendo compatibilidade de importações."""
+
 from app.api.v1.meetings import (
     create_meeting,
     get_meeting,

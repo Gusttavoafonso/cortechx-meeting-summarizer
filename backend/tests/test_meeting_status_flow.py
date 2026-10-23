@@ -78,8 +78,8 @@ def storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     audio_storage = AudioStorageService(base_storage_path=tmp_path)
 
     app.dependency_overrides[get_audio_storage_service] = lambda: audio_storage
-    app.dependency_overrides[get_transcription_service] = (
-        lambda: MockSpeechToTextService()
+    app.dependency_overrides[get_transcription_service] = lambda: (
+        MockSpeechToTextService()
     )
     app.dependency_overrides[get_diarization_service] = lambda: MagicMock()
     app.dependency_overrides[get_meeting_job_dispatcher] = lambda: _noop_dispatcher
@@ -99,9 +99,7 @@ def storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         app.dependency_overrides.pop(dependency, None)
 
 
-
 # Helpers
-
 
 
 def _create_meeting(client: TestClient, title: str = "Reunião de status") -> int:
@@ -184,9 +182,7 @@ def _run_worker(
     )
 
 
-
 # Estado inicial, após upload e consulta pela API
-
 
 
 def test_new_meeting_starts_as_received(client: TestClient) -> None:
@@ -225,9 +221,7 @@ def test_status_is_audio_uploaded_after_upload(client: TestClient) -> None:
     assert client.get(f"/meetings/{meeting_id}").json()["status"] == "audio_uploaded"
 
 
-
 # Início do processamento, durante e após o worker
-
 
 
 def test_process_reserves_processing_state_and_start_time(
@@ -324,9 +318,7 @@ def test_new_attempt_after_failure_clears_previous_error(
     assert row.processing_started_at is not None
 
 
-
 # Transições (service) e metadados de falha
-
 
 
 @pytest.mark.parametrize(
@@ -414,9 +406,7 @@ def test_invalid_transition_through_api_returns_409(
     assert _get_status(client, meeting_id)["status"] == "completed"
 
 
-
 # Processamento duplicado / simultâneo
-
 
 
 @pytest.mark.parametrize("action", ["transcribe", "diarize", "summary", "process"])
@@ -432,9 +422,7 @@ def test_actions_are_rejected_while_meeting_is_processing(
     assert _get_status(client, meeting_id)["status"] == "processing"
 
 
-
 # Fluxo síncrono de resumo: COMPLETED / FAILED / retentativa
-
 
 
 def test_summary_success_marks_meeting_completed(client: TestClient) -> None:

@@ -1,4 +1,9 @@
 from app.core.config import settings
+from app.core.exceptions import (
+    MeetingNotFoundError,
+    SummaryAlreadyProcessingError,
+    TranscriptNotFoundError,
+)
 from app.models.meeting_status import IN_PROGRESS_STATUSES, MeetingStatus
 from app.repositories.meeting_repository import MeetingRepository
 from app.repositories.summary_repository import SummaryRepository
@@ -8,22 +13,13 @@ from app.services.meeting_service import MeetingService
 from app.services.summarization.service import SummarizationService
 
 
-class MeetingNotFoundError(Exception):
-    """A reunião informada não existe."""
-
-class TranscriptNotFoundError(Exception):
-    """A reunião existe, mas ainda não possui transcrição."""
-
-class SummaryAlreadyProcessingError(Exception):
-    """Já existe um processamento de resumo em andamento para a reunião informada."""
-
 class SummaryService:
     def __init__(
-            self,
-            summarization: SummarizationService,
-            summary_repository: SummaryRepository,
-            meeting_repository: MeetingRepository,
-            transcript_repository: TranscriptRepository,
+        self,
+        summarization: SummarizationService,
+        summary_repository: SummaryRepository,
+        meeting_repository: MeetingRepository,
+        transcript_repository: TranscriptRepository,
     ) -> None:
         self.summarization = summarization
         self.summary_repository = summary_repository
@@ -36,15 +32,12 @@ class SummaryService:
         if meeting is None:
             raise MeetingNotFoundError(meeting_id)
 
-        if meeting.status == MeetingStatus.PROCESSING:
+        if MeetingStatus(meeting.status) in IN_PROGRESS_STATUSES:
             raise SummaryAlreadyProcessingError(meeting_id)
 
         transcript = self.transcript_repository.get_by_meeting_id(meeting_id)
         if transcript is None or not transcript.raw_text.strip():
             raise TranscriptNotFoundError(meeting_id)
-
-        if MeetingStatus(meeting.status) in IN_PROGRESS_STATUSES:
-            raise SummaryAlreadyProcessingError(meeting_id)
 
         self.meeting_service.update_status(meeting_id, MeetingStatus.PROCESSING)
 

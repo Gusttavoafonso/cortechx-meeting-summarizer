@@ -1,13 +1,10 @@
 from datetime import datetime, timezone
 
+from app.core.exceptions import MeetingNotFoundError
 from app.models.meeting import Meeting
 from app.models.meeting_status import VALID_TRANSITIONS, MeetingStatus
 from app.repositories.meeting_repository import MeetingRepository
 from app.schemas.meeting import MeetingCreate
-
-
-class MeetingNotFoundError(Exception):
-    """Levantada quando uma meeting não é encontrada."""
 
 
 class InvalidMeetingTransitionError(ValueError):
@@ -53,7 +50,7 @@ class MeetingService:
         meeting.updated_at = now
 
         if target in {MeetingStatus.TRANSCRIBING, MeetingStatus.PROCESSING}:
-            if meeting.processing_started_at is None or current in {
+            if getattr(meeting, "processing_started_at", None) is None or current in {
                 MeetingStatus.COMPLETED,
                 MeetingStatus.FAILED,
                 MeetingStatus.TRANSCRIBED,

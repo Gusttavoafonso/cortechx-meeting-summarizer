@@ -198,8 +198,8 @@ def test_transcribe_can_be_retried_after_failure(client: TestClient) -> None:
     assert client.post(f"/meetings/{meeting_id}/transcribe").status_code == 422
     assert client.get(f"/meetings/{meeting_id}").json()["status"] == "failed"
 
-    app.dependency_overrides[get_transcription_service] = (
-        lambda: MockSpeechToTextService()
+    app.dependency_overrides[get_transcription_service] = lambda: (
+        MockSpeechToTextService()
     )
     retry = client.post(f"/meetings/{meeting_id}/transcribe")
 

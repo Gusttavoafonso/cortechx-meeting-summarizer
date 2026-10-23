@@ -14,6 +14,10 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_session
+from app.core.exceptions import (
+    LLMError,
+    TranscriptionAudioCorruptedError,
+)
 from app.models.meeting_status import IN_PROGRESS_STATUSES, MeetingStatus
 from app.repositories.audio_repository import AudioRepository
 from app.repositories.meeting_repository import MeetingRepository
@@ -117,7 +121,7 @@ def get_summary_service(
 ) -> SummaryService:
     try:
         llm = get_llm_service()
-    except Exception as exc:
+    except LLMError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Serviço de LLM não configurado ou indisponível: {exc}",
@@ -399,6 +403,16 @@ def transcribe_meeting(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erro inesperado durante a leitura do arquivo de áudio: {io_err}",
+        )
+    except TranscriptionAudioCorruptedError as corr_err:
+        _mark_failed(
+            meeting_id,
+            meeting_repo,
+            f"Arquivo de áudio corrompido ou formato ilegível: {corr_err}",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Arquivo de áudio corrompido ou formato ilegível: {corr_err}",
         )
     except Exception as stt_err:
         _mark_failed(
@@ -728,6 +742,80 @@ def get_summary(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"Resumo ainda não gerado pra reunião com ID {meeting_id}.",
     )
+
+
+@router.post(
+    "/{meeting_id}/retry",
+    response_model=MeetingResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Reprocessar manualmente reunião com falha (retry)",
+    description=(
+        "Permite o reprocessamento manual de uma reunião cujo status seja FAILED.\n\n"
+        "### Regras e Bloqueios:\n"
+        "- **404 Not Found:** Reunião não encontrada.\n"
+        "- **422 Unprocessable Content:** Áudio ausente no banco ou no disco.\n"
+        "- **409 Conflict:** Reunião já em processamento "
+        "(`processing` ou `transcribing`).\n"
+        "- **409 Conflict:** Reunião já concluída com sucesso (`completed`).\n"
+        "- **409 Conflict:** Reunião em estado que não seja falha (`failed`)."
+    ),
+)
+def retry_meeting(
+    meeting_id: int,
+    background_tasks: BackgroundTasks,
+    meeting_repo: MeetingRepository = Depends(get_meeting_repository),
+    audio_repo: AudioRepository = Depends(get_audio_repository),
+    storage_service: AudioStorageService = Depends(get_audio_storage_service),
+) -> MeetingResponse:
+    validate_meeting_id(meeting_id)
+    meeting = meeting_repo.get_by_id(meeting_id)
+    if not meeting:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reunião com ID {meeting_id} não encontrada.",
+        )
+
+    audio_record = audio_repo.get_by_meeting_id(meeting_id)
+    if not audio_record or not storage_service.file_exists(audio_record.file_path):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                f"Arquivo de áudio não encontrado para a reunião com ID {meeting_id}."
+            ),
+        )
+
+    current_status = (
+        meeting.status.value
+        if hasattr(meeting.status, "value")
+        else str(meeting.status).lower()
+    )
+    if current_status in (
+        MeetingStatus.PROCESSING.value,
+        MeetingStatus.TRANSCRIBING.value,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A reunião já está em processamento.",
+        )
+
+    if current_status == MeetingStatus.COMPLETED.value:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A reunião já foi processada com sucesso.",
+        )
+
+    if current_status != MeetingStatus.FAILED.value:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "O endpoint de retry manual é destinado exclusivamente a reuniões "
+                f"com falha (FAILED). Status atual: {meeting.status}."
+            ),
+        )
+
+    MeetingService(meeting_repo).update_status(meeting_id, MeetingStatus.PROCESSING)
+    enqueue_meeting_processing(meeting_id, background_tasks)
+    return MeetingResponse.model_validate(meeting)
 
 
 @router.get(

@@ -7,14 +7,25 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from app.core.config import settings
+from app.core.exceptions import (
+    DiarizationAssociationError,
+    DiarizationConfigurationError,
+    DiarizationEmptyResponseError,
+    DiarizationError,
+    DiarizationProviderError,
+)
 
-
-class DiarizationError(Exception):
-    pass
-
-
-class DiarizationAssociationError(DiarizationError):
-    pass
+__all__ = [
+    "DiarizationError",
+    "DiarizationAssociationError",
+    "DiarizationConfigurationError",
+    "DiarizationEmptyResponseError",
+    "DiarizationProviderError",
+    "DiarizationSegment",
+    "DiarizationProvider",
+    "PyannoteDiarizationProvider",
+    "DiarizationService",
+]
 
 
 # Dataclass para representar um segmento de diarização e manter o serviço independente
@@ -68,7 +79,7 @@ class PyannoteDiarizationProvider(DiarizationProvider):
         except DiarizationError:
             raise
         except Exception as exc:
-            raise DiarizationError("Falha ao executar o Pyannote") from exc
+            raise DiarizationProviderError("Falha ao executar o Pyannote") from exc
 
     # carrega o modelo apenas na primeira chamada de diarizacao
     def _get_pipeline(self) -> Any:
@@ -83,11 +94,17 @@ class PyannoteDiarizationProvider(DiarizationProvider):
                 "pyannote/speaker-diarization-community-1",
                 token=token,
             )
+        except DiarizationError:
+            raise
         except Exception as exc:
-            raise DiarizationError("Falha ao carregar o modelo do Pyannote") from exc
+            raise DiarizationProviderError(
+                "Falha ao carregar o modelo do Pyannote"
+            ) from exc
 
         if self._pipeline is None:
-            raise DiarizationError("Não foi possível carregar o modelo do Pyannote")
+            raise DiarizationProviderError(
+                "Não foi possível carregar o modelo do Pyannote"
+            )
 
         return self._pipeline
 
@@ -95,11 +112,11 @@ class PyannoteDiarizationProvider(DiarizationProvider):
     # busca o token configurado para baixar o modelo do Hugging Face
     def _get_configured_token() -> str:
         if settings.huggingface_token is None:
-            raise DiarizationError("HUGGINGFACE_TOKEN não configurado")
+            raise DiarizationConfigurationError("HUGGINGFACE_TOKEN não configurado")
 
         token = settings.huggingface_token.get_secret_value().strip()
         if not token:
-            raise DiarizationError("HUGGINGFACE_TOKEN não configurado")
+            raise DiarizationConfigurationError("HUGGINGFACE_TOKEN não configurado")
 
         return token
 
@@ -120,12 +137,14 @@ class DiarizationService:
         except DiarizationError:
             raise
         except Exception as exc:
-            raise DiarizationError(
+            raise DiarizationProviderError(
                 "Falha ao executar o provider de diarização"
             ) from exc
 
         if not provider_segments:
-            raise DiarizationError("O provider não retornou segmentos de diarização")
+            raise DiarizationEmptyResponseError(
+                "O provider não retornou segmentos de diarização"
+            )
 
         segments = [self._validate_segment(item) for item in provider_segments]
         # ordena os segmentos por timestamp e speaker

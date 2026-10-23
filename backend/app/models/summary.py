@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 
 
 class Summary(Base):
-
     __tablename__ = "summaries"
 
     id: Mapped[int] = mapped_column(
@@ -53,7 +52,8 @@ class Summary(Base):
         server_default=text("'[]'"),
     )
 
-    # Payload estruturado completo devolvido pelo pipeline (fonte da verdade para reprocessar/auditar; inclui as tarefas como o LLM as devolveu).
+    # Payload estruturado completo devolvido pelo pipeline
+    # (fonte da verdade para reprocessar/auditar; inclui tarefas do LLM).
     structured_result: Mapped[dict[str, Any] | None] = mapped_column(
         JSONType,
         nullable=True,

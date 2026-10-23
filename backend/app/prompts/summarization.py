@@ -1,4 +1,4 @@
-# O prompt utilizado para gerar transcrições de reuniões a partir de transcrições de áudio
+# Prompt para gerar transcrições de reuniões a partir de transcrições de áudio
 
 SUMMARIZATION_PROMPT_TEMPLATE = """\
 Você é um assistente de sumarização de reuniões. Analise exclusivamente a
@@ -35,6 +35,7 @@ Transcrição da reunião:
 {transcript}
 ---
 """
+
 
 # função para montar o prompt de sumarização a partir da transcrição.
 def build_summarization_prompt(transcript: str) -> str:

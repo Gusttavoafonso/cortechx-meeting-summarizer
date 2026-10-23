@@ -92,10 +92,10 @@ class MeetingRepository:
             )
             .values(
                 status=MeetingStatus.PROCESSING,
-                processing_started_at = now,
-                processing_completed_at = None,
-                last_error = None,
-                updated_at = now,    
+                processing_started_at=now,
+                processing_completed_at=None,
+                last_error=None,
+                updated_at=now,
             )
         )
         try:

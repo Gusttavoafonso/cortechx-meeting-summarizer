@@ -49,8 +49,8 @@ class Transcript(Base):
         "TranscriptSegment",
         back_populates="transcript",
         cascade="all, delete-orphan",
-        #ordenação temporal com desempate por id
-        # A lambda adia a avaliação dos atributos (lazy evaluation) para evitar 
+        # ordenação temporal com desempate por id
+        # A lambda adia a avaliação dos atributos (lazy evaluation) para evitar
         # erros de mapeamento ou referências circulares
         order_by=lambda: (
             TranscriptSegment.start_time,

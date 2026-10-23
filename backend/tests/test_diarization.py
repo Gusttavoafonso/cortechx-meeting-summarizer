@@ -10,7 +10,7 @@ from app.services.diarization import (
 )
 
 
-# define um provider falso para testes, que retorna os segmentos fornecidos ou lança um erro
+# Provider falso para testes que retorna segmentos fornecidos ou erro
 class FakeDiarizationProvider(DiarizationProvider):
     def __init__(
         self,
