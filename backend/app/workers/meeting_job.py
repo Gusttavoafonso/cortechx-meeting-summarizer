@@ -96,10 +96,22 @@ def run_meeting_processing_job(
     try:
         try:
             processor = processor_factory(session)
-        except Exception:
+        except Exception as proc_exc:
             meeting = session.get(Meeting, meeting_id)
             if meeting is not None:
-                MeetingRepository(session).update_status(meeting, MeetingStatus.FAILED)
+                from app.core.failure_recorder import sanitize_error_message
+                from app.services.meeting_service import MeetingService
+
+                try:
+                    MeetingService(MeetingRepository(session)).update_status(
+                        meeting_id,
+                        MeetingStatus.FAILED,
+                        error_message=sanitize_error_message(str(proc_exc)),
+                    )
+                except Exception:
+                    MeetingRepository(session).update_status(
+                        meeting, MeetingStatus.FAILED
+                    )
             raise
         processor.process_meeting(
             meeting_id,

@@ -245,10 +245,17 @@ class MeetingProcessor:
                     error=exc,
                     attempts=1,
                 )
+            from app.core.failure_recorder import sanitize_error_message
+
+            sanitized_msg = (
+                self._job_runner.last_failure.message
+                if self._job_runner.last_failure is not None
+                else sanitize_error_message(str(exc))
+            )
             self._meeting_service.update_status(
                 meeting_id,
                 MeetingStatus.FAILED,
-                error_message=str(exc) or exc.__class__.__name__,
+                error_message=sanitized_msg or exc.__class__.__name__,
             )
             raise
 

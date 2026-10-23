@@ -279,6 +279,28 @@ class InvalidPersistenceDataError(PersistenceError):
 
 
 # =====================================================================
+# 4.1 Storage (Arquivos de Áudio e Mídia)
+# =====================================================================
+class StorageError(ApplicationError):
+    """Erro base para operações no subsistema de armazenamento de arquivos."""
+
+    category: FailureCategory = FailureCategory.DEFINITIVE
+    is_retryable: bool = False
+
+
+class StorageFileNotFoundError(StorageError, DefinitiveError, FileNotFoundError):
+    """Arquivo solicitado não foi encontrado no storage."""
+
+    is_retryable: bool = False
+
+
+class StoragePermissionError(StorageError, DefinitiveError, PermissionError):
+    """Permissão negada ao acessar storage de arquivos."""
+
+    is_retryable: bool = False
+
+
+# =====================================================================
 # 5. Processing (Chunking, Summarization, Task Extraction)
 # =====================================================================
 class ProcessingError(ApplicationError):

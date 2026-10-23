@@ -146,13 +146,31 @@ class JobRunner:
                     except Exception:
                         pass
                 try:
-                    self.meeting_repository.update_status(meeting, MeetingStatus.FAILED)
+                    from app.services.meeting_service import MeetingService
+
+                    meeting_id = getattr(meeting, "id", meeting)
+                    if isinstance(meeting_id, int):
+                        MeetingService(self.meeting_repository).update_status(
+                            meeting_id,
+                            MeetingStatus.FAILED,
+                            error_message=record.message,
+                        )
+                    else:
+                        self.meeting_repository.update_status(
+                            meeting, MeetingStatus.FAILED
+                        )
                     logger.info(
                         "Status da reunião %s atualizado para FAILED na etapa '%s'.",
                         getattr(meeting, "id", meeting),
                         stage,
                     )
                 except Exception as repo_exc:
+                    try:
+                        self.meeting_repository.update_status(
+                            meeting, MeetingStatus.FAILED
+                        )
+                    except Exception:
+                        pass
                     logger.error(
                         "Falha ao persistir status FAILED no repositório: %s",
                         repo_exc,
