@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from app.core.config import Settings
 from pydantic import SecretStr
@@ -61,3 +63,46 @@ def test_validate_llm_configuration_missing(monkeypatch) -> None:
     assert "LLM_PROVIDER" in message
     assert "LLM_MODEL" in message
     assert "LLM_API_KEY" in message
+
+
+def test_settings_obsidian_defaults(monkeypatch) -> None:
+    for name in ("OBSIDIAN_ENABLED", "OBSIDIAN_VAULT_PATH", "OBSIDIAN_NOTES_FOLDER"):
+        monkeypatch.delenv(name, raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.obsidian_enabled is False
+    assert settings.obsidian_vault_path is None
+    assert settings.obsidian_notes_folder == "Reuniões"
+
+
+def test_settings_reads_obsidian_configuration(monkeypatch) -> None:
+    monkeypatch.setenv("OBSIDIAN_ENABLED", "true")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", "/vault")
+    monkeypatch.setenv("OBSIDIAN_NOTES_FOLDER", "Atas/2026")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.obsidian_enabled is True
+    assert settings.obsidian_vault_path == Path("/vault")
+    assert settings.obsidian_notes_folder == "Atas/2026"
+
+
+def test_settings_obsidian_empty_values_use_defaults(monkeypatch) -> None:
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", "")
+    monkeypatch.setenv("OBSIDIAN_NOTES_FOLDER", "  ")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.obsidian_vault_path is None
+    assert settings.obsidian_notes_folder == "Reuniões"
+
+
+@pytest.mark.parametrize(
+    "folder", ["../fora", "a/../../b", "/etc", "\\\\servidor", "C:/x", "a\\..\\b"]
+)
+def test_settings_rejects_obsidian_folder_outside_vault(monkeypatch, folder) -> None:
+    monkeypatch.setenv("OBSIDIAN_NOTES_FOLDER", folder)
+
+    with pytest.raises(ValueError):
+        Settings(_env_file=None)

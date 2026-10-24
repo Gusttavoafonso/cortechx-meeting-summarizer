@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 PROJECT_DIR = BACKEND_DIR.parent
+DEFAULT_OBSIDIAN_NOTES_FOLDER = "Reuniões"
 
 
 class Settings(BaseSettings):
@@ -76,6 +77,16 @@ class Settings(BaseSettings):
     discord_enabled: bool = Field(default=False, validation_alias="DISCORD_ENABLED")
     notion_enabled: bool = Field(default=False, validation_alias="NOTION_ENABLED")
 
+    obsidian_enabled: bool = Field(default=False, validation_alias="OBSIDIAN_ENABLED")
+    # Caminho do vault visto pelo backend (dentro do container, via volume montado).
+    obsidian_vault_path: Path | None = Field(
+        default=None, validation_alias="OBSIDIAN_VAULT_PATH"
+    )
+    obsidian_notes_folder: str = Field(
+        default=DEFAULT_OBSIDIAN_NOTES_FOLDER,
+        validation_alias="OBSIDIAN_NOTES_FOLDER",
+    )
+
     discord_webhook_url: HttpUrl | None = None
     huggingface_token: SecretStr | None = None
 
@@ -129,6 +140,7 @@ class Settings(BaseSettings):
         "notion_token",
         "notion_database_id",
         "llm_api_key",
+        "obsidian_vault_path",
         mode="before",
     )
     @classmethod
@@ -136,6 +148,22 @@ class Settings(BaseSettings):
         if isinstance(v, str) and not v.strip():
             return None
         return v
+
+    @field_validator("obsidian_notes_folder", mode="before")
+    @classmethod
+    def validate_obsidian_notes_folder(cls, v: Any) -> Any:
+        """Usa o padrão se vazio e rejeita pastas que escapem do vault."""
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return DEFAULT_OBSIDIAN_NOTES_FOLDER
+        if not isinstance(v, str):
+            return v
+        folder = v.strip()
+        parts = folder.replace("\\", "/").split("/")
+        if folder.startswith(("/", "\\")) or ".." in parts or ":" in parts[0]:
+            raise ValueError(
+                "OBSIDIAN_NOTES_FOLDER deve ser um caminho relativo dentro do vault."
+            )
+        return folder
 
     model_config = SettingsConfigDict(
         env_file=(PROJECT_DIR / ".env", BACKEND_DIR / ".env", ".env"),
