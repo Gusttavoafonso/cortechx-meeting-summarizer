@@ -55,3 +55,18 @@ service = IntegrationService(
 
 result = service.send_persisted_meeting("teste", meeting)
 ```
+
+## Obsidian
+
+O `ObsidianProvider` grava o Markdown produzido por `ObsidianFormatter` em
+`OBSIDIAN_VAULT_PATH`/`OBSIDIAN_NOTES_FOLDER`. Configure `OBSIDIAN_ENABLED=true`
+para incluir o provider na entrega automática e no reenvio manual. No Docker,
+monte o vault em `/vault` nos serviços `backend` e `worker` usando
+`docker-compose.obsidian.yml` junto com o Compose principal; defina
+`OBSIDIAN_VAULT_HOST_PATH` para uma pasta existente no host.
+
+O nome segue `AAAA-MM-DD - Título (meeting_id).md`; títulos são sanitizados e
+limitados para manter o arquivo dentro da pasta de notas. Sem data, o prefixo é
+`sem-data`. O reenvio atualiza a nota da mesma reunião por escrita atômica.
+Vaults individuais, sincronização bidirecional e acesso por API não são
+suportados: o vault precisa estar acessível ao backend e ao worker.

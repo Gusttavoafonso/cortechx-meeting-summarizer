@@ -1,0 +1,16 @@
+services:
+  backend:
+    volumes:
+      - type: bind
+        source: ${OBSIDIAN_VAULT_HOST_PATH:?Defina OBSIDIAN_VAULT_HOST_PATH no .env}
+        target: /vault
+        bind:
+          create_host_path: false
+
+  worker:
+    volumes:
+      - type: bind
+        source: ${OBSIDIAN_VAULT_HOST_PATH:?Defina OBSIDIAN_VAULT_HOST_PATH no .env}
+        target: /vault
+        bind:
+          create_host_path: false
