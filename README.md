@@ -236,7 +236,7 @@ backend/
 
 ## Disparo das integrações externas
 
-O disparo das integrações ocorre de forma assíncrona após a conclusão do pipeline de processamento da reunião (`MeetingProcessor` marca o status como `completed`). Em segundo plano, o worker Celery (`deliver_integrations_task` via `IntegrationDeliveryService`) tenta entregar o resultado persistido aos provedores habilitados (Discord e Notion).
+O disparo das integrações ocorre de forma assíncrona após a conclusão do pipeline de processamento da reunião (`MeetingProcessor` marca o status como `completed`). Em segundo plano, o worker Celery (`deliver_integrations_task` via `IntegrationDeliveryService`) tenta entregar o resultado persistido aos provedores habilitados (Discord, Notion e Obsidian).
 
 Se o processamento ou persistência da reunião falhar, o pipeline encerra em `failed` e nenhuma integração é acionada. Falhas em entregas externas são registradas individualmente na tabela `integration_deliveries` e nunca revertem o resumo nem alteram o status principal da reunião.
 
@@ -248,6 +248,25 @@ DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 NOTION_ENABLED=true
 NOTION_API_KEY=secret_...
 NOTION_DATABASE_ID=...
+OBSIDIAN_ENABLED=true
+OBSIDIAN_VAULT_PATH=/vault
+OBSIDIAN_NOTES_FOLDER=Reuniões
+OBSIDIAN_VAULT_HOST_PATH=/caminho/para/seu/vault
 ```
 
 Uma integração só é executada quando estiver habilitada **e** suas credenciais/configurações estiverem presentes. Cada provider opera de forma isolada (`success` ou `failed`). Falhas transitórias sofrem retry automático com backoff exponencial no Celery. Caso necessário, é possível disparar o reenvio manual via rota `POST /meetings/{meeting_id}/integrations/retry` sem reexecutar o pipeline de transcrição e IA.
+
+O Obsidian grava arquivos Markdown diretamente no vault. Para usá-lo com
+Docker Compose, defina `OBSIDIAN_VAULT_HOST_PATH` como uma pasta de vault que já
+exista na máquina e inicie os serviços com o arquivo adicional:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.obsidian.yml up --build
+```
+
+O volume fica disponível em `/vault` tanto no backend quanto no worker. As notas
+são gravadas em `OBSIDIAN_NOTES_FOLDER`, com padrão `Reuniões`, usando nomes no
+formato `AAAA-MM-DD - Título (meeting_id).md` (ou `sem-data` quando a reunião
+não tem data). O título do arquivo é sanitizado e limitado; reenvios da mesma
+reunião atualizam a nota existente. O vault precisa estar acessível ao processo
+que executa o backend/worker.
