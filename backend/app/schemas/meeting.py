@@ -1,0 +1,47 @@
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.models.meeting_status import MeetingStatus
+from app.schemas.audio import AudioUploadResponse
+from app.schemas.transcription import TranscriptResponse
+
+
+class MeetingBase(BaseModel):
+    title: str = Field(..., min_length=1, max_length=255)
+
+
+class MeetingCreate(MeetingBase):
+    @field_validator("title")
+    @classmethod
+    def validate_title_non_empty(cls, v: str) -> str:
+        clean = v.strip()
+        if not clean:
+            raise ValueError("O título da reunião não pode ser vazio.")
+        return clean
+
+
+class MeetingResponse(MeetingBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    status: MeetingStatus
+    created_at: datetime
+    updated_at: datetime
+    processing_started_at: datetime | None = None
+    processing_completed_at: datetime | None = None
+    last_error: str | None = None
+    audio: AudioUploadResponse | None = None
+    transcript: TranscriptResponse | None = None
+
+
+class MeetingProcessResponse(BaseModel):
+    meeting_id: int
+    status: MeetingStatus = MeetingStatus.PROCESSING
+
+
+class MeetingStatusResponse(BaseModel):
+    meeting_id: int
+    status: MeetingStatus
+    updated_at: datetime
+    last_error: str | None = None

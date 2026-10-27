@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cortechx-meeting-summarizer-backend"
+version = "0.1.0"
+description = "API para transcricao e sumarizacao de reunioes."
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard]",
+    "openai",
+    "langchain",
+    "notion-client",
+    "pydantic-settings",
+    "sqlalchemy>=2.0",
+    "alembic",
+    "asyncpg",
+    "psycopg[binary]",
+    "python-dotenv>=1.0.0",
+    "python-multipart>=0.0.9",
+    "faster-whisper>=1.0.0",
+    "av>=14,<19",
+    "groq>=0.9.0",
+    "pyannote.audio>=4.0,<5.0",
+    "celery>=5.4.0",
+    "redis>=5.0.0",
+    "google-genai",
+    "httpx>=0.27.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ruff",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+namespaces = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 88
+src = ["app", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

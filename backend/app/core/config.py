@@ -1,0 +1,170 @@
+from functools import lru_cache
+from pathlib import Path
+from typing import Any
+
+from pydantic import AliasChoices, Field, HttpUrl, SecretStr, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+PROJECT_DIR = BACKEND_DIR.parent
+
+
+class Settings(BaseSettings):
+    DATABASE_URL: str = (
+        "postgresql+psycopg://postgres:postgres@localhost:5434/cortechx_meeting"
+    )
+
+    DEBUG: bool = Field(False, validation_alias="APP_DEBUG")
+
+    AUDIO_STORAGE_PATH: Path = Field(
+        default=BACKEND_DIR / "storage" / "meetings",
+        validation_alias="AUDIO_STORAGE_PATH",
+    )
+    MAX_AUDIO_SIZE_MB: int = Field(250, validation_alias="MAX_AUDIO_SIZE_MB")
+    ALLOWED_AUDIO_EXTENSIONS: set[str] = {
+        ".mp3",
+        ".wav",
+        ".m4a",
+        ".mp4",
+        ".webm",
+    }
+    ALLOWED_AUDIO_MIME_TYPES: set[str] = {
+        "audio/mpeg",
+        "audio/mp3",
+        "audio/wav",
+        "audio/x-wav",
+        "audio/wave",
+        "audio/mp4",
+        "audio/x-m4a",
+        "audio/m4a",
+        "audio/webm",
+        "video/mp4",
+        "video/webm",
+    }
+
+    # Configurações genéricas do serviço de LLM
+    llm_provider: str | None = Field(
+        default=None,
+        validation_alias="LLM_PROVIDER",
+    )
+    llm_model: str | None = Field(
+        default=None,
+        validation_alias="LLM_MODEL",
+    )
+    llm_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias="LLM_API_KEY",
+    )
+
+    groq_api_key: SecretStr | None = None
+    openai_api_key: SecretStr | None = None
+    openai_model: str = "gpt-4o-mini"
+    summary_chunk_size: int = 12000
+    summary_chunk_overlap: int = 500
+
+    gemini_api_key: SecretStr | None = None
+
+    notion_token: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices("NOTION_API_KEY", "NOTION_TOKEN"),
+    )
+    notion_database_id: str | None = Field(
+        default=None,
+        validation_alias="NOTION_DATABASE_ID",
+    )
+
+    discord_enabled: bool = Field(default=False, validation_alias="DISCORD_ENABLED")
+    notion_enabled: bool = Field(default=False, validation_alias="NOTION_ENABLED")
+
+    discord_webhook_url: HttpUrl | None = None
+    huggingface_token: SecretStr | None = None
+
+    WHISPER_MODEL_SIZE: str = Field(
+        default="small", validation_alias="WHISPER_MODEL_SIZE"
+    )
+    WHISPER_DEVICE: str = Field(default="auto", validation_alias="WHISPER_DEVICE")
+    WHISPER_COMPUTE_TYPE: str = Field(
+        default="auto", validation_alias="WHISPER_COMPUTE_TYPE"
+    )
+
+    # Configurações da Política de Retry (Issue #26)
+    RETRY_MAX_ATTEMPTS: int = Field(default=3, validation_alias="RETRY_MAX_ATTEMPTS")
+    RETRY_INITIAL_DELAY: float = Field(
+        default=1.0, validation_alias="RETRY_INITIAL_DELAY"
+    )
+    RETRY_BACKOFF_FACTOR: float = Field(
+        default=2.0, validation_alias="RETRY_BACKOFF_FACTOR"
+    )
+    RETRY_MAX_DELAY: float = Field(default=10.0, validation_alias="RETRY_MAX_DELAY")
+    RETRY_JITTER: bool = Field(default=False, validation_alias="RETRY_JITTER")
+
+    CELERY_BROKER_URL: str = Field(
+        default="redis://localhost:6379/0",
+        validation_alias="CELERY_BROKER_URL",
+    )
+    CELERY_RESULT_BACKEND: str = Field(
+        default="redis://localhost:6379/0",
+        validation_alias="CELERY_RESULT_BACKEND",
+    )
+    CELERY_TASK_ALWAYS_EAGER: bool = Field(
+        default=False,
+        validation_alias="CELERY_TASK_ALWAYS_EAGER",
+    )
+
+    @field_validator("AUDIO_STORAGE_PATH", mode="before")
+    @classmethod
+    def resolve_storage_path(cls, v: Any) -> Path:
+        if v is not None:
+            path = Path(v)
+            if not path.is_absolute():
+                return BACKEND_DIR / path
+            return path
+        return BACKEND_DIR / "storage" / "meetings"
+
+    @field_validator(
+        "discord_webhook_url",
+        "groq_api_key",
+        "openai_api_key",
+        "gemini_api_key",
+        "notion_token",
+        "notion_database_id",
+        "llm_api_key",
+        mode="before",
+    )
+    @classmethod
+    def empty_str_to_none(cls, v: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+    model_config = SettingsConfigDict(
+        env_file=(PROJECT_DIR / ".env", BACKEND_DIR / ".env", ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    def validate_llm_configuration(self) -> None:
+        """Valida as configurações obrigatórias para utilização do serviço de LLM."""
+        missing = []
+
+        if not self.llm_provider:
+            missing.append("LLM_PROVIDER")
+
+        if not self.llm_model:
+            missing.append("LLM_MODEL")
+
+        if self.llm_api_key is None:
+            missing.append("LLM_API_KEY")
+
+        if missing:
+            raise ValueError(
+                "Missing required LLM configuration: " + ", ".join(missing)
+            )
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+settings = get_settings()

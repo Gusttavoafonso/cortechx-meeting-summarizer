@@ -1,0 +1,108 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING
+
+from sqlalchemy import DateTime, String, Text
+from sqlalchemy import Enum as SqlEnum
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.core.database import Base
+from app.models.meeting_status import MeetingStatus
+from app.models.task import Task
+
+if TYPE_CHECKING:
+    from app.models.audio_file import AudioFile
+    from app.models.integration_configuration import IntegrationConfiguration
+    from app.models.integration_delivery import IntegrationDelivery
+    from app.models.summary import Summary
+    from app.models.transcript import Transcript
+
+
+class Meeting(Base):
+    __tablename__ = "meetings"
+
+    id: Mapped[int] = mapped_column(
+        primary_key=True,
+        autoincrement=True,
+    )
+
+    title: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    status: Mapped[MeetingStatus] = mapped_column(
+        SqlEnum(
+            MeetingStatus,
+            name="meeting_status",
+            native_enum=True,
+            values_callable=lambda enum_type: [member.value for member in enum_type],
+        ),
+        nullable=False,
+        default=MeetingStatus.RECEIVED,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    processing_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    processing_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    audio: Mapped["AudioFile | None"] = relationship(
+        "AudioFile",
+        back_populates="meeting",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+    transcript: Mapped["Transcript | None"] = relationship(
+        "Transcript",
+        back_populates="meeting",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+    summary: Mapped["Summary | None"] = relationship(
+        "Summary",
+        back_populates="meeting",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+    integration_configurations: Mapped[list["IntegrationConfiguration"]] = relationship(
+        "IntegrationConfiguration",
+        back_populates="meeting",
+        cascade="all, delete-orphan",
+    )
+
+    integration_deliveries: Mapped[list["IntegrationDelivery"]] = relationship(
+        "IntegrationDelivery",
+        back_populates="meeting",
+        cascade="all, delete-orphan",
+    )
+
+    tasks: Mapped[list["Task"]] = relationship(
+        "Task",
+        back_populates="meeting",
+        cascade="all, delete-orphan",
+        # ordem do pipeline, com desempate por id
+        order_by=lambda: (Task.position, Task.id),
+    )
