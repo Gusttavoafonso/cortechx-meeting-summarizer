@@ -25,13 +25,16 @@ export const SettingsPage: React.FC = () => {
             type="button"
             onClick={() => setActiveTab('perfil')}
             className={cn(
-              'pb-3 transition-colors relative',
+              'pb-3 transition-colors flex items-center gap-2 relative',
               activeTab === 'perfil'
                 ? 'text-ink border-b-2 border-brand font-bold'
                 : 'text-muted hover:text-ink'
             )}
           >
-            Perfil
+            {activeTab === 'perfil' && (
+              <span className="w-2 h-2 rounded-full bg-brand shrink-0" />
+            )}
+            <span>Perfil</span>
           </button>
 
           <button
@@ -44,7 +47,9 @@ export const SettingsPage: React.FC = () => {
                 : 'text-muted hover:text-ink'
             )}
           >
-            <span className="w-2 h-2 rounded-full bg-brand shrink-0" />
+            {activeTab === 'integracoes' && (
+              <span className="w-2 h-2 rounded-full bg-brand shrink-0" />
+            )}
             <span>Integrações</span>
           </button>
 
@@ -52,13 +57,16 @@ export const SettingsPage: React.FC = () => {
             type="button"
             onClick={() => setActiveTab('notificacoes')}
             className={cn(
-              'pb-3 transition-colors relative',
+              'pb-3 transition-colors flex items-center gap-2 relative',
               activeTab === 'notificacoes'
                 ? 'text-ink border-b-2 border-brand font-bold'
                 : 'text-muted hover:text-ink'
             )}
           >
-            Notificações
+            {activeTab === 'notificacoes' && (
+              <span className="w-2 h-2 rounded-full bg-brand shrink-0" />
+            )}
+            <span>Notificações</span>
           </button>
         </div>
       </div>

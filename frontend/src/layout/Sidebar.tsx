@@ -35,7 +35,7 @@ export const Sidebar: React.FC = () => {
       {/* Brand Logo */}
       <div className="px-2 mb-8 flex items-center">
         <NavLink
-          to="/meetings"
+          to="/dashboard"
           className="inline-block hover:opacity-90 transition-opacity"
         >
           <ZumoLogo size="lg" />
