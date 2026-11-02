@@ -1,0 +1,32 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/schema.json",
+  "productName": "Zumo",
+  "version": "0.1.0",
+  "identifier": "com.cortechx.zumo",
+  "build": {
+    "frontendDist": "../../backend/app/static"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "CortechX Zumo",
+        "width": 1100,
+        "height": 760,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true
+      }
+    ],
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "tooltip": "CortechX Zumo - Gravador de Reuniões"
+    },
+    "security": {
+      "csp": null
+    }
+  },
+  "plugins": {
+    "notification": {}
+  }
+}
