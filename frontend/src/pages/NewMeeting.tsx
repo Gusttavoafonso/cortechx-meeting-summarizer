@@ -10,6 +10,7 @@ import {
   Share2,
   MoreHorizontal,
   Upload,
+  Mic,
   X,
   RefreshCw,
   AlertCircle,
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { RecordingPanel } from '../components/recording/RecordingPanel'
 import { createMeeting, processMeeting, uploadMeetingAudio } from '../api/meetings'
 import { formatBytes, formatSecondsToTime } from '../lib/utils'
 
@@ -44,6 +46,7 @@ export const NewMeeting: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [fileError, setFileError] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
+  const [inputMethod, setInputMethod] = useState<'record' | 'upload'>('record')
 
   // Audio preview playback state
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
@@ -346,7 +349,7 @@ export const NewMeeting: React.FC = () => {
       </div>
 
       {/* Title Input */}
-      <div className="mb-8">
+      <div className="mb-6">
         <input
           ref={titleInputRef}
           type="text"
@@ -358,39 +361,77 @@ export const NewMeeting: React.FC = () => {
         />
       </div>
 
-      {/* Dropzone Area */}
-      {!selectedFile ? (
-        <div
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
-          className={`border-2 border-dashed rounded-2xl p-12 text-center transition-all cursor-pointer bg-white/40 hover:bg-white/80 ${
-            isDragging
-              ? 'border-brand bg-brand/5 scale-[1.005]'
-              : 'border-slate-300 hover:border-slate-400'
-          }`}
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="audio/*,video/*,.mp3,.m4a,.wav,.mp4,.webm,.ogg,.aac,.flac"
-            onChange={handleFileChange}
-            className="hidden"
-          />
+      {/* Mode Selector Tabs (Gravar ou Enviar arquivo) */}
+      {!selectedFile && (
+        <div className="flex items-center gap-2 mb-6">
+          <button
+            type="button"
+            onClick={() => setInputMethod('record')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+              inputMethod === 'record'
+                ? 'bg-primary-btn text-white shadow-xs'
+                : 'bg-white text-muted hover:text-ink border border-slate-200'
+            }`}
+          >
+            <Mic className="w-4 h-4 stroke-[2.2]" />
+            <span>Gravar reunião</span>
+          </button>
 
-          <div className="w-12 h-12 rounded-2xl bg-surface text-brand flex items-center justify-center mx-auto mb-4 shadow-xs">
-            <Upload className="w-5 h-5 stroke-[2.2]" />
-          </div>
-
-          <p className="text-sm font-medium text-ink mb-1">
-            Solte seu arquivo de áudio ou vídeo aqui, ou{' '}
-            <span className="text-brand underline decoration-brand/60 underline-offset-2 hover:text-brand-dark">
-              procure
-            </span>
-          </p>
-          <p className="text-xs text-muted">MP3, M4A, WAV, MP4 ou WebM até 250 MB</p>
+          <button
+            type="button"
+            onClick={() => setInputMethod('upload')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+              inputMethod === 'upload'
+                ? 'bg-primary-btn text-white shadow-xs'
+                : 'bg-white text-muted hover:text-ink border border-slate-200'
+            }`}
+          >
+            <Upload className="w-4 h-4 stroke-[2.2]" />
+            <span>Enviar arquivo</span>
+          </button>
         </div>
+      )}
+
+      {/* Main Action Area: Recording Panel or Dropzone */}
+      {!selectedFile ? (
+        inputMethod === 'record' ? (
+          <RecordingPanel
+            onRecordingComplete={(file) => validateAndSetFile(file)}
+            disabled={currentStep !== 'idle' && currentStep !== 'failed'}
+          />
+        ) : (
+          <div
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-2xl p-12 text-center transition-all cursor-pointer bg-white/40 hover:bg-white/80 ${
+              isDragging
+                ? 'border-brand bg-brand/5 scale-[1.005]'
+                : 'border-slate-300 hover:border-slate-400'
+            }`}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="audio/*,video/*,.mp3,.m4a,.wav,.mp4,.webm,.ogg,.aac,.flac"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+
+            <div className="w-12 h-12 rounded-2xl bg-surface text-brand flex items-center justify-center mx-auto mb-4 shadow-xs">
+              <Upload className="w-5 h-5 stroke-[2.2]" />
+            </div>
+
+            <p className="text-sm font-medium text-ink mb-1">
+              Solte seu arquivo de áudio ou vídeo aqui, ou{' '}
+              <span className="text-brand underline decoration-brand/60 underline-offset-2 hover:text-brand-dark">
+                procure
+              </span>
+            </p>
+            <p className="text-xs text-muted">MP3, M4A, WAV, MP4 ou WebM até 250 MB</p>
+          </div>
+        )
       ) : (
         /* Selected Audio Card Preview (Matching Figma criacao_reuniao.png) */
         <Card className="p-4 sm:p-5 mb-6 border-slate-200 shadow-xs">
