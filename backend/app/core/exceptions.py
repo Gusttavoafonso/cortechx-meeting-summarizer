@@ -364,7 +364,34 @@ class TaskExtractionLLMFailureError(TaskExtractionError, RecoverableError):
 
 
 # =====================================================================
-# 6. Constantes e Classificação de Falhas (Recoverable vs Definitive)
+# 6. Authentication
+# =====================================================================
+class AuthenticationError(DefinitiveError):
+    """Erro base para falhas de autenticação."""
+
+
+class InvalidGoogleTokenError(AuthenticationError):
+    """Token de autenticação do Google inválido, malformado ou expirado."""
+
+
+class InvalidSessionTokenError(AuthenticationError):
+    """Token de sessão interna da aplicação inválido, expirado ou revogado."""
+
+
+class InvalidCredentialsError(AuthenticationError):
+    """Credenciais inválidas (e-mail ou senha incorretos)."""
+
+
+class UserAlreadyExistsError(EntityConflictError):
+    """Já existe um usuário cadastrado com este e-mail."""
+
+
+class GoogleAccountPasswordMissingError(AuthenticationError):
+    """Esta conta foi cadastrada via Google e não possui senha de acesso."""
+
+
+# =====================================================================
+# 7. Constantes e Classificação de Falhas (Recoverable vs Definitive)
 # =====================================================================
 RECOVERABLE_HTTP_STATUS_CODES: frozenset[int] = frozenset({429, 502, 503, 504})
 DEFINITIVE_HTTP_STATUS_CODES: frozenset[int] = frozenset(

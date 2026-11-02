@@ -15,17 +15,22 @@ class MeetingService:
     def __init__(self, repository: MeetingRepository):
         self.repository = repository
 
-    def create(self, data: MeetingCreate) -> Meeting:
-        meeting = Meeting(title=data.title, status=MeetingStatus.RECEIVED)
+    def create(self, data: MeetingCreate, user_id: int | None = None) -> Meeting:
+        meeting = Meeting(title=data.title, status=MeetingStatus.RECEIVED, user_id=user_id)
         return self.repository.create(meeting)
 
-    def get_by_id(self, meeting_id: int) -> Meeting:
-        meeting = self.repository.get_by_id(meeting_id)
+    def get_by_id(self, meeting_id: int, user_id: int | None = None) -> Meeting:
+        if user_id is not None:
+            meeting = self.repository.get_by_id_and_user(meeting_id, user_id)
+        else:
+            meeting = self.repository.get_by_id(meeting_id)
         if meeting is None:
             raise MeetingNotFoundError(meeting_id)
         return meeting
 
-    def list_all(self) -> list[Meeting]:
+    def list_all(self, user_id: int | None = None) -> list[Meeting]:
+        if user_id is not None:
+            return self.repository.list_by_user(user_id)
         return self.repository.list_all()
 
     def update_status(

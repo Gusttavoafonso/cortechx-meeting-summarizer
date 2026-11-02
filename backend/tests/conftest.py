@@ -1,8 +1,10 @@
 from collections.abc import Generator
 
 import pytest
+from app.api.deps import get_current_user
 from app.core.database import Base, get_session
 from app.main import app
+from app.models.user import User
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -37,7 +39,22 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
         finally:
             pass
 
+    def override_get_current_user():
+        user = db_session.query(User).filter(User.google_id == "default_test_sub").first()
+        if not user:
+            user = User(
+                google_id="default_test_sub",
+                email="default_test@cortechx.com",
+                name="Default Test User",
+                picture_url="https://lh3.googleusercontent.com/test.jpg",
+            )
+            db_session.add(user)
+            db_session.commit()
+            db_session.refresh(user)
+        return user
+
     app.dependency_overrides[get_session] = override_get_session
+    app.dependency_overrides[get_current_user] = override_get_current_user
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()

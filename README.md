@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/zumo-logo-final.png" alt="Zumo" width="320">
+</p>
+
 # CortechX Meeting Summarizer
 
 ## Backend (Windows)
