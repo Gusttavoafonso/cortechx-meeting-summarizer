@@ -55,3 +55,42 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
     </span>
   )
 }
+
+export interface GenericBadgeProps {
+  children: React.ReactNode
+  variant?: 'brand' | 'success' | 'neutral' | 'default'
+  size?: 'sm' | 'md'
+  className?: string
+}
+
+export const Badge: React.FC<GenericBadgeProps> = ({
+  children,
+  variant = 'default',
+  size = 'md',
+  className,
+}) => {
+  const variantStyles = {
+    default: 'bg-surface text-ink-light border-subtle-border',
+    brand: 'bg-surface text-brand border-brand/20',
+    success: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    neutral: 'bg-slate-100 text-muted border-slate-200',
+  }
+
+  const sizeStyles = {
+    sm: 'text-[11px] px-2 py-0.5',
+    md: 'text-xs px-2.5 py-0.5',
+  }
+
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 font-semibold rounded-full border select-none',
+        variantStyles[variant],
+        sizeStyles[size],
+        className
+      )}
+    >
+      {children}
+    </span>
+  )
+}

@@ -1,7 +1,8 @@
 import React from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppLayout } from './layout/AppLayout'
+import { LandingPage } from './pages/LandingPage'
 import { MeetingsList } from './pages/MeetingsList'
 import { NewMeeting } from './pages/NewMeeting'
 import { MeetingDetails } from './pages/MeetingDetails'
@@ -25,8 +26,11 @@ export const App: React.FC = () => {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<AppLayout />}>
-            <Route index element={<Navigate to="/meetings" replace />} />
+          {/* Public Landing Page */}
+          <Route path="/" element={<LandingPage />} />
+
+          {/* Authenticated / App Workspace */}
+          <Route element={<AppLayout />}>
             <Route path="meetings" element={<MeetingsList />} />
             <Route path="meetings/new" element={<NewMeeting />} />
             <Route path="meetings/:id" element={<MeetingDetails />} />
