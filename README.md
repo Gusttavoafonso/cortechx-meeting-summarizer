@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/zumo-logo-final.png" alt="Zumo" width="320">
+</p>
+
 # CortechX Meeting Summarizer
 
 ## Backend (Windows)
@@ -17,7 +21,7 @@ Para rodar os testes execute no Powershell:
 python -m pytest
 ```
 
-A API ficará disponível em `http://127.0.0.1:8000`. Verifique o status em
+A API e a interface web do gravador ficarão disponíveis em `http://127.0.0.1:8000`. Verifique o status da API em
 `http://127.0.0.1:8000/health`.
 
 ## Backend (Linux)
@@ -37,8 +41,23 @@ Para rodar os testes execute no terminal:
 python -m pytest
 ```
 
-A API ficará disponível em `http://127.0.0.1:8000`. Verifique o status em
+A API e a interface web do gravador ficarão disponíveis em `http://127.0.0.1:8000`. Verifique o status da API em
 `http://127.0.0.1:8000/health`.
+
+## Interface Web e Gravação Direta (Sem Anexar Arquivos)
+
+Ao acessar `http://127.0.0.1:8000`, o usuário tem acesso à interface web integrada do Zumo:
+* **Botão Imediato de Gravação:** Inicia a captura em 1 clique sem necessidade de gravar em software externo e anexar arquivos.
+* **Captura Combinada (Dual Source):** Grava o som dos demais participantes (áudio da aba do Google Meet, Discord, etc.) somado ao microfone do próprio usuário via Web Audio API.
+* **VU Meters em Tempo Real:** Medidores de intensidade de som para confirmar visualmente a entrada do microfone e do áudio do sistema.
+* **Processamento Automatizado:** Ao finalizar a gravação, o arquivo é despachado automaticamente para `POST /meetings/{id}/audio` e o pipeline de transcrição/sumarização é disparado, exibindo o resultado diretamente na tela.
+
+## Aplicativo Desktop Standalone (Tauri 2.0 em `desktop/`)
+
+Para disponibilizar o executável de aplicativo (.exe / .msi / .dmg) com detecção em segundo plano:
+* **Estrutura:** Configurado no diretório `desktop/` com casca nativa em Rust e empacotamento multi-plataforma.
+* **System Tray:** Roda minimizado na bandeja do sistema, consumindo cerca de ~30 MB de RAM.
+* **Detecção Automática:** Monitora as janelas e processos do SO e sugere a gravação automaticamente ao identificar reuniões ativas no **Google Meet**, **Discord**, **Zoom** ou **Microsoft Teams**.
 
 ## Upload de Áudio e Formatos Suportados
 

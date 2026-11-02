@@ -4,9 +4,6 @@ from app.api.v1.integrations import get_enabled_providers, get_integration_dispa
 from app.main import app
 from app.models.integration_delivery import IntegrationDeliveryStatus
 from app.models.meeting_status import MeetingStatus
-from fastapi.testclient import TestClient
-
-client = TestClient(app)
 
 BASE_URL = "/meetings"
 
@@ -15,12 +12,13 @@ BASE_URL = "/meetings"
 @patch("app.api.v1.integrations.IntegrationDeliveryRepository")
 @patch("app.api.v1.integrations.enqueue_integration_delivery")
 def test_retry_integrations_enqueues_task_and_returns_202(
-    mock_enqueue, mock_delivery_repo_class, mock_meeting_repo_class
+    mock_enqueue, mock_delivery_repo_class, mock_meeting_repo_class, client
 ):
     # Setup da reunião simulada (Mock do banco de dados)
     mock_meeting = MagicMock()
     mock_meeting.status = MeetingStatus.COMPLETED
     mock_meeting_repo_class.return_value.get_by_id.return_value = mock_meeting
+    mock_meeting_repo_class.return_value.get_by_id_and_user.return_value = mock_meeting
 
     # Setup dos providers simulados com os seus status
     mock_delivery_repo_class.return_value.list_by_meeting.return_value = [
@@ -51,11 +49,14 @@ def test_retry_integrations_enqueues_task_and_returns_202(
 
 
 @patch("app.api.v1.integrations.MeetingRepository")
-def test_retry_integrations_rejects_in_progress_meeting(mock_meeting_repo_class):
+def test_retry_integrations_rejects_in_progress_meeting(
+    mock_meeting_repo_class, client
+):
     # Setup de uma reunião ainda não concluída
     mock_meeting = MagicMock()
     mock_meeting.status = MeetingStatus.PROCESSING
     mock_meeting_repo_class.return_value.get_by_id.return_value = mock_meeting
+    mock_meeting_repo_class.return_value.get_by_id_and_user.return_value = mock_meeting
 
     # Chamada POST corrigida
     response = client.post(f"{BASE_URL}/1/integrations/retry")
@@ -65,11 +66,25 @@ def test_retry_integrations_rejects_in_progress_meeting(mock_meeting_repo_class)
 
 
 @patch("app.api.v1.integrations.MeetingRepository")
-def test_list_integrations_returns_delivery_status(mock_meeting_repo_class):
+def test_list_integrations_returns_delivery_status(mock_meeting_repo_class, client):
     # Setup forçando a não encontrar nenhuma reunião
     mock_meeting_repo_class.return_value.get_by_id.return_value = None
+    mock_meeting_repo_class.return_value.get_by_id_and_user.return_value = None
 
     # Chamada POST corrigida (testando um ID que não existe)
     response = client.post(f"{BASE_URL}/999/integrations/retry")
 
     assert response.status_code == 404
+
+
+@patch("app.api.v1.integrations.MeetingRepository")
+def test_integrations_cross_tenant_idor_blocked(mock_meeting_repo_class, client):
+    """Testa que get_by_id_and_user retornando None bloqueia IDOR com 404."""
+    # get_by_id encontraria a reunião de outro usuário, mas scoping bloqueia
+    mock_other_meeting = MagicMock(id=5, user_id=99)
+    mock_meeting_repo_class.return_value.get_by_id.return_value = mock_other_meeting
+    mock_meeting_repo_class.return_value.get_by_id_and_user.return_value = None
+
+    response = client.get(f"{BASE_URL}/5/integrations")
+    assert response.status_code == 404
+    assert "não encontrada" in response.json()["detail"]

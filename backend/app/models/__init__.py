@@ -6,6 +6,7 @@ from app.models.summary import Summary
 from app.models.task import Task
 from app.models.transcript import Transcript
 from app.models.transcript_segment import TranscriptSegment
+from app.models.user import User
 
 __all__ = [
     "AudioFile",
@@ -16,4 +17,5 @@ __all__ = [
     "Summary",
     "Task",
     "IntegrationConfiguration",
+    "User",
 ]

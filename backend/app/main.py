@@ -2,6 +2,8 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.api.frontend import configure_frontend
+from app.api.v1.auth import router as auth_router
 from app.api.v1.integrations import router as integrations_router
 from app.api.v1.meetings import router as meetings_router
 from app.services.meeting_service import InvalidMeetingTransitionError
@@ -12,22 +14,7 @@ app = FastAPI(
     version="0.1.0",
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5172",
-        "http://127.0.0.1:5172",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+configure_frontend(app)
 
 
 @app.exception_handler(InvalidMeetingTransitionError)
@@ -42,5 +29,6 @@ def health_check():
     return {"status": "ok"}
 
 
+app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(meetings_router, prefix="/meetings", tags=["Meetings"])
 app.include_router(integrations_router, prefix="/meetings", tags=["Integrations"])

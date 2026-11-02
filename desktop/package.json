@@ -1,0 +1,12 @@
+{
+  "name": "cortechx-zumo-desktop",
+  "version": "0.1.0",
+  "description": "CortechX Zumo Desktop App - Gravador e Sumarizador com Detecção Inteligente de Reuniões",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}
