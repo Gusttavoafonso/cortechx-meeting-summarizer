@@ -67,7 +67,7 @@ export const Sidebar: React.FC = () => {
                 to={item.to}
                 className={({ isActive }) =>
                   cn(
-                    'relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group',
+                    'relative flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group',
                     isActive
                       ? 'text-ink font-semibold bg-white/60 shadow-xs'
                       : 'text-muted hover:text-ink hover:bg-white/30'
@@ -76,8 +76,10 @@ export const Sidebar: React.FC = () => {
               >
                 {({ isActive }) => (
                   <>
-                    {isActive && (
-                      <span className="absolute -left-1.5 w-1.5 h-1.5 rounded-full bg-brand" />
+                    {isActive ? (
+                      <span className="w-2 h-2 rounded-full bg-brand shrink-0" />
+                    ) : (
+                      <span className="w-2 h-2 shrink-0" />
                     )}
                     <Icon
                       className={cn(
