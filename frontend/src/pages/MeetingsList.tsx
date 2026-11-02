@@ -92,7 +92,7 @@ export const MeetingsList: React.FC = () => {
   }
 
   return (
-    <div className="flex-1 px-8 py-10 max-w-6xl mx-auto w-full">
+    <div className="flex-1 px-8 py-10 max-w-5xl mx-auto w-full">
       {/* Page Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
