@@ -12,6 +12,7 @@ from fastapi import (
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import get_session
 from app.core.exceptions import (
@@ -19,6 +20,7 @@ from app.core.exceptions import (
     TranscriptionAudioCorruptedError,
 )
 from app.models.meeting_status import IN_PROGRESS_STATUSES, MeetingStatus
+from app.models.user import User
 from app.repositories.audio_repository import AudioRepository
 from app.repositories.meeting_repository import MeetingRepository
 from app.repositories.summary_repository import SummaryRepository
@@ -59,7 +61,7 @@ from app.services.transcription import (
 )
 from app.workers.meeting_job import enqueue_meeting_processing
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 def get_meeting_repository(db: Session = Depends(get_session)) -> MeetingRepository:
@@ -152,9 +154,10 @@ def _mark_failed(
 )
 def create_meeting(
     meeting_in: MeetingCreate,
+    current_user: User = Depends(get_current_user),
     meeting_service: MeetingService = Depends(get_meeting_service),
 ) -> MeetingResponse:
-    meeting = meeting_service.create(meeting_in)
+    meeting = meeting_service.create(meeting_in, user_id=current_user.id)
     return MeetingResponse.model_validate(meeting)
 
 
@@ -164,9 +167,10 @@ def create_meeting(
     summary="Listar reuniões",
 )
 def list_meetings(
+    current_user: User = Depends(get_current_user),
     meeting_service: MeetingService = Depends(get_meeting_service),
 ) -> list[MeetingResponse]:
-    meetings = meeting_service.list_all()
+    meetings = meeting_service.list_all(user_id=current_user.id)
     return [MeetingResponse.model_validate(m) for m in meetings]
 
 
@@ -177,11 +181,12 @@ def list_meetings(
 )
 def get_meeting(
     meeting_id: int,
+    current_user: User = Depends(get_current_user),
     meeting_service: MeetingService = Depends(get_meeting_service),
 ) -> MeetingResponse:
     validate_meeting_id(meeting_id)
     try:
-        meeting = meeting_service.get_by_id(meeting_id)
+        meeting = meeting_service.get_by_id(meeting_id, user_id=current_user.id)
     except MeetingNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -213,13 +218,14 @@ def get_meeting(
 def upload_audio(
     meeting_id: int,
     file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
     meeting_repo: MeetingRepository = Depends(get_meeting_repository),
     audio_repo: AudioRepository = Depends(get_audio_repository),
     transcript_repo: TranscriptRepository = Depends(get_transcript_repository),
     storage_service: AudioStorageService = Depends(get_audio_storage_service),
 ) -> AudioUploadResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id(meeting_id)
+    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
     if not meeting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -298,11 +304,12 @@ def upload_audio(
 )
 def get_audio_metadata(
     meeting_id: int,
+    current_user: User = Depends(get_current_user),
     meeting_repo: MeetingRepository = Depends(get_meeting_repository),
     audio_repo: AudioRepository = Depends(get_audio_repository),
 ) -> AudioUploadResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id(meeting_id)
+    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
     if not meeting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -340,6 +347,7 @@ def get_audio_metadata(
 def transcribe_meeting(
     meeting_id: int,
     db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
     meeting_repo: MeetingRepository = Depends(get_meeting_repository),
     audio_repo: AudioRepository = Depends(get_audio_repository),
     transcript_repo: TranscriptRepository = Depends(get_transcript_repository),
@@ -347,7 +355,7 @@ def transcribe_meeting(
     stt_service: BaseSpeechToTextService = Depends(get_transcription_service),
 ) -> TranscriptResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id(meeting_id)
+    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
     if not meeting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -499,6 +507,7 @@ def transcribe_meeting(
 )
 def diarize_meeting(
     meeting_id: int,
+    current_user: User = Depends(get_current_user),
     meeting_repo: MeetingRepository = Depends(get_meeting_repository),
     audio_repo: AudioRepository = Depends(get_audio_repository),
     transcript_repo: TranscriptRepository = Depends(get_transcript_repository),
@@ -506,7 +515,7 @@ def diarize_meeting(
     diarization_service: DiarizationService = Depends(get_diarization_service),
 ) -> TranscriptResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id(meeting_id)
+    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
 
     # trata erros de reunião inexistente, áudio ausente ou transcrição não realizada
     if not meeting:
@@ -583,11 +592,12 @@ def diarize_meeting(
 )
 def get_meeting_transcript(
     meeting_id: int,
+    current_user: User = Depends(get_current_user),
     meeting_repo: MeetingRepository = Depends(get_meeting_repository),
     transcript_repo: TranscriptRepository = Depends(get_transcript_repository),
 ) -> TranscriptResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id(meeting_id)
+    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
 
     # trata erros de reunião inexistente ou transcrição não realizada
     if not meeting:
@@ -619,6 +629,7 @@ def get_meeting_transcript(
 def process_meeting_async(
     meeting_id: int,
     background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
     meeting_repo: MeetingRepository = Depends(get_meeting_repository),
     audio_repo: AudioRepository = Depends(get_audio_repository),
     storage_service: AudioStorageService = Depends(get_audio_storage_service),
@@ -627,7 +638,7 @@ def process_meeting_async(
     ),
 ) -> MeetingProcessResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id(meeting_id)
+    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
 
     if not meeting:
         raise HTTPException(
@@ -685,9 +696,17 @@ def process_meeting_async(
 )
 def create_summary(
     meeting_id: int,
+    current_user: User = Depends(get_current_user),
+    meeting_repo: MeetingRepository = Depends(get_meeting_repository),
     summary_service: SummaryService = Depends(get_summary_service),
 ) -> SummaryResponse:
     validate_meeting_id(meeting_id)
+    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
+    if not meeting:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reunião com ID {meeting_id} não encontrada.",
+        )
     try:
         return summary_service.generate_and_persist(meeting_id)
     except SummaryMeetingNotFoundError:
@@ -722,21 +741,22 @@ def create_summary(
 )
 def get_summary(
     meeting_id: int,
+    current_user: User = Depends(get_current_user),
     meeting_repo: MeetingRepository = Depends(get_meeting_repository),
     summary_repo: SummaryRepository = Depends(get_summary_repository),
 ) -> SummaryResponse:
     validate_meeting_id(meeting_id)
 
-    summary = summary_repo.get_by_meeting_id(meeting_id)
-    if summary is not None:
-        return SummaryResponse.model_validate(summary)
-
-    meeting = meeting_repo.get_by_id(meeting_id)
+    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
     if meeting is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Reunião com ID {meeting_id} não encontrada.",
         )
+
+    summary = summary_repo.get_by_meeting_id(meeting_id)
+    if summary is not None:
+        return SummaryResponse.model_validate(summary)
 
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
@@ -763,12 +783,13 @@ def get_summary(
 def retry_meeting(
     meeting_id: int,
     background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
     meeting_repo: MeetingRepository = Depends(get_meeting_repository),
     audio_repo: AudioRepository = Depends(get_audio_repository),
     storage_service: AudioStorageService = Depends(get_audio_storage_service),
 ) -> MeetingResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id(meeting_id)
+    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
     if not meeting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -825,11 +846,12 @@ def retry_meeting(
 )
 def get_meeting_status(
     meeting_id: int,
+    current_user: User = Depends(get_current_user),
     meeting_service: MeetingService = Depends(get_meeting_service),
 ) -> MeetingStatusResponse:
     validate_meeting_id(meeting_id)
     try:
-        meeting = meeting_service.get_by_id(meeting_id)
+        meeting = meeting_service.get_by_id(meeting_id, user_id=current_user.id)
     except MeetingNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

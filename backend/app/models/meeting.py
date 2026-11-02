@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from app.models.integration_delivery import IntegrationDelivery
     from app.models.summary import Summary
     from app.models.transcript import Transcript
+    from app.models.user import User
 
 
 class Meeting(Base):
@@ -31,6 +32,15 @@ class Meeting(Base):
         String(255),
         nullable=False,
     )
+
+    user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+
+    user: Mapped[User | None] = relationship("User", back_populates="meetings")
 
     status: Mapped[MeetingStatus] = mapped_column(
         SqlEnum(

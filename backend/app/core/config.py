@@ -111,6 +111,36 @@ class Settings(BaseSettings):
         validation_alias="CELERY_TASK_ALWAYS_EAGER",
     )
 
+    # Configurações de Autenticação Google e Sessão
+    google_client_id: str | None = Field(
+        default=None,
+        validation_alias="GOOGLE_CLIENT_ID",
+    )
+    jwt_secret_key: str = Field(
+        default="dev-secret-key-change-in-production",
+        validation_alias="JWT_SECRET_KEY",
+    )
+    jwt_algorithm: str = Field(
+        default="HS256",
+        validation_alias="JWT_ALGORITHM",
+    )
+    session_cookie_name: str = Field(
+        default="session_token",
+        validation_alias="SESSION_COOKIE_NAME",
+    )
+    session_max_age_seconds: int = Field(
+        default=604800,  # 7 dias
+        validation_alias="SESSION_MAX_AGE_SECONDS",
+    )
+    session_cookie_secure: bool = Field(
+        default=False,
+        validation_alias="SESSION_COOKIE_SECURE",
+    )
+    session_cookie_samesite: str = Field(
+        default="lax",
+        validation_alias="SESSION_COOKIE_SAMESITE",
+    )
+
     @field_validator("AUDIO_STORAGE_PATH", mode="before")
     @classmethod
     def resolve_storage_path(cls, v: Any) -> Path:
@@ -129,6 +159,7 @@ class Settings(BaseSettings):
         "notion_token",
         "notion_database_id",
         "llm_api_key",
+        "google_client_id",
         mode="before",
     )
     @classmethod
