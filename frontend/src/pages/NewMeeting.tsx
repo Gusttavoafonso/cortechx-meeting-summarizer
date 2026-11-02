@@ -19,7 +19,10 @@ import {
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { RecordingPanel } from '../components/recording/RecordingPanel'
+import { MeetingOptionsModal } from '../components/recording/MeetingOptionsModal'
+import { useRecordingContext } from '../context/RecordingContext'
 import { createMeeting, processMeeting, uploadMeetingAudio } from '../api/meetings'
+import { getMe, loginUser, UserPublic } from '../api/auth'
 import { formatBytes, formatSecondsToTime } from '../lib/utils'
 
 const MAX_FILE_SIZE_BYTES = 250 * 1024 * 1024 // 250MB
@@ -38,6 +41,7 @@ type ProcessStep = 'idle' | 'creating' | 'uploading' | 'processing' | 'done' | '
 
 export const NewMeeting: React.FC = () => {
   const navigate = useNavigate()
+  const recordingCtx = useRecordingContext()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null)
@@ -47,6 +51,8 @@ export const NewMeeting: React.FC = () => {
   const [fileError, setFileError] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [inputMethod, setInputMethod] = useState<'record' | 'upload'>('record')
+  const [isOptionsOpen, setIsOptionsOpen] = useState(false)
+  const [currentUser, setCurrentUser] = useState<UserPublic | null>(null)
 
   // Audio preview playback state
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
@@ -66,6 +72,46 @@ export const NewMeeting: React.FC = () => {
   useEffect(() => {
     titleInputRef.current?.focus()
   }, [])
+
+  // Auto-login / check user session on mount
+  useEffect(() => {
+    let isMounted = true
+    const initAuth = async () => {
+      try {
+        const user = await getMe()
+        if (isMounted) setCurrentUser(user)
+      } catch {
+        try {
+          // Auto-login demo user for local test environment
+          const user = await loginUser('demo@cortechx.com', 'Password123!')
+          if (isMounted) setCurrentUser(user)
+        } catch {
+          if (isMounted) {
+            setCurrentUser({
+              id: 1,
+              email: 'demo@cortechx.com',
+              name: 'Demo User',
+            })
+          }
+        }
+      }
+    }
+    initAuth()
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  // Restore recorded audio from global context if user switched tabs/pages
+  useEffect(() => {
+    if (recordingCtx.recordedFile && !selectedFile) {
+      validateAndSetFile(recordingCtx.recordedFile)
+      if (recordingCtx.title && !title) {
+        setTitle(recordingCtx.title)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordingCtx.recordedFile])
 
   // Create & clean up audio object URL
   useEffect(() => {
@@ -194,6 +240,7 @@ export const NewMeeting: React.FC = () => {
     setAudioUploaded(false)
     setFailedStep(null)
     setErrorMessage(null)
+    recordingCtx.clearRecording()
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
@@ -261,6 +308,7 @@ export const NewMeeting: React.FC = () => {
       setFailedStep(null)
       await processMeeting(meetingId)
       setCurrentStep('done')
+      recordingCtx.clearRecording()
 
       // Redireciona para a lista ou tela de detalhes da reunião
       setTimeout(() => {
@@ -396,7 +444,11 @@ export const NewMeeting: React.FC = () => {
       {!selectedFile ? (
         inputMethod === 'record' ? (
           <RecordingPanel
-            onRecordingComplete={(file) => validateAndSetFile(file)}
+            userId={currentUser?.id || 1}
+            onRecordingComplete={(file, durationMs) => {
+              recordingCtx.setRecordingData(file, durationMs, title || file.name)
+              validateAndSetFile(file)
+            }}
             disabled={currentStep !== 'idle' && currentStep !== 'failed'}
           />
         ) : (
@@ -564,16 +616,16 @@ export const NewMeeting: React.FC = () => {
         </div>
       )}
 
-      {/* Bottom Bar: Opções (subtly disabled) & Iniciar processo */}
+      {/* Bottom Bar: Opções & Iniciar processo */}
       <div className="flex items-center justify-between mt-10 pt-4">
-        {/* Secondary button: Opções (Disabled subtly) */}
+        {/* Secondary button: Opções */}
         <button
           type="button"
-          disabled
-          title="Opções avançadas estarão disponíveis nas próximas fases"
-          className="flex items-center gap-2 text-xs font-medium text-muted/60 cursor-not-allowed opacity-60 hover:opacity-60"
+          onClick={() => setIsOptionsOpen(true)}
+          title="Configurações de transcrição, resumo e IA"
+          className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-muted hover:text-ink hover:bg-white rounded-xl border border-slate-200 transition-all cursor-pointer shadow-2xs"
         >
-          <SlidersHorizontal className="w-4 h-4" />
+          <SlidersHorizontal className="w-3.5 h-3.5 text-brand" />
           <span>Opções</span>
         </button>
 
@@ -592,6 +644,12 @@ export const NewMeeting: React.FC = () => {
           {failedStep ? 'Tentar novamente' : 'Iniciar processo'}
         </Button>
       </div>
+
+      {/* Meeting Options Modal */}
+      <MeetingOptionsModal
+        isOpen={isOptionsOpen}
+        onClose={() => setIsOptionsOpen(false)}
+      />
     </div>
   )
 }

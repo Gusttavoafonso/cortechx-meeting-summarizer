@@ -244,7 +244,7 @@ export class AudioRecorderEngine {
     }
   }
 
-  async stop(): Promise<RecordingResult> {
+  async stop({ userId = 1 }: { userId?: number | string } = {}): Promise<RecordingResult> {
     if (!this.isRecording) {
       throw new Error('Nenhuma gravação em andamento.')
     }
@@ -267,7 +267,12 @@ export class AudioRecorderEngine {
         const blob = new Blob(this.recordedChunks, { type: mimeType })
         const durationMs = this.elapsedTime
         const ext = mimeType.includes('mp4') ? 'm4a' : 'webm'
-        const file = new File([blob], `gravacao-${Date.now()}.${ext}`, { type: mimeType })
+
+        const now = new Date()
+        const pad = (n: number) => String(n).padStart(2, '0')
+        const formattedDate = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+        const fileName = `gravacao-u${userId}-${formattedDate}.${ext}`
+        const file = new File([blob], fileName, { type: mimeType })
 
         this.cleanup()
         if (this.onStateChange) this.onStateChange('stopped')

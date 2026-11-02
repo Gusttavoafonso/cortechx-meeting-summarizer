@@ -13,5 +13,15 @@ export default defineConfig({
   server: {
     port: 5172,
     host: true,
+    proxy: {
+      '/meetings': {
+        target: 'http://localhost:8001',
+        changeOrigin: true,
+      },
+      '/auth': {
+        target: 'http://localhost:8001',
+        changeOrigin: true,
+      },
+    },
   },
 })

@@ -17,11 +17,13 @@ import { formatSecondsToTime } from '../../lib/utils'
 
 interface RecordingPanelProps {
   onRecordingComplete: (file: File, durationMs: number) => void
+  userId?: number | string
   disabled?: boolean
 }
 
 export const RecordingPanel: React.FC<RecordingPanelProps> = ({
   onRecordingComplete,
+  userId = 1,
   disabled = false,
 }) => {
   const engineRef = useRef<AudioRecorderEngine | null>(null)
@@ -128,7 +130,7 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
 
     try {
-      const result = await engineRef.current.stop()
+      const result = await engineRef.current.stop({ userId })
       setIsRecording(false)
       setIsPaused(false)
       setElapsedMs(0)
