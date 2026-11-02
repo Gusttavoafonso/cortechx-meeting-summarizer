@@ -90,6 +90,136 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Elementos de Autenticação
+  const authModal = document.getElementById('authModal');
+  const authForm = document.getElementById('authForm');
+  const authNameField = document.getElementById('authNameField');
+  const authName = document.getElementById('authName');
+  const authEmail = document.getElementById('authEmail');
+  const authPassword = document.getElementById('authPassword');
+  const btnAuthSubmit = document.getElementById('btnAuthSubmit');
+  const btnAuthToggle = document.getElementById('btnAuthToggle');
+  const authToggleText = document.getElementById('authToggleText');
+  const authModalTitle = document.getElementById('authModalTitle');
+  const btnCloseAuth = document.getElementById('btnCloseAuth');
+  const authNavContainer = document.getElementById('authNavContainer');
+  const btnOpenLogin = document.getElementById('btnOpenLogin');
+
+  let currentUser = null;
+  let isRegisterMode = false;
+
+  async function checkAuth() {
+    try {
+      const res = await fetch('/auth/me');
+      if (res.ok) {
+        currentUser = await res.json();
+        renderAuthNav();
+        fetchRecentMeetings();
+      } else {
+        currentUser = null;
+        renderAuthNav();
+      }
+    } catch (e) {
+      currentUser = null;
+      renderAuthNav();
+    }
+  }
+
+  function renderAuthNav() {
+    if (!authNavContainer) return;
+    if (currentUser) {
+      authNavContainer.innerHTML = `
+        <span style="font-size: 0.85rem; color: #cbd5e1;">👤 ${currentUser.name || currentUser.email}</span>
+        <button id="btnLogout" class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">Sair</button>
+      `;
+      document.getElementById('btnLogout')?.addEventListener('click', async () => {
+        await fetch('/auth/logout', { method: 'POST' });
+        currentUser = null;
+        renderAuthNav();
+        showToast('Você saiu da sua conta.');
+        if (recentMeetingsContainer) {
+          recentMeetingsContainer.innerHTML = '<div style="color: var(--text-muted); grid-column: 1/-1;">Faça login para ver seu histórico.</div>';
+        }
+      });
+    } else {
+      authNavContainer.innerHTML = `
+        <button id="btnOpenLogin" class="btn btn-secondary" style="padding: 0.35rem 0.85rem; font-size: 0.85rem;">Entrar</button>
+      `;
+      document.getElementById('btnOpenLogin')?.addEventListener('click', () => {
+        openAuthModal(false);
+      });
+    }
+  }
+
+  function openAuthModal(register = false) {
+    if (!authModal) return;
+    isRegisterMode = register;
+    authModalTitle.textContent = isRegisterMode ? 'Criar Conta no Zumo' : 'Entrar no Zumo';
+    btnAuthSubmit.textContent = isRegisterMode ? 'Criar Conta' : 'Entrar';
+    authNameField.style.display = isRegisterMode ? 'block' : 'none';
+    authToggleText.textContent = isRegisterMode ? 'Já possui conta?' : 'Não tem uma conta?';
+    btnAuthToggle.textContent = isRegisterMode ? 'Entrar' : 'Criar Conta';
+    authModal.style.display = 'flex';
+  }
+
+  function closeAuthModal() {
+    if (authModal) authModal.style.display = 'none';
+  }
+
+  btnOpenLogin?.addEventListener('click', () => openAuthModal(false));
+  btnCloseAuth?.addEventListener('click', closeAuthModal);
+
+  btnAuthToggle?.addEventListener('click', () => {
+    openAuthModal(!isRegisterMode);
+  });
+
+  authForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = authEmail.value.trim();
+    const password = authPassword.value;
+    const name = authName.value.trim();
+
+    try {
+      btnAuthSubmit.disabled = true;
+      btnAuthSubmit.textContent = 'Processando...';
+
+      if (isRegisterMode) {
+        const res = await fetch('/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, name: name || 'Usuário' }),
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.detail || 'Erro ao criar conta.');
+        }
+      }
+
+      // Login
+      const loginRes = await fetch('/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!loginRes.ok) {
+        const data = await loginRes.json();
+        throw new Error(data.detail || 'E-mail ou senha incorretos.');
+      }
+
+      currentUser = await loginRes.json();
+      renderAuthNav();
+      closeAuthModal();
+      showToast(`Bem-vindo, ${currentUser.name || 'ao Zumo'}!`);
+      fetchRecentMeetings();
+    } catch (err) {
+      showToast(err.message, true);
+    } finally {
+      btnAuthSubmit.disabled = false;
+      btnAuthSubmit.textContent = isRegisterMode ? 'Criar Conta' : 'Entrar';
+    }
+  });
+
   // Seletores de fonte
   const radioSourceBoth = document.getElementById('sourceBoth');
   const radioSourceMic = document.getElementById('sourceMic');
@@ -125,6 +255,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Iniciar Gravação
   btnStartRecord.addEventListener('click', async () => {
+    if (!currentUser) {
+      showToast('Por favor, faça login ou entre com a conta de demonstração para gravar.', false);
+      openAuthModal(false);
+      return;
+    }
+
     if (!ZumoAudioRecorder.isSupported()) {
       showToast('Seu navegador não suporta a gravação de áudio WebRTC / MediaRecorder.', true);
       return;
@@ -509,6 +645,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Carrega histórico inicial
-  fetchRecentMeetings();
+  // Verifica autenticação e carrega dados do usuário
+  checkAuth();
 });

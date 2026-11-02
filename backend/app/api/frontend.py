@@ -18,6 +18,7 @@ def configure_frontend(app: FastAPI) -> None:
 
 
 @router.get("/", include_in_schema=False)
+@router.head("/", include_in_schema=False)
 def serve_index():
     if INDEX_HTML.is_file():
         return FileResponse(INDEX_HTML)
