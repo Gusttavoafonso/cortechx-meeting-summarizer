@@ -57,12 +57,12 @@ export const LandingNavbar: React.FC = () => {
         {/* Desktop Action Buttons */}
         <div className="hidden md:flex items-center gap-3">
           <Link
-            to="/meetings"
+            to="/login"
             className="text-sm font-medium text-ink-light hover:text-ink px-3 py-2 rounded-lg hover:bg-surface/50 transition-colors"
           >
             Entrar
           </Link>
-          <Link to="/meetings/new">
+          <Link to="/login?mode=register">
             <Button
               size="sm"
               className="h-9 px-4 text-xs font-semibold rounded-lg shadow-sm group"
@@ -103,14 +103,14 @@ export const LandingNavbar: React.FC = () => {
           </nav>
           <div className="pt-3 border-t border-subtle-border flex flex-col gap-2">
             <Link
-              to="/meetings"
+              to="/login"
               onClick={() => setMobileMenuOpen(false)}
               className="w-full text-center py-2.5 text-sm font-semibold text-ink hover:bg-surface rounded-lg"
             >
               Entrar
             </Link>
             <Link
-              to="/meetings/new"
+              to="/login?mode=register"
               onClick={() => setMobileMenuOpen(false)}
               className="w-full"
             >

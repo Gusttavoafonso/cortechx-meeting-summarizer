@@ -399,7 +399,7 @@ export const LandingPage: React.FC = () => {
                 com tarefas organizadas.
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3 relative z-10">
-                <Link to="/meetings/new" className="w-full sm:w-auto">
+                <Link to="/login?mode=register" className="w-full sm:w-auto">
                   <Button
                     size="lg"
                     className="w-full sm:w-auto bg-white text-primary-btn hover:bg-surface active:bg-surface-hover font-bold shadow-md"
@@ -408,7 +408,7 @@ export const LandingPage: React.FC = () => {
                     Criar Primeira Reunião
                   </Button>
                 </Link>
-                <Link to="/meetings" className="w-full sm:w-auto">
+                <Link to="/login" className="w-full sm:w-auto">
                   <button
                     type="button"
                     className="w-full sm:w-auto h-12 px-6 rounded-xl text-sm font-semibold text-white/90 hover:text-white hover:bg-white/10 transition-colors"
@@ -441,7 +441,7 @@ export const LandingPage: React.FC = () => {
             <a href="#faq" className="hover:text-ink transition-colors">
               FAQ
             </a>
-            <Link to="/meetings" className="hover:text-ink transition-colors">
+            <Link to="/login" className="hover:text-ink transition-colors">
               Acessar App
             </Link>
           </div>

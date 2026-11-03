@@ -1,5 +1,5 @@
 import React from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate, Link } from 'react-router-dom'
 import {
   LayoutGrid,
   MessagesSquare,
@@ -7,9 +7,12 @@ import {
   AudioLines,
   Settings,
   Plus,
+  LogOut,
+  LogIn,
 } from 'lucide-react'
 import { ZumoLogo } from '../components/ZumoLogo'
 import { Button } from '../components/ui/Button'
+import { useAuth } from '../contexts/AuthContext'
 import { cn } from '../lib/utils'
 
 interface NavItem {
@@ -29,6 +32,7 @@ const navItems: NavItem[] = [
 
 export const Sidebar: React.FC = () => {
   const navigate = useNavigate()
+  const { user, logout } = useAuth()
 
   return (
     <aside className="w-64 bg-surface shrink-0 min-h-screen flex flex-col px-5 py-6 select-none border-r border-[#DCE2FB]">
@@ -102,14 +106,49 @@ export const Sidebar: React.FC = () => {
       </div>
 
       {/* User / Workspace Footer */}
-      <div className="pt-4 border-t border-slate-200/40 px-2 flex items-center gap-2.5 text-xs text-muted">
-        <div className="w-7 h-7 rounded-full bg-brand/10 text-brand flex items-center justify-center font-bold text-[11px]">
-          Z
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="truncate font-medium text-ink">CortechX Workspace</p>
-          <p className="text-[10px] text-muted truncate">Free plan</p>
-        </div>
+      <div className="pt-4 border-t border-slate-200/40 px-2 flex items-center justify-between gap-2.5 text-xs text-muted">
+        {user ? (
+          <>
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              {user.picture_url ? (
+                <img
+                  src={user.picture_url}
+                  alt={user.name}
+                  className="w-7 h-7 rounded-full object-cover shrink-0 border border-slate-200"
+                />
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-brand/10 text-brand flex items-center justify-center font-bold text-[11px] shrink-0">
+                  {user.name.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="truncate font-semibold text-ink leading-tight">
+                  {user.name}
+                </p>
+                <p className="text-[10px] text-muted truncate">Conectado</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                await logout()
+                navigate('/login')
+              }}
+              title="Sair da conta"
+              className="p-1.5 rounded-lg text-muted hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </>
+        ) : (
+          <Link
+            to="/login"
+            className="flex items-center justify-between w-full p-1 rounded-lg text-xs font-semibold text-brand hover:underline"
+          >
+            <span>Fazer login</span>
+            <LogIn className="w-3.5 h-3.5" />
+          </Link>
+        )}
       </div>
     </aside>
   )

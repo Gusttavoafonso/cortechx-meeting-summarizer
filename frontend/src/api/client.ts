@@ -26,6 +26,7 @@ export async function request<T>(
   }
 
   const response = await fetch(url, {
+    credentials: options.credentials || 'include',
     ...options,
     headers,
   })
