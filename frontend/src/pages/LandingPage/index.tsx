@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Mic,
@@ -23,6 +23,48 @@ import { cn } from '../../lib/utils'
 
 export const LandingPage: React.FC = () => {
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0)
+  const mainRef = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    const main = mainRef.current
+    if (!main || !('IntersectionObserver' in window)) return
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+    if (reducedMotion.matches) return
+
+    const targets = main.querySelectorAll<HTMLElement>(
+      'section:not(:first-child) > div > .text-center, section:not(:first-child) .grid > div, section:last-child > div'
+    )
+    let frame = 0
+    const update = () => {
+      frame = 0
+      const viewport = window.innerHeight
+      targets.forEach((element) => {
+        const top = element.getBoundingClientRect().top
+        const progress = reducedMotion.matches
+          ? 1
+          : Math.max(0, Math.min(1, (viewport * 0.92 - top) / (viewport * 0.38)))
+        element.style.opacity = String(progress)
+        element.style.transform = `translateY(${(1 - progress) * 32}px)`
+      })
+    }
+    const scheduleUpdate = () => {
+      if (!frame) frame = window.requestAnimationFrame(update)
+    }
+    update()
+    window.addEventListener('scroll', scheduleUpdate, { passive: true })
+    window.addEventListener('resize', scheduleUpdate)
+    reducedMotion.addEventListener('change', scheduleUpdate)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener('scroll', scheduleUpdate)
+      window.removeEventListener('resize', scheduleUpdate)
+      reducedMotion.removeEventListener('change', scheduleUpdate)
+      targets.forEach((element) => {
+        element.style.removeProperty('opacity')
+        element.style.removeProperty('transform')
+      })
+    }
+  }, [])
 
   const faqs = [
     {
@@ -48,11 +90,11 @@ export const LandingPage: React.FC = () => {
   ]
 
   return (
-    <div className="min-h-screen bg-page text-ink selection:bg-surface selection:text-brand flex flex-col">
+    <div className="landing-page min-h-screen bg-page text-ink selection:bg-surface selection:text-brand flex flex-col">
       {/* Navigation */}
       <LandingNavbar />
 
-      <main className="flex-1">
+      <main ref={mainRef} className="flex-1">
         {/* ================= HERO SECTION (FULL SCREEN) ================= */}
         <section className="relative min-h-[calc(100vh-4.5rem)] flex flex-col justify-between overflow-hidden">
           {/* Subtle Ambient Background Light */}

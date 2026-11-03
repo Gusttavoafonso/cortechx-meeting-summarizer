@@ -36,6 +36,16 @@ export const LandingNavbar: React.FC = () => {
         {/* Brand Logo */}
         <Link
           to="/"
+          onClick={(event) => {
+            event.preventDefault()
+            window.scrollTo({
+              top: 0,
+              behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                ? 'instant'
+                : 'smooth',
+            })
+            setMobileMenuOpen(false)
+          }}
           className="flex items-center gap-2 group hover:opacity-95 transition-opacity"
         >
           <ZumoLogo size="lg" />

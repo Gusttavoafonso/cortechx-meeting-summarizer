@@ -1,5 +1,6 @@
 import React from 'react'
 import { cn } from '../lib/utils'
+import zumoLogo from '../assets/zumo-logo-extended.png'
 
 interface ZumoLogoProps {
   className?: string
@@ -13,9 +14,9 @@ export const ZumoLogo: React.FC<ZumoLogoProps> = ({
   size = 'md',
 }) => {
   const sizeClasses = {
-    sm: 'text-xl',
-    md: 'text-2xl',
-    lg: 'text-3xl',
+    sm: 'w-14',
+    md: 'w-16',
+    lg: 'w-20',
   }
 
   if (showIconOnly) {
@@ -35,15 +36,10 @@ export const ZumoLogo: React.FC<ZumoLogoProps> = ({
   }
 
   return (
-    <div
-      className={cn(
-        'flex items-baseline select-none tracking-tight font-fredoka font-bold leading-none',
-        sizeClasses[size],
-        className
-      )}
-    >
-      <span className="text-ink">zumo</span>
-      <span className="inline-block w-2 h-2 rounded-full bg-brand ml-0.5" />
-    </div>
+    <img
+      src={zumoLogo}
+      alt="Zumo"
+      className={cn('block h-auto shrink-0 select-none', sizeClasses[size], className)}
+    />
   )
 }

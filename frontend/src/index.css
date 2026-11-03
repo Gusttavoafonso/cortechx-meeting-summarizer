@@ -25,6 +25,16 @@
 
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  html:has(.landing-page) {
+    scroll-behavior: smooth;
+  }
+}
+
+.landing-page section[id] {
+  scroll-margin-top: 6rem;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
