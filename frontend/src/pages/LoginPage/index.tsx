@@ -9,12 +9,12 @@ import {
   AlertCircle,
   ArrowLeft,
 } from 'lucide-react'
-import { ZumoLogo } from '../components/ZumoLogo'
-import { Button } from '../components/ui/Button'
-import { Input } from '../components/ui/Input'
-import { GoogleLoginButton } from '../components/auth/GoogleLoginButton'
-import { useAuth } from '../contexts/AuthContext'
-import { ApiError } from '../api/client'
+import { ZumoLogo } from '../../components/ZumoLogo'
+import { Button } from '../../components/ui/Button'
+import { Input } from '../../components/ui/Input'
+import { GoogleLoginButton } from '../../components/auth/GoogleLoginButton'
+import { useAuth } from '../../contexts/AuthContext'
+import { ApiError } from '../../api/client'
 
 export const LoginPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -134,7 +134,7 @@ export const LoginPage: React.FC = () => {
             >
               <ZumoLogo size="lg" />
             </Link>
-            <h1 className="text-2xl font-bold font-fredoka text-ink">
+            <h1 className="text-2xl font-bold font-sans text-ink">
               {mode === 'login' ? 'Bem-vindo de volta' : 'Crie sua conta'}
             </h1>
             <p className="text-xs text-muted mt-1">

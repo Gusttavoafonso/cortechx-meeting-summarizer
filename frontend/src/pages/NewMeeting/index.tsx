@@ -15,10 +15,10 @@ import {
   AlertCircle,
   CheckCircle2,
 } from 'lucide-react'
-import { Button } from '../components/ui/Button'
-import { Card } from '../components/ui/Card'
-import { createMeeting, processMeeting, uploadMeetingAudio } from '../api/meetings'
-import { formatBytes, formatSecondsToTime } from '../lib/utils'
+import { Button } from '../../components/ui/Button'
+import { Card } from '../../components/ui/Card'
+import { createMeeting, processMeeting, uploadMeetingAudio } from '../../api/meetings'
+import { formatBytes, formatSecondsToTime } from '../../lib/utils'
 
 const MAX_FILE_SIZE_BYTES = 250 * 1024 * 1024 // 250MB
 const ALLOWED_EXTENSIONS = [
@@ -354,7 +354,7 @@ export const NewMeeting: React.FC = () => {
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Alinhamento de Produto — Sprint 04"
           disabled={currentStep !== 'idle' && currentStep !== 'failed'}
-          className="w-full text-2xl sm:text-3xl font-bold font-fredoka text-ink bg-transparent border-b-2 border-transparent hover:border-slate-200 focus:border-brand focus:outline-none transition-colors pb-1 placeholder:text-muted/40"
+          className="w-full text-2xl sm:text-3xl font-bold font-sans text-ink bg-transparent border-b-2 border-transparent hover:border-slate-200 focus:border-brand focus:outline-none transition-colors pb-1 placeholder:text-muted/40"
         />
       </div>
 

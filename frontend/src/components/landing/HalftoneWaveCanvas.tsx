@@ -50,6 +50,34 @@ export const HalftoneWaveCanvas: React.FC<HalftoneWaveCanvasProps> = ({
 
     let width = canvas.parentElement?.clientWidth || window.innerWidth
     let canvasHeight = height
+    const pointer = { x: 0, y: 0, strength: 0, active: false }
+    const disturbance = { x: 0, y: 0, strength: 0 }
+    const interactionRadius = 120
+    const maxDisplacement = 20
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (event.pointerType === 'touch' && event.buttons === 0) return
+      const rect = canvas.getBoundingClientRect()
+      pointer.x = event.clientX - rect.left
+      pointer.y = event.clientY - rect.top
+      pointer.active = true
+    }
+    const handlePointerLeave = () => {
+      pointer.active = false
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      handlePointerMove(event)
+      const rect = canvas.getBoundingClientRect()
+      disturbance.x = event.clientX - rect.left
+      disturbance.y = event.clientY - rect.top
+      disturbance.strength = 1
+    }
+
+    canvas.addEventListener('pointermove', handlePointerMove)
+    canvas.addEventListener('pointerdown', handlePointerDown)
+    canvas.addEventListener('pointerleave', handlePointerLeave)
+    canvas.addEventListener('pointerup', handlePointerLeave)
+    canvas.addEventListener('pointercancel', handlePointerLeave)
 
     const handleResize = () => {
       if (!canvas || !canvas.parentElement) return
@@ -78,51 +106,57 @@ export const HalftoneWaveCanvas: React.FC<HalftoneWaveCanvasProps> = ({
       {
         baseColor: [147, 197, 253], // Soft Sky Blue
         crestColor: [224, 242, 254], // Light Ice Crest
-        amp: 44,
+        amp: 55,
         phaseOffset: 0.7,
-        baseThickness: 26,
-        maxDotSize: 2.4,
+        baseThickness: 34,
+        maxDotSize: 3,
         verticalShift: -18,
-        baseAlpha: 0.5,
+        baseAlpha: 0.65,
       },
       {
         baseColor: [56, 189, 248], // Luminous Azure
         crestColor: [186, 230, 253], // Highlight Azure
-        amp: 50,
+        amp: 62,
         phaseOffset: 0.35,
-        baseThickness: 30,
-        maxDotSize: 3.2,
+        baseThickness: 38,
+        maxDotSize: 3.8,
         verticalShift: -6,
-        baseAlpha: 0.7,
+        baseAlpha: 0.8,
       },
       {
         baseColor: [76, 155, 224], // Brand Light Blue
         crestColor: [125, 211, 252], // Bright Crest
-        amp: 48,
+        amp: 60,
         phaseOffset: 0,
-        baseThickness: 28,
-        maxDotSize: 2.8,
+        baseThickness: 36,
+        maxDotSize: 3.5,
         verticalShift: 8,
-        baseAlpha: 0.65,
+        baseAlpha: 0.8,
       },
       {
         baseColor: [0, 110, 185], // CortechX Brand Blue
         crestColor: [56, 189, 248], // Azure Glow
-        amp: 42,
+        amp: 53,
         phaseOffset: -0.4,
-        baseThickness: 25,
-        maxDotSize: 2.5,
+        baseThickness: 33,
+        maxDotSize: 3.1,
         verticalShift: 20,
-        baseAlpha: 0.45,
+        baseAlpha: 0.65,
       },
     ]
 
     const startTime = performance.now()
     const gridStepX = 12
     const gridStepY = 12
+    let previousFrame = startTime
 
     const render = (now: number) => {
       const elapsed = (now - startTime) / 1000
+      const delta = Math.min((now - previousFrame) / 1000, 0.1)
+      previousFrame = now
+      const targetStrength = pointer.active ? 1 : 0
+      pointer.strength += (targetStrength - pointer.strength) * (1 - Math.exp(-delta * 7))
+      disturbance.strength *= Math.exp(-delta * 2.5)
 
       ctx.clearRect(0, 0, width, canvasHeight)
 
@@ -218,16 +252,26 @@ export const HalftoneWaveCanvas: React.FC<HalftoneWaveCanvasProps> = ({
                   Math.min(maxDot * sizeBonus, intensity * maxDot * sizeBonus)
                 )
 
+                const hoverDistance = Math.hypot(x - pointer.x, y - pointer.y)
+                const glow = Math.max(0, 1 - hoverDistance / interactionRadius) * pointer.strength
                 const alpha = Math.min(
-                  0.88,
-                  Math.max(0.08, intensity * layer.baseAlpha * (0.9 + crestFactor * 0.2))
+                  1,
+                  Math.max(0.08, intensity * layer.baseAlpha * (0.9 + crestFactor * 0.2)) +
+                    glow * intensity * 1
                 )
 
                 ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`
+                const dx = x - disturbance.x
+                const dy = y - disturbance.y
+                const distance = Math.hypot(dx, dy)
+                const influence = Math.max(0, 1 - distance / interactionRadius)
+                const displacement = maxDisplacement * influence * influence * disturbance.strength
+                const directionX = distance > 0 ? dx / distance : 0
+                const directionY = distance > 0 ? dy / distance : -1
                 // Draw refined square pixel dot
                 ctx.fillRect(
-                  Math.round(x - dotSize / 2),
-                  Math.round(y - dotSize / 2),
+                  Math.round(x + directionX * displacement - dotSize / 2),
+                  Math.round(y + directionY * displacement - dotSize / 2),
                   Math.round(dotSize),
                   Math.round(dotSize)
                 )
@@ -247,6 +291,11 @@ export const HalftoneWaveCanvas: React.FC<HalftoneWaveCanvasProps> = ({
         cancelAnimationFrame(animFrameIdRef.current)
       }
       window.removeEventListener('resize', handleResize)
+      canvas.removeEventListener('pointermove', handlePointerMove)
+      canvas.removeEventListener('pointerdown', handlePointerDown)
+      canvas.removeEventListener('pointerleave', handlePointerLeave)
+      canvas.removeEventListener('pointerup', handlePointerLeave)
+      canvas.removeEventListener('pointercancel', handlePointerLeave)
     }
   }, [height, isVisible])
 

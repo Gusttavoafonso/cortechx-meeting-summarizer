@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
-import { Button } from '../components/ui/Button'
-import { Card } from '../components/ui/Card'
-import { cn } from '../lib/utils'
+import { Button } from '../../components/ui/Button'
+import { Card } from '../../components/ui/Card'
+import { cn } from '../../lib/utils'
 
 type TabType = 'perfil' | 'integracoes' | 'notificacoes'
 
@@ -12,7 +12,7 @@ export const SettingsPage: React.FC = () => {
     <div className="flex-1 px-8 py-10 max-w-5xl mx-auto w-full">
       {/* Page Title */}
       <div className="mb-6">
-        <h1 className="text-3xl font-bold font-fredoka text-ink">Settings</h1>
+        <h1 className="text-3xl font-bold font-sans text-ink">Settings</h1>
         <p className="text-sm text-muted mt-1">
           Ajuste sua conta e escolha para onde os resumos das reuniões vão.
         </p>
@@ -75,7 +75,7 @@ export const SettingsPage: React.FC = () => {
       {activeTab === 'integracoes' && (
         <div>
           <div className="mb-8">
-            <h2 className="text-xl font-bold font-fredoka text-ink mb-1">
+            <h2 className="text-xl font-bold font-sans text-ink mb-1">
               Conecte suas ferramentas
             </h2>
             <p className="text-sm text-muted max-w-xl">
@@ -116,7 +116,7 @@ export const SettingsPage: React.FC = () => {
                     </svg>
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold font-fredoka text-ink">Notion</h3>
+                    <h3 className="text-lg font-bold font-sans text-ink">Notion</h3>
                     <p className="text-xs text-muted mt-1 leading-relaxed">
                       Salve cada resumo como uma página no database que você escolher.
                     </p>
@@ -146,7 +146,7 @@ export const SettingsPage: React.FC = () => {
                     </svg>
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold font-fredoka text-ink">Discord</h3>
+                    <h3 className="text-lg font-bold font-sans text-ink">Discord</h3>
                     <p className="text-xs text-muted mt-1 leading-relaxed">
                       Publique o resumo em um canal para todo mundo ficar por dentro.
                     </p>
@@ -165,7 +165,7 @@ export const SettingsPage: React.FC = () => {
 
       {activeTab === 'perfil' && (
         <Card className="p-8">
-          <h3 className="text-lg font-bold font-fredoka text-ink mb-2">
+          <h3 className="text-lg font-bold font-sans text-ink mb-2">
             Perfil do Usuário
           </h3>
           <p className="text-sm text-muted mb-6">
@@ -198,7 +198,7 @@ export const SettingsPage: React.FC = () => {
 
       {activeTab === 'notificacoes' && (
         <Card className="p-8">
-          <h3 className="text-lg font-bold font-fredoka text-ink mb-2">
+          <h3 className="text-lg font-bold font-sans text-ink mb-2">
             Preferências de Notificação
           </h3>
           <p className="text-sm text-muted mb-4">

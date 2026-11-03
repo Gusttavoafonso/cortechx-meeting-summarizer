@@ -11,11 +11,11 @@ import {
   Sparkles,
   ListTodo,
 } from 'lucide-react'
-import { fetchMeetingById, retryMeeting } from '../api/meetings'
-import { Card } from '../components/ui/Card'
-import { StatusBadge } from '../components/ui/Badge'
-import { Button } from '../components/ui/Button'
-import { formatBytes, formatMeetingDate, formatSecondsToTime } from '../lib/utils'
+import { fetchMeetingById, retryMeeting } from '../../api/meetings'
+import { Card } from '../../components/ui/Card'
+import { StatusBadge } from '../../components/ui/Badge'
+import { Button } from '../../components/ui/Button'
+import { formatBytes, formatMeetingDate, formatSecondsToTime } from '../../lib/utils'
 
 export const MeetingDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>()
@@ -111,7 +111,7 @@ export const MeetingDetails: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <div className="flex items-center gap-3 flex-wrap mb-1.5">
-            <h1 className="text-3xl font-bold font-fredoka text-ink">{meeting.title}</h1>
+            <h1 className="text-3xl font-bold font-sans text-ink">{meeting.title}</h1>
             <StatusBadge status={meeting.status} />
           </div>
           <p className="text-xs text-muted flex items-center gap-3">

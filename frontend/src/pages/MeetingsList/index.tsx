@@ -9,13 +9,13 @@ import {
   Plus,
   RefreshCw,
 } from 'lucide-react'
-import { fetchMeetings } from '../api/meetings'
-import { SearchInput } from '../components/ui/Input'
-import { TimeBadge, StatusBadge } from '../components/ui/Badge'
-import { Button } from '../components/ui/Button'
-import { Card } from '../components/ui/Card'
-import { formatMeetingDate, formatMeetingTimeBadge } from '../lib/utils'
-import { Meeting } from '../types/meeting'
+import { fetchMeetings } from '../../api/meetings'
+import { SearchInput } from '../../components/ui/Input'
+import { TimeBadge, StatusBadge } from '../../components/ui/Badge'
+import { Button } from '../../components/ui/Button'
+import { Card } from '../../components/ui/Card'
+import { formatMeetingDate, formatMeetingTimeBadge } from '../../lib/utils'
+import { Meeting } from '../../types/meeting'
 
 export const MeetingsList: React.FC = () => {
   const navigate = useNavigate()
@@ -96,7 +96,7 @@ export const MeetingsList: React.FC = () => {
       {/* Page Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-ink font-fredoka">
+          <h1 className="text-3xl font-bold tracking-tight text-ink font-sans">
             Reuniões
           </h1>
           <p className="text-sm text-muted mt-1">Todas as suas reuniões transcritas</p>
@@ -169,7 +169,7 @@ export const MeetingsList: React.FC = () => {
           <div className="w-16 h-16 rounded-2xl bg-surface text-brand flex items-center justify-center mx-auto mb-4">
             <MessagesSquare className="w-8 h-8 stroke-[1.5]" />
           </div>
-          <h3 className="text-lg font-bold text-ink font-fredoka mb-1">
+          <h3 className="text-lg font-bold text-ink font-sans mb-1">
             {searchTerm ? 'Nenhuma reunião encontrada' : 'Nenhuma reunião cadastrada'}
           </h3>
           <p className="text-sm text-muted max-w-sm mx-auto mb-6">

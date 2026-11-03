@@ -32,7 +32,7 @@ export const LandingNavbar: React.FC = () => {
           : 'bg-transparent border-b border-transparent'
       )}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-4 flex items-center justify-between">
         {/* Brand Logo */}
         <Link
           to="/"

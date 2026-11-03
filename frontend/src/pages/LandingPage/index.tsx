@@ -14,12 +14,12 @@ import {
   ShieldCheck,
   Share2,
 } from 'lucide-react'
-import { LandingNavbar } from '../components/landing/LandingNavbar'
-import { HalftoneWaveCanvas } from '../components/landing/HalftoneWaveCanvas'
-import { Button } from '../components/ui/Button'
-import { Badge } from '../components/ui/Badge'
-import { ZumoLogo } from '../components/ZumoLogo'
-import { cn } from '../lib/utils'
+import { LandingNavbar } from '../../components/landing/LandingNavbar'
+import { HalftoneWaveCanvas } from '../../components/landing/HalftoneWaveCanvas'
+import { Button } from '../../components/ui/Button'
+import { Badge } from '../../components/ui/Badge'
+import { ZumoLogo } from '../../components/ZumoLogo'
+import { cn } from '../../lib/utils'
 
 export const LandingPage: React.FC = () => {
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0)
@@ -61,7 +61,7 @@ export const LandingPage: React.FC = () => {
           {/* Hero Typography Container - Centered in viewport */}
           <div className="flex-1 flex flex-col justify-center max-w-4xl mx-auto px-4 sm:px-6 text-center relative z-10 pt-16 pb-6">
             {/* Main Headline */}
-            <h1 className="text-4xl sm:text-6xl md:text-7xl font-bold tracking-tight text-ink font-fredoka leading-[1.08] mb-6">
+            <h1 className="text-4xl sm:text-6xl md:text-7xl font-bold tracking-tight text-ink font-sans leading-[1.08] mb-6">
               Suas reuniões, <br />
               <span className="text-brand">mais inteligentes.</span>
             </h1>
@@ -74,9 +74,9 @@ export const LandingPage: React.FC = () => {
             </p>
           </div>
 
-          {/* ================= FULL-WIDTH BLUE HALFTONE WAVE (AT SCREEN BOTTOM) ================= */}
-          <div className="w-full relative mt-auto overflow-hidden select-none">
-            <HalftoneWaveCanvas height={210} className="w-full" />
+          {/* ================= FULL-WIDTH BLUE HALFTONE WAVE ================= */}
+          <div className="w-full relative mt-auto mb-12 sm:mb-20 overflow-hidden select-none">
+            <HalftoneWaveCanvas height={260} className="w-full" />
           </div>
         </section>
 
@@ -89,7 +89,7 @@ export const LandingPage: React.FC = () => {
                 <div className="w-10 h-10 rounded-xl bg-surface flex items-center justify-center text-brand mb-3 group-hover:scale-105 transition-transform">
                   <Mic className="w-5 h-5 stroke-[2.2]" />
                 </div>
-                <h3 className="text-base font-bold text-ink mb-1 font-fredoka">
+                <h3 className="text-base font-bold text-ink mb-1 font-sans">
                   Transcrição precisa
                 </h3>
                 <p className="text-xs text-muted leading-relaxed">
@@ -102,7 +102,7 @@ export const LandingPage: React.FC = () => {
                 <div className="w-10 h-10 rounded-xl bg-surface flex items-center justify-center text-brand mb-3 group-hover:scale-105 transition-transform">
                   <FileText className="w-5 h-5 stroke-[2.2]" />
                 </div>
-                <h3 className="text-base font-bold text-ink mb-1 font-fredoka">
+                <h3 className="text-base font-bold text-ink mb-1 font-sans">
                   Resumos automáticos
                 </h3>
                 <p className="text-xs text-muted leading-relaxed">
@@ -115,7 +115,7 @@ export const LandingPage: React.FC = () => {
                 <div className="w-10 h-10 rounded-xl bg-surface flex items-center justify-center text-brand mb-3 group-hover:scale-105 transition-transform">
                   <Users className="w-5 h-5 stroke-[2.2]" />
                 </div>
-                <h3 className="text-base font-bold text-ink mb-1 font-fredoka">
+                <h3 className="text-base font-bold text-ink mb-1 font-sans">
                   Organização simples
                 </h3>
                 <p className="text-xs text-muted leading-relaxed">
@@ -128,7 +128,7 @@ export const LandingPage: React.FC = () => {
                 <div className="w-10 h-10 rounded-lg bg-surface flex items-center justify-center text-brand mb-3 group-hover:scale-105 transition-transform">
                   <BarChart3 className="w-5 h-5 stroke-[2.2]" />
                 </div>
-                <h3 className="text-base font-bold text-ink mb-1 font-fredoka">
+                <h3 className="text-base font-bold text-ink mb-1 font-sans">
                   Mais produtividade
                 </h3>
                 <p className="text-xs text-muted leading-relaxed">
@@ -149,7 +149,7 @@ export const LandingPage: React.FC = () => {
               <Badge variant="brand" className="mb-3">
                 Pipeline de Extração
               </Badge>
-              <h2 className="text-3xl sm:text-4xl font-bold font-fredoka text-ink mb-4">
+              <h2 className="text-3xl sm:text-4xl font-bold font-sans text-ink mb-4">
                 Como funciona o Zumo ?
               </h2>
               <p className="text-base text-muted">
@@ -161,10 +161,10 @@ export const LandingPage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
               {/* Step 1 */}
               <div className="relative p-6 rounded-2xl bg-white border border-subtle-border shadow-card flex flex-col">
-                <div className="w-12 h-12 rounded-xl bg-surface text-brand font-fredoka font-bold text-xl flex items-center justify-center mb-5">
+                <div className="w-12 h-12 rounded-xl bg-surface text-brand font-sans font-bold text-xl flex items-center justify-center mb-5">
                   01
                 </div>
-                <h3 className="text-lg font-bold text-ink mb-2 font-fredoka">
+                <h3 className="text-lg font-bold text-ink mb-2 font-sans">
                   Envie ou Grave o Áudio
                 </h3>
                 <p className="text-sm text-muted leading-relaxed mb-4 flex-1">
@@ -178,10 +178,10 @@ export const LandingPage: React.FC = () => {
 
               {/* Step 2 */}
               <div className="relative p-6 rounded-2xl bg-white border border-subtle-border shadow-card flex flex-col">
-                <div className="w-12 h-12 rounded-xl bg-surface text-brand font-fredoka font-bold text-xl flex items-center justify-center mb-5">
+                <div className="w-12 h-12 rounded-xl bg-surface text-brand font-sans font-bold text-xl flex items-center justify-center mb-5">
                   02
                 </div>
-                <h3 className="text-lg font-bold text-ink mb-2 font-fredoka">
+                <h3 className="text-lg font-bold text-ink mb-2 font-sans">
                   Fatiamento & Transcrição
                 </h3>
                 <p className="text-sm text-muted leading-relaxed mb-4 flex-1">
@@ -195,10 +195,10 @@ export const LandingPage: React.FC = () => {
 
               {/* Step 3 */}
               <div className="relative p-6 rounded-2xl bg-white border border-subtle-border shadow-card flex flex-col">
-                <div className="w-12 h-12 rounded-xl bg-surface text-brand font-fredoka font-bold text-xl flex items-center justify-center mb-5">
+                <div className="w-12 h-12 rounded-xl bg-surface text-brand font-sans font-bold text-xl flex items-center justify-center mb-5">
                   03
                 </div>
-                <h3 className="text-lg font-bold text-ink mb-2 font-fredoka">
+                <h3 className="text-lg font-bold text-ink mb-2 font-sans">
                   Resumo & Ações Prontas
                 </h3>
                 <p className="text-sm text-muted leading-relaxed mb-4 flex-1">
@@ -220,7 +220,7 @@ export const LandingPage: React.FC = () => {
               <Badge variant="brand" className="mb-3">
                 Recursos Avançados
               </Badge>
-              <h2 className="text-3xl sm:text-4xl font-bold font-fredoka text-ink mb-4">
+              <h2 className="text-3xl sm:text-4xl font-bold font-sans text-ink mb-4">
                 Construído para profissionais e equipes exigentes
               </h2>
               <p className="text-base text-muted">
@@ -236,7 +236,7 @@ export const LandingPage: React.FC = () => {
                   <div className="w-10 h-10 rounded-xl bg-surface flex items-center justify-center text-brand mb-4">
                     <Cpu className="w-5 h-5" />
                   </div>
-                  <h3 className="text-2xl font-bold font-fredoka text-ink mb-2">
+                  <h3 className="text-2xl font-bold font-sans text-ink mb-2">
                     Liberdade Total: Modo Local Offline ou Nuvem Ultra-rápida
                   </h3>
                   <p className="text-sm text-muted max-w-xl leading-relaxed mb-6">
@@ -273,7 +273,7 @@ export const LandingPage: React.FC = () => {
                   <div className="w-10 h-10 rounded-xl bg-surface flex items-center justify-center text-brand mb-4">
                     <Zap className="w-5 h-5" />
                   </div>
-                  <h3 className="text-xl font-bold font-fredoka text-ink mb-2">
+                  <h3 className="text-xl font-bold font-sans text-ink mb-2">
                     Silero VAD Nativo
                   </h3>
                   <p className="text-sm text-muted leading-relaxed mb-4">
@@ -292,7 +292,7 @@ export const LandingPage: React.FC = () => {
                   <div className="w-10 h-10 rounded-xl bg-surface flex items-center justify-center text-brand mb-4">
                     <Lock className="w-5 h-5" />
                   </div>
-                  <h3 className="text-xl font-bold font-fredoka text-ink mb-2">
+                  <h3 className="text-xl font-bold font-sans text-ink mb-2">
                     Privacidade por Padrão
                   </h3>
                   <p className="text-sm text-muted leading-relaxed mb-4">
@@ -311,7 +311,7 @@ export const LandingPage: React.FC = () => {
                   <div className="w-10 h-10 rounded-xl bg-surface flex items-center justify-center text-brand mb-4">
                     <Share2 className="w-5 h-5" />
                   </div>
-                  <h3 className="text-2xl font-bold font-fredoka text-ink mb-2">
+                  <h3 className="text-2xl font-bold font-sans text-ink mb-2">
                     Conexão Direta com suas Ferramentas
                   </h3>
                   <p className="text-sm text-muted max-w-xl leading-relaxed mb-6">
@@ -343,7 +343,7 @@ export const LandingPage: React.FC = () => {
               <Badge variant="brand" className="mb-3">
                 Dúvidas Frequentes
               </Badge>
-              <h2 className="text-3xl sm:text-4xl font-bold font-fredoka text-ink mb-4">
+              <h2 className="text-3xl sm:text-4xl font-bold font-sans text-ink mb-4">
                 Perguntas Frequentes
               </h2>
               <p className="text-sm text-muted">
@@ -391,7 +391,7 @@ export const LandingPage: React.FC = () => {
               {/* Background Glow */}
               <div className="absolute top-0 right-0 w-80 h-80 bg-brand-light/20 blur-3xl rounded-full pointer-events-none" />
 
-              <h2 className="text-3xl sm:text-5xl font-bold font-fredoka mb-4 relative z-10">
+              <h2 className="text-3xl sm:text-5xl font-bold font-sans mb-4 relative z-10">
                 Pronto para transformar suas reuniões?
               </h2>
               <p className="max-w-xl mx-auto text-white/80 text-base sm:text-lg mb-8 relative z-10">
