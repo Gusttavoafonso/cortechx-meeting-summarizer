@@ -1,22 +1,35 @@
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
-class UserRegisterRequest(BaseModel):
-    email: EmailStr
+class UserCreate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=255)
+    email: EmailStr = Field(max_length=255)
     password: str = Field(
         min_length=8,
-        max_length=72,
-        description="Senha deve conter entre 8 e 72 caracteres",
+        max_length=128,
+        description="Mínimo de 8 caracteres",
     )
-    name: str = Field(min_length=2, max_length=255)
 
 
-class UserLoginRequest(BaseModel):
-    email: EmailStr
-    password: str = Field(
-        max_length=72,
-        description="Senha de acesso",
-    )
+class UserResponse(BaseModel):
+    """Dados do usuário. Nunca expõe o hash da senha."""
+
+    id: int
+    name: str
+    email: str
+    is_active: bool
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
 
 
 class GoogleAuthRequest(BaseModel):

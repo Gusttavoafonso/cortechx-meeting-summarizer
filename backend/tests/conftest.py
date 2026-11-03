@@ -1,3 +1,11 @@
+# ruff: noqa: E402
+import os
+
+# Precisa vir antes de qualquer import de `app`: Settings exige JWT_SECRET_KEY.
+os.environ.setdefault(
+    "JWT_SECRET_KEY", "test-only-secret-key-with-at-least-32-characters"
+)
+
 from collections.abc import Generator
 
 import pytest

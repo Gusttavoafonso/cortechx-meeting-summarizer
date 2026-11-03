@@ -3,9 +3,9 @@ from unittest.mock import patch
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.exceptions import InvalidGoogleTokenError
+from app.core.security import create_access_token
 from app.main import app
 from app.models.user import User
-from app.services.auth_service import create_session_token
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -102,11 +102,11 @@ def test_authenticate_google_missing_required_claims(client: TestClient):
 
 
 def test_get_me_unauthenticated(client: TestClient):
-    """Testa acesso a /auth/me sem autenticação (401)."""
+    """Testa acesso a /users/me sem autenticação (401)."""
     # Remove qualquer override temporariamente para testar a dependência real
     override = app.dependency_overrides.pop(get_current_user, None)
     try:
-        response = client.get("/auth/me")
+        response = client.get("/users/me")
         assert response.status_code == 401
         assert "Não autenticado" in response.json()["detail"]
     finally:
@@ -115,7 +115,7 @@ def test_get_me_unauthenticated(client: TestClient):
 
 
 def test_get_me_authenticated_via_cookie(client: TestClient, db_session: Session):
-    """Testa obter perfil (/auth/me) com cookie HTTP-Only válido."""
+    """Testa obter perfil (/users/me) com cookie HTTP-Only válido."""
     user = User(
         google_id="sub-profile-test",
         email="profile@example.com",
@@ -126,19 +126,20 @@ def test_get_me_authenticated_via_cookie(client: TestClient, db_session: Session
     db_session.commit()
     db_session.refresh(user)
 
-    token = create_session_token(user.id)
+    token = create_access_token(user.id)
 
     # Remove override para testar a dependência get_current_user real com o cookie
     override = app.dependency_overrides.pop(get_current_user, None)
     try:
         client.cookies.set(settings.session_cookie_name, token)
-        response = client.get("/auth/me")
+        response = client.get("/users/me")
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == user.id
         assert data["name"] == "Carlos Eduardo"
-        assert data["picture_url"] == "https://example.com/carlos.jpg"
-        assert "email" not in data
+        assert data["email"] == "profile@example.com"
+        assert data["is_active"] is True
+        assert "hashed_password" not in data
     finally:
         client.cookies.clear()
         if override:
@@ -169,14 +170,14 @@ def test_get_me_expired_session(client: TestClient, db_session: Session):
     }
     expired_token = jwt.encode(
         expired_payload,
-        settings.jwt_secret_key,
-        algorithm=settings.jwt_algorithm,
+        settings.JWT_SECRET_KEY.get_secret_value(),
+        algorithm=settings.JWT_ALGORITHM,
     )
 
     override = app.dependency_overrides.pop(get_current_user, None)
     try:
         client.cookies.set(settings.session_cookie_name, expired_token)
-        response = client.get("/auth/me")
+        response = client.get("/users/me")
         assert response.status_code == 401
         assert "Sessão expirada" in response.json()["detail"]
     finally:
@@ -217,8 +218,8 @@ def test_meeting_user_segregation(client: TestClient, db_session: Session):
     db_session.refresh(user_a)
     db_session.refresh(user_b)
 
-    token_a = create_session_token(user_a.id)
-    token_b = create_session_token(user_b.id)
+    token_a = create_access_token(user_a.id)
+    token_b = create_access_token(user_b.id)
 
     # Remove override para usar os cookies de cada usuário
     override = app.dependency_overrides.pop(get_current_user, None)

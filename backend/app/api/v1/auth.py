@@ -1,27 +1,26 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import get_session
 from app.core.exceptions import (
-    GoogleAccountPasswordMissingError,
     InvalidCredentialsError,
     InvalidGoogleTokenError,
     UserAlreadyExistsError,
 )
-from app.models.user import User
+from app.core.security import create_access_token
 from app.schemas.user import (
     GoogleAuthRequest,
-    UserLoginRequest,
+    Token,
+    UserCreate,
     UserPublic,
-    UserRegisterRequest,
+    UserResponse,
 )
 from app.services.auth_service import (
     authenticate_with_credentials,
-    create_session_token,
     get_or_create_google_user,
     register_user,
     verify_google_token,
@@ -31,12 +30,11 @@ router = APIRouter()
 
 
 def _set_session_cookie(response: Response, user_id: int) -> None:
-    """Configura o cookie de sessão HTTP-Only assinado criptograficamente."""
-    session_token = create_session_token(user_id)
+    """Configura o cookie HTTP-Only com o JWT de acesso (fluxo Google)."""
     response.set_cookie(
         key=settings.session_cookie_name,
-        value=session_token,
-        max_age=settings.session_max_age_seconds,
+        value=create_access_token(user_id),
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         httponly=True,
         secure=settings.session_cookie_secure,
         samesite=settings.session_cookie_samesite,
@@ -46,16 +44,15 @@ def _set_session_cookie(response: Response, user_id: int) -> None:
 
 @router.post(
     "/register",
-    response_model=UserPublic,
+    response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Cadastrar nova conta com e-mail e senha",
 )
 def register(
-    payload: UserRegisterRequest,
-    response: Response,
+    payload: UserCreate,
     db: Session = Depends(get_session),
-) -> UserPublic:
-    """Registra um usuário via login tradicional e inicia a sessão autenticada."""
+) -> UserResponse:
+    """Cria o usuário (senha com hash Argon2). Não inicia sessão."""
     try:
         user = register_user(
             db=db,
@@ -69,35 +66,33 @@ def register(
             detail=str(exc),
         ) from exc
 
-    _set_session_cookie(response, user.id)
-    return UserPublic.model_validate(user)
+    return UserResponse.model_validate(user)
 
 
 @router.post(
     "/login",
-    response_model=UserPublic,
-    summary="Entrar com e-mail e senha",
+    response_model=Token,
+    summary="Entrar com e-mail e senha (OAuth2 password flow)",
 )
 def login(
-    payload: UserLoginRequest,
-    response: Response,
+    form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_session),
-) -> UserPublic:
-    """Valida as credenciais tradicionais e emite o Cookie HTTP-Only de sessão."""
+) -> Token:
+    """O campo `username` do formulário OAuth2 recebe o e-mail."""
     try:
         user = authenticate_with_credentials(
             db=db,
-            email=payload.email,
-            password=payload.password,
+            email=form_data.username,
+            password=form_data.password,
         )
-    except (InvalidCredentialsError, GoogleAccountPasswordMissingError) as exc:
+    except InvalidCredentialsError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(exc),
+            headers={"WWW-Authenticate": "Bearer"},
         ) from exc
 
-    _set_session_cookie(response, user.id)
-    return UserPublic.model_validate(user)
+    return Token(access_token=create_access_token(user.id), token_type="bearer")
 
 
 @router.post(
@@ -138,20 +133,14 @@ def authenticate_with_google(
         picture_url=picture,
     )
 
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Usuário não encontrado ou inativo.",
+        )
+
     _set_session_cookie(response, user.id)
     return UserPublic.model_validate(user)
-
-
-@router.get(
-    "/me",
-    response_model=UserPublic,
-    summary="Retorna os dados públicos do usuário autenticado (nome e foto)",
-)
-def get_me(
-    current_user: User = Depends(get_current_user),
-) -> UserPublic:
-    """Retorna estritamente o identificador, nome e foto de perfil do usuário logado."""
-    return UserPublic.model_validate(current_user)
 
 
 @router.post(
