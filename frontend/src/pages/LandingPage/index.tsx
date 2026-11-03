@@ -76,7 +76,7 @@ export const LandingPage: React.FC = () => {
 
           {/* ================= FULL-WIDTH BLUE HALFTONE WAVE ================= */}
           <div className="w-full relative mt-auto mb-12 sm:mb-20 overflow-hidden select-none">
-            <HalftoneWaveCanvas height={260} className="w-full" />
+            <HalftoneWaveCanvas height={320} className="w-full" />
           </div>
         </section>
 

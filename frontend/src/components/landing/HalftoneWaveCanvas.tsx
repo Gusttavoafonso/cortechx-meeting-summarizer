@@ -10,11 +10,12 @@ interface OrganicWaveLayer {
   baseColor: [number, number, number]
   crestColor: [number, number, number]
   amp: number
-  phaseOffset: number
   baseThickness: number
   maxDotSize: number
   verticalShift: number
   baseAlpha: number
+  phaseOffset?: number
+  envelopeOffset?: number
 }
 
 export const HalftoneWaveCanvas: React.FC<HalftoneWaveCanvasProps> = ({
@@ -95,59 +96,64 @@ export const HalftoneWaveCanvas: React.FC<HalftoneWaveCanvasProps> = ({
     handleResize()
     window.addEventListener('resize', handleResize)
 
-    // Physics constants for realistic acoustic/fluid waves:
-    // SHARED_SPEED: fluid, elegant horizontal flow
-    // SHARED_FREQ: natural wavelength creating 3 to 4 prominent undulating crests
+    // Shared phase keeps all layers narrow where the wave crosses its center axis.
     const SHARED_SPEED = 0.65
-    const SHARED_FREQ = 0.0068
+    const SHARED_FREQ = 0.011
 
-    // 4 organic layers with dynamic lighting (baseColor in shadows, crestColor on illuminated peaks):
+    // Blue layers and a translucent black wave offset by 70 degrees.
     const layers: OrganicWaveLayer[] = [
       {
         baseColor: [147, 197, 253], // Soft Sky Blue
         crestColor: [224, 242, 254], // Light Ice Crest
-        amp: 55,
-        phaseOffset: 0.7,
+        amp: 100,
         baseThickness: 34,
         maxDotSize: 3,
         verticalShift: -18,
-        baseAlpha: 0.65,
+        baseAlpha: 0.4,
       },
       {
         baseColor: [56, 189, 248], // Luminous Azure
         crestColor: [186, 230, 253], // Highlight Azure
-        amp: 62,
-        phaseOffset: 0.35,
+        amp: 110,
         baseThickness: 38,
         maxDotSize: 3.8,
         verticalShift: -6,
-        baseAlpha: 0.8,
+        baseAlpha: 0.5,
       },
       {
         baseColor: [76, 155, 224], // Brand Light Blue
         crestColor: [125, 211, 252], // Bright Crest
-        amp: 60,
-        phaseOffset: 0,
+        amp: 107,
         baseThickness: 36,
         maxDotSize: 3.5,
         verticalShift: 8,
-        baseAlpha: 0.8,
+        baseAlpha: 0.5,
       },
       {
         baseColor: [0, 110, 185], // CortechX Brand Blue
         crestColor: [56, 189, 248], // Azure Glow
-        amp: 53,
-        phaseOffset: -0.4,
+        amp: 98,
         baseThickness: 33,
         maxDotSize: 3.1,
         verticalShift: 20,
-        baseAlpha: 0.65,
+        baseAlpha: 0.4,
+      },
+      {
+        baseColor: [0, 0, 0],
+        crestColor: [0, 0, 0],
+        amp: 105,
+        baseThickness: 36,
+        maxDotSize: 3.5,
+        verticalShift: 0,
+        baseAlpha: 0.16,
+        phaseOffset: (70 * Math.PI) / 180,
+        envelopeOffset: 1.4,
       },
     ]
 
     const startTime = performance.now()
-    const gridStepX = 12
-    const gridStepY = 12
+    const gridStepX = 8
+    const gridStepY = 8
     let previousFrame = startTime
 
     const render = (now: number) => {
@@ -166,8 +172,7 @@ export const HalftoneWaveCanvas: React.FC<HalftoneWaveCanvasProps> = ({
 
       const t = elapsed * SHARED_SPEED
 
-      // Calculate realistic Trochoidal / Stokes waveforms for each layer
-      // Real fluid/acoustic waves have slightly sharpened crests and wider, smooth troughs
+      // The layers share a sine wave and taper towards the center axis.
       const waveYs: Float32Array[] = []
       const waveThicknesses: Float32Array[] = []
       const waveNormals: Float32Array[] = []
@@ -180,30 +185,20 @@ export const HalftoneWaveCanvas: React.FC<HalftoneWaveCanvasProps> = ({
         for (let col = 0; col < cols; col++) {
           const x = col * gridStepX
 
-          // Natural acoustic envelope: waves swell and breathe across the landscape
+          // Slow, overlapping envelopes give the wave the changing energy of speech.
+          const envelopePhase = layer.envelopeOffset ?? 0
           const envelope =
-            0.82 + 0.24 * Math.sin(x * 0.0014 - t * 0.3) * Math.cos(x * 0.0007 + t * 0.15)
+            0.72 +
+            0.2 * Math.sin(x * 0.003 - t * 0.7 + envelopePhase) +
+            0.12 * Math.sin(x * 0.007 + t * 1.1 + envelopePhase)
+          const phase = x * SHARED_FREQ - t + 0.18 * Math.sin(x * 0.002 - t * 0.4)
+          const sine = Math.sin(phase + (layer.phaseOffset ?? 0))
+          const yWave = sine * (layer.amp + layer.verticalShift * 0.3) * envelope
+          // Fill the space between the sine curve and the center axis.
+          yArr[col] = centerY + yWave * 0.55
 
-          const effectiveAmp = layer.amp * envelope
-
-          // Trochoidal/Stokes formulation:
-          // theta1 = fundamental wave traveling horizontally
-          // theta2 = second harmonic sharpening the crests
-          const theta1 = x * SHARED_FREQ - t + layer.phaseOffset
-          const theta2 = theta1 * 2 + 0.3
-
-          // Asymmetrical wave profile: peaked peaks, rounded troughs (realistic wave physics)
-          const stokesWave =
-            Math.sin(theta1) +
-            0.26 * Math.sin(theta1) * Math.cos(theta1) +
-            0.18 * Math.sin(theta2)
-
-          const yWave = stokesWave * effectiveAmp
-          yArr[col] = centerY + layer.verticalShift + yWave
-
-          // Acoustic compression: the ribbon naturally thickens at crests and thins at troughs
-          const crestFactor = Math.max(0, -yWave / effectiveAmp) // 1 at peak, 0 at trough
-          thickArr[col] = layer.baseThickness * (0.85 + crestFactor * 0.35)
+          const crestFactor = Math.abs(sine)
+          thickArr[col] = 2 + (Math.abs(yWave) * 0.45 + layer.baseThickness * 0.3) * crestFactor
           normArr[col] = crestFactor
         }
 
@@ -241,8 +236,13 @@ export const HalftoneWaveCanvas: React.FC<HalftoneWaveCanvasProps> = ({
 
             if (dist < thickness) {
               const normDist = dist / thickness
-              // Smooth exponential decay from wave centerline
-              const intensity = Math.pow(1 - normDist, 1.6)
+              // Keep the fill soft while emphasizing the outer sine-wave edge.
+              const outerSide = Math.sign(waveY - centerY) * (y - waveY)
+              const edge = Math.max(0, outerSide / thickness)
+              const intensity = Math.min(
+                1,
+                Math.pow(1 - normDist, 1.6) * 0.55 + Math.pow(edge, 1.5) * 1.4
+              )
 
               if (intensity > 0.07) {
                 // Crests have slightly denser/larger dots, troughs have finer dots
@@ -256,8 +256,8 @@ export const HalftoneWaveCanvas: React.FC<HalftoneWaveCanvasProps> = ({
                 const glow = Math.max(0, 1 - hoverDistance / interactionRadius) * pointer.strength
                 const alpha = Math.min(
                   1,
-                  Math.max(0.08, intensity * layer.baseAlpha * (0.9 + crestFactor * 0.2)) +
-                    glow * intensity * 1
+                  Math.max(0.02, intensity * layer.baseAlpha * (0.9 + crestFactor * 0.2)) +
+                    glow * intensity * (layer.phaseOffset ? layer.baseAlpha : 1)
                 )
 
                 ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`
