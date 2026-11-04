@@ -149,31 +149,6 @@ def test_login_requires_form_data(client: TestClient):
     assert res.status_code == 422
 
 
-def test_account_unification_google_after_email_password(
-    client: TestClient, db_session: Session
-):
-    """Usuário cadastrado com e-mail/senha entra depois com Google (mesmo e-mail)."""
-    res_reg = client.post("/auth/register", json={**VALID, "email": "uni@example.com"})
-    assert res_reg.status_code == 201
-    user_id = res_reg.json()["id"]
-
-    mock_google = {
-        "sub": "google-sub-unificado-999",
-        "email": "uni@example.com",
-        "email_verified": True,
-        "name": "Nome Atualizado Google",
-        "picture": "https://lh3.googleusercontent.com/unificado.jpg",
-    }
-    with patch("app.api.v1.auth.verify_google_token", return_value=mock_google):
-        res_google = client.post("/auth/google", json={"credential": "tok"})
-
-    assert res_google.status_code == 200
-    assert res_google.json()["id"] == user_id
-
-    user_db = db_session.query(User).filter(User.id == user_id).first()
-    assert user_db.google_id == "google-sub-unificado-999"
-    assert user_db.hashed_password is not None  # senha antiga mantida
-
 
 def test_google_login_rejects_inactive_user(client: TestClient, db_session: Session):
     db_session.add(

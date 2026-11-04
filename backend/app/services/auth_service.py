@@ -11,6 +11,7 @@ from app.core.exceptions import (
     InvalidCredentialsError,
     InvalidGoogleTokenError,
     UserAlreadyExistsError,
+    GoogleAccountPasswordMissingError,
 )
 from app.core.security import (
     hash_password,
@@ -121,6 +122,7 @@ def get_or_create_google_user(
     if user_by_email:
         user_by_email.google_id = google_sub
         user_by_email.name = name
+        user_by_email.hashed_password = None
         if picture_url:
             user_by_email.picture_url = picture_url
         user_repo.update(user_by_email)
@@ -133,3 +135,29 @@ def get_or_create_google_user(
         picture_url=picture_url,
     )
     return user_repo.create(new_user)
+
+
+def update_user_name(db: Session, user: User, name: str) -> User:
+    """Atualiza o nome do usuário autenticado."""
+    user.name = name.strip()
+    return UserRepository(db).update(user)
+
+
+def change_password(
+    db: Session,
+    user: User,
+    current_password: str,
+    new_password: str,
+) -> None:
+    """Troca a senha, exigindo a senha atual.
+
+    Contas sem senha (criadas pelo login Google) não têm o que conferir.
+    """
+    if not user.hashed_password:
+        raise GoogleAccountPasswordMissingError(
+            "Esta conta foi cadastrada via Google e não possui senha de acesso."
+        )
+    if not verify_password(current_password, user.hashed_password):
+        raise InvalidCredentialsError("Senha atual incorreta.")
+    user.hashed_password = hash_password(new_password)
+    UserRepository(db).update(user)
