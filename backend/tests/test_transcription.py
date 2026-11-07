@@ -45,22 +45,26 @@ def setup_test_environment(tmp_path: Path):
         shutil.rmtree(test_storage_path, ignore_errors=True)
 
 
-def test_transcribe_meeting_success(client: TestClient, setup_test_environment) -> None:
+def test_transcribe_meeting_success(
+    auth_client: TestClient, setup_test_environment
+) -> None:
     _, mock_stt = setup_test_environment
 
     # 1. Cria reunião
-    meeting_resp = client.post("/meetings", json={"title": "Reunião de Arquitetura"})
+    meeting_resp = auth_client.post(
+        "/meetings", json={"title": "Reunião de Arquitetura"}
+    )
     assert meeting_resp.status_code == 201
     meeting_id = meeting_resp.json()["id"]
 
     # 2. Faz upload de áudio
     audio_content = b"fake-audio-bytes-for-transcription"
     files = {"file": ("reuniao.mp3", io.BytesIO(audio_content), "audio/mpeg")}
-    upload_resp = client.post(f"/meetings/{meeting_id}/audio", files=files)
+    upload_resp = auth_client.post(f"/meetings/{meeting_id}/audio", files=files)
     assert upload_resp.status_code == 201
 
     # 3. Dispara transcrição
-    transcribe_resp = client.post(f"/meetings/{meeting_id}/transcribe")
+    transcribe_resp = auth_client.post(f"/meetings/{meeting_id}/transcribe")
     assert transcribe_resp.status_code == 200
     data = transcribe_resp.json()
 
@@ -79,7 +83,7 @@ def test_transcribe_meeting_success(client: TestClient, setup_test_environment) 
     assert "Bom dia" in data["segments"][0]["text"]
 
     # 4. Verifica se o status da reunião mudou para "transcribed"
-    meeting_check = client.get(f"/meetings/{meeting_id}")
+    meeting_check = auth_client.get(f"/meetings/{meeting_id}")
     assert meeting_check.status_code == 200
     assert meeting_check.json()["status"] == "transcribed"
     assert meeting_check.json()["transcript"] is not None
@@ -87,14 +91,16 @@ def test_transcribe_meeting_success(client: TestClient, setup_test_environment) 
 
 
 def test_transcribe_rolls_back_when_persistence_fails(
-    client: TestClient,
+    auth_client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from app.repositories.transcript_repository import TranscriptRepository
 
-    meeting_response = client.post("/meetings", json={"title": "Falha ao persistir"})
+    meeting_response = auth_client.post(
+        "/meetings", json={"title": "Falha ao persistir"}
+    )
     meeting_id = meeting_response.json()["id"]
-    client.post(
+    auth_client.post(
         f"/meetings/{meeting_id}/audio",
         files={"file": ("audio.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg")},
     )
@@ -109,63 +115,65 @@ def test_transcribe_rolls_back_when_persistence_fails(
         TranscriptRepository, "save_transcript", failing_save_transcript
     )
 
-    response = client.post(f"/meetings/{meeting_id}/transcribe")
+    response = auth_client.post(f"/meetings/{meeting_id}/transcribe")
 
     assert response.status_code == 500
     assert response.json()["detail"] == "Falha ao persistir a transcrição."
-    assert client.get(f"/meetings/{meeting_id}/transcript").status_code == 404
-    meeting_data = client.get(f"/meetings/{meeting_id}").json()
+    assert auth_client.get(f"/meetings/{meeting_id}/transcript").status_code == 404
+    meeting_data = auth_client.get(f"/meetings/{meeting_id}").json()
     assert meeting_data["status"] == "failed"
     assert "persistir" in meeting_data["last_error"].lower()
 
 
-def test_transcribe_meeting_not_found(client: TestClient) -> None:
-    response = client.post("/meetings/99999/transcribe")
+def test_transcribe_meeting_not_found(auth_client: TestClient) -> None:
+    response = auth_client.post("/meetings/99999/transcribe")
     assert response.status_code == 404
     assert "não encontrada" in response.json()["detail"]
 
 
-def test_transcribe_meeting_invalid_id(client: TestClient) -> None:
-    response = client.post("/meetings/-1/transcribe")
+def test_transcribe_meeting_invalid_id(auth_client: TestClient) -> None:
+    response = auth_client.post("/meetings/-1/transcribe")
     assert response.status_code == 400
 
 
-def test_transcribe_meeting_without_audio(client: TestClient) -> None:
-    meeting_resp = client.post("/meetings", json={"title": "Reunião Sem Áudio"})
+def test_transcribe_meeting_without_audio(auth_client: TestClient) -> None:
+    meeting_resp = auth_client.post("/meetings", json={"title": "Reunião Sem Áudio"})
     meeting_id = meeting_resp.json()["id"]
 
-    response = client.post(f"/meetings/{meeting_id}/transcribe")
+    response = auth_client.post(f"/meetings/{meeting_id}/transcribe")
     assert response.status_code == 404
     assert "Arquivo de áudio não encontrado" in response.json()["detail"]
 
 
 def test_transcribe_audio_missing_on_disk(
-    client: TestClient, setup_test_environment
+    auth_client: TestClient, setup_test_environment
 ) -> None:
     test_storage, _ = setup_test_environment
 
-    meeting_resp = client.post("/meetings", json={"title": "Reunião Arquivo Deletado"})
+    meeting_resp = auth_client.post(
+        "/meetings", json={"title": "Reunião Arquivo Deletado"}
+    )
     meeting_id = meeting_resp.json()["id"]
 
     files = {"file": ("audio.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg")}
-    upload_resp = client.post(f"/meetings/{meeting_id}/audio", files=files)
+    upload_resp = auth_client.post(f"/meetings/{meeting_id}/audio", files=files)
     assert upload_resp.status_code == 201
 
     # Remove o arquivo do disco para simular perda de arquivo
     meeting_storage_dir = test_storage / str(meeting_id)
     shutil.rmtree(meeting_storage_dir)
 
-    response = client.post(f"/meetings/{meeting_id}/transcribe")
+    response = auth_client.post(f"/meetings/{meeting_id}/transcribe")
     assert response.status_code == 404
     assert "não encontrado no armazenamento" in response.json()["detail"]
 
 
-def test_transcribe_stt_service_failure(client: TestClient) -> None:
-    meeting_resp = client.post("/meetings", json={"title": "Reunião Falha STT"})
+def test_transcribe_stt_service_failure(auth_client: TestClient) -> None:
+    meeting_resp = auth_client.post("/meetings", json={"title": "Reunião Falha STT"})
     meeting_id = meeting_resp.json()["id"]
 
     files = {"file": ("audio.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg")}
-    client.post(f"/meetings/{meeting_id}/audio", files=files)
+    auth_client.post(f"/meetings/{meeting_id}/audio", files=files)
 
     # Simula erro de API ou execução no provider de STT
     class FailingSTTService(MockSpeechToTextService):
@@ -174,19 +182,21 @@ def test_transcribe_stt_service_failure(client: TestClient) -> None:
 
     app.dependency_overrides[get_transcription_service] = FailingSTTService
 
-    response = client.post(f"/meetings/{meeting_id}/transcribe")
+    response = auth_client.post(f"/meetings/{meeting_id}/transcribe")
     assert response.status_code == 502
     assert "Falha no serviço de Speech-to-Text" in response.json()["detail"]
 
     # Valida que o status da reunião não ficou travado em "transcribing"
-    meeting_data = client.get(f"/meetings/{meeting_id}").json()
+    meeting_data = auth_client.get(f"/meetings/{meeting_id}").json()
     assert meeting_data["status"] == "failed"
     assert "Conexão interrompida" in meeting_data["last_error"]
 
 
-def test_transcribe_can_be_retried_after_failure(client: TestClient) -> None:
-    meeting_id = client.post("/meetings", json={"title": "Retentativa"}).json()["id"]
-    client.post(
+def test_transcribe_can_be_retried_after_failure(auth_client: TestClient) -> None:
+    meeting_id = auth_client.post("/meetings", json={"title": "Retentativa"}).json()[
+        "id"
+    ]
+    auth_client.post(
         f"/meetings/{meeting_id}/audio",
         files={"file": ("audio.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg")},
     )
@@ -195,26 +205,26 @@ def test_transcribe_can_be_retried_after_failure(client: TestClient) -> None:
         canned_result=TranscriptionResult(text="", segments=[])
     )
     app.dependency_overrides[get_transcription_service] = lambda: empty_mock
-    assert client.post(f"/meetings/{meeting_id}/transcribe").status_code == 422
-    assert client.get(f"/meetings/{meeting_id}").json()["status"] == "failed"
+    assert auth_client.post(f"/meetings/{meeting_id}/transcribe").status_code == 422
+    assert auth_client.get(f"/meetings/{meeting_id}").json()["status"] == "failed"
 
     app.dependency_overrides[get_transcription_service] = lambda: (
         MockSpeechToTextService()
     )
-    retry = client.post(f"/meetings/{meeting_id}/transcribe")
+    retry = auth_client.post(f"/meetings/{meeting_id}/transcribe")
 
     assert retry.status_code == 200
-    meeting_data = client.get(f"/meetings/{meeting_id}").json()
+    meeting_data = auth_client.get(f"/meetings/{meeting_id}").json()
     assert meeting_data["status"] == "transcribed"
     assert meeting_data["last_error"] is None
 
 
-def test_transcribe_stt_empty_response(client: TestClient) -> None:
-    meeting_resp = client.post("/meetings", json={"title": "Reunião Áudio Mudo"})
+def test_transcribe_stt_empty_response(auth_client: TestClient) -> None:
+    meeting_resp = auth_client.post("/meetings", json={"title": "Reunião Áudio Mudo"})
     meeting_id = meeting_resp.json()["id"]
 
     files = {"file": ("audio.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg")}
-    client.post(f"/meetings/{meeting_id}/audio", files=files)
+    auth_client.post(f"/meetings/{meeting_id}/audio", files=files)
 
     # Simula retorno vazio do STT (áudio inaudível ou sem voz)
     empty_mock = MockSpeechToTextService(
@@ -222,12 +232,12 @@ def test_transcribe_stt_empty_response(client: TestClient) -> None:
     )
     app.dependency_overrides[get_transcription_service] = lambda: empty_mock
 
-    response = client.post(f"/meetings/{meeting_id}/transcribe")
+    response = auth_client.post(f"/meetings/{meeting_id}/transcribe")
     assert response.status_code == 422
     assert "resposta vazia" in response.json()["detail"]
 
     # Status revertido para permitir retentativa
-    meeting_data = client.get(f"/meetings/{meeting_id}").json()
+    meeting_data = auth_client.get(f"/meetings/{meeting_id}").json()
     assert meeting_data["status"] == "failed"
     assert "vazia" in meeting_data["last_error"].lower()
 
@@ -240,11 +250,13 @@ def test_transcribe_stt_empty_response(client: TestClient) -> None:
     ],
 )
 def test_transcribe_rejects_invalid_segments(
-    client: TestClient, segment: SegmentData
+    auth_client: TestClient, segment: SegmentData
 ) -> None:
-    meeting_response = client.post("/meetings", json={"title": "Segmento inválido"})
+    meeting_response = auth_client.post(
+        "/meetings", json={"title": "Segmento inválido"}
+    )
     meeting_id = meeting_response.json()["id"]
-    client.post(
+    auth_client.post(
         f"/meetings/{meeting_id}/audio",
         files={"file": ("audio.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg")},
     )
@@ -253,23 +265,23 @@ def test_transcribe_rejects_invalid_segments(
     )
     app.dependency_overrides[get_transcription_service] = lambda: invalid_mock
 
-    response = client.post(f"/meetings/{meeting_id}/transcribe")
+    response = auth_client.post(f"/meetings/{meeting_id}/transcribe")
 
     assert response.status_code == 422
-    assert client.get(f"/meetings/{meeting_id}/transcript").status_code == 404
-    meeting_data = client.get(f"/meetings/{meeting_id}").json()
+    assert auth_client.get(f"/meetings/{meeting_id}/transcript").status_code == 404
+    meeting_data = auth_client.get(f"/meetings/{meeting_id}").json()
     assert meeting_data["status"] == "failed"
     assert meeting_data["last_error"]
 
 
 def test_transcribe_unexpected_read_error(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    auth_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    meeting_resp = client.post("/meetings", json={"title": "Reunião Erro IO"})
+    meeting_resp = auth_client.post("/meetings", json={"title": "Reunião Erro IO"})
     meeting_id = meeting_resp.json()["id"]
 
     files = {"file": ("audio.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg")}
-    client.post(f"/meetings/{meeting_id}/audio", files=files)
+    auth_client.post(f"/meetings/{meeting_id}/audio", files=files)
 
     # Simula falha de leitura I/O do disco
     import builtins
@@ -283,22 +295,22 @@ def test_transcribe_unexpected_read_error(
 
     monkeypatch.setattr(builtins, "open", failing_open)
 
-    response = client.post(f"/meetings/{meeting_id}/transcribe")
+    response = auth_client.post(f"/meetings/{meeting_id}/transcribe")
     assert response.status_code == 500
     assert "Erro inesperado durante a leitura" in response.json()["detail"]
 
 
-def test_get_transcript_success(client: TestClient) -> None:
+def test_get_transcript_success(auth_client: TestClient) -> None:
     # 1. Cria, envia áudio e transcreve
-    meeting_resp = client.post("/meetings", json={"title": "Reunião Teste GET"})
+    meeting_resp = auth_client.post("/meetings", json={"title": "Reunião Teste GET"})
     meeting_id = meeting_resp.json()["id"]
 
     files = {"file": ("audio.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg")}
-    client.post(f"/meetings/{meeting_id}/audio", files=files)
-    client.post(f"/meetings/{meeting_id}/transcribe")
+    auth_client.post(f"/meetings/{meeting_id}/audio", files=files)
+    auth_client.post(f"/meetings/{meeting_id}/transcribe")
 
     # 2. Busca transcrição diretamente
-    get_resp = client.get(f"/meetings/{meeting_id}/transcript")
+    get_resp = auth_client.get(f"/meetings/{meeting_id}/transcript")
     assert get_resp.status_code == 200
     data = get_resp.json()
     assert data["meeting_id"] == meeting_id
@@ -307,30 +319,34 @@ def test_get_transcript_success(client: TestClient) -> None:
     assert len(data["segments"]) == 2
 
 
-def test_get_transcript_not_found(client: TestClient) -> None:
-    meeting_resp = client.post("/meetings", json={"title": "Reunião Não Transcrita"})
+def test_get_transcript_not_found(auth_client: TestClient) -> None:
+    meeting_resp = auth_client.post(
+        "/meetings", json={"title": "Reunião Não Transcrita"}
+    )
     meeting_id = meeting_resp.json()["id"]
 
-    response = client.get(f"/meetings/{meeting_id}/transcript")
+    response = auth_client.get(f"/meetings/{meeting_id}/transcript")
     assert response.status_code == 404
     assert "Transcrição não encontrada" in response.json()["detail"]
 
 
-def test_get_transcript_meeting_not_found(client: TestClient) -> None:
-    response = client.get("/meetings/99999/transcript")
+def test_get_transcript_meeting_not_found(auth_client: TestClient) -> None:
+    response = auth_client.get("/meetings/99999/transcript")
     assert response.status_code == 404
 
 
-def test_retranscribe_replaces_old_transcript(client: TestClient) -> None:
+def test_retranscribe_replaces_old_transcript(auth_client: TestClient) -> None:
     # 1. Cria reunião e upload
-    meeting_resp = client.post("/meetings", json={"title": "Reunião Dupla Transcrição"})
+    meeting_resp = auth_client.post(
+        "/meetings", json={"title": "Reunião Dupla Transcrição"}
+    )
     meeting_id = meeting_resp.json()["id"]
 
     files = {"file": ("audio.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg")}
-    client.post(f"/meetings/{meeting_id}/audio", files=files)
+    auth_client.post(f"/meetings/{meeting_id}/audio", files=files)
 
     # 2. Primeira transcrição
-    first_resp = client.post(f"/meetings/{meeting_id}/transcribe")
+    first_resp = auth_client.post(f"/meetings/{meeting_id}/transcribe")
     assert first_resp.status_code == 200
     first_id = first_resp.json()["id"]
 
@@ -352,7 +368,7 @@ def test_retranscribe_replaces_old_transcript(client: TestClient) -> None:
     app.dependency_overrides[get_transcription_service] = lambda: custom_mock
 
     # 4. Segunda transcrição para a mesma reunião
-    second_resp = client.post(f"/meetings/{meeting_id}/transcribe")
+    second_resp = auth_client.post(f"/meetings/{meeting_id}/transcribe")
     assert second_resp.status_code == 200
     data = second_resp.json()
     assert data["id"] == first_id
@@ -389,34 +405,36 @@ def test_groq_whisper_service_missing_credentials() -> None:
         GroqWhisperService(api_key="   ")
 
 
-def test_transcribe_while_transcribing_conflict(client: TestClient) -> None:
-    meeting_resp = client.post("/meetings", json={"title": "Reunião Concorrente"})
+def test_transcribe_while_transcribing_conflict(auth_client: TestClient) -> None:
+    meeting_resp = auth_client.post("/meetings", json={"title": "Reunião Concorrente"})
     meeting_id = meeting_resp.json()["id"]
 
     files = {"file": ("audio.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg")}
-    client.post(f"/meetings/{meeting_id}/audio", files=files)
+    auth_client.post(f"/meetings/{meeting_id}/audio", files=files)
 
     # Força status para transcribing
     from app.core.database import get_session
     from app.repositories.meeting_repository import MeetingRepository
 
-    db = next(client.app.dependency_overrides[get_session]())
+    db = next(auth_client.app.dependency_overrides[get_session]())
     meeting_repo = MeetingRepository(db)
-    meeting = meeting_repo.get_by_id(meeting_id)
+    meeting = meeting_repo.get_for_pipeline(meeting_id)
     meeting_repo.update_status(meeting, status="transcribing")
 
     # Segunda tentativa deve ser bloqueada
-    response = client.post(f"/meetings/{meeting_id}/transcribe")
+    response = auth_client.post(f"/meetings/{meeting_id}/transcribe")
     assert response.status_code == 409
     assert "já está em processo de transcrição" in response.json()["detail"].lower()
 
 
-def test_transcribe_corrupt_audio_file(client: TestClient) -> None:
-    meeting_resp = client.post("/meetings", json={"title": "Reunião Áudio Corrompido"})
+def test_transcribe_corrupt_audio_file(auth_client: TestClient) -> None:
+    meeting_resp = auth_client.post(
+        "/meetings", json={"title": "Reunião Áudio Corrompido"}
+    )
     meeting_id = meeting_resp.json()["id"]
 
     files = {"file": ("corrupt.mp3", io.BytesIO(b"corrupted-bytes"), "audio/mpeg")}
-    client.post(f"/meetings/{meeting_id}/audio", files=files)
+    auth_client.post(f"/meetings/{meeting_id}/audio", files=files)
 
     class CorruptDecodingSTT(MockSpeechToTextService):
         def transcribe(self, audio_path, language="pt"):
@@ -426,7 +444,7 @@ def test_transcribe_corrupt_audio_file(client: TestClient) -> None:
 
     app.dependency_overrides[get_transcription_service] = CorruptDecodingSTT
 
-    response = client.post(f"/meetings/{meeting_id}/transcribe")
+    response = auth_client.post(f"/meetings/{meeting_id}/transcribe")
     assert response.status_code == 422
     assert "corrompido ou formato ilegível" in response.json()["detail"].lower()
 
@@ -543,13 +561,15 @@ def test_faster_whisper_model_cache(monkeypatch: pytest.MonkeyPatch) -> None:
     assert len(created_instances) == 1
 
 
-def test_meeting_repository_eager_loads_transcript_segments(client: TestClient) -> None:
+def test_meeting_repository_eager_loads_transcript_segments(
+    auth_client: TestClient,
+) -> None:
     from app.core.database import get_session
     from app.repositories.meeting_repository import MeetingRepository
     from app.repositories.transcript_repository import TranscriptRepository
     from app.services.transcription.base import SegmentData
 
-    db = next(client.app.dependency_overrides[get_session]())
+    db = next(auth_client.app.dependency_overrides[get_session]())
     meeting_repo = MeetingRepository(db)
     transcript_repo = TranscriptRepository(db)
 
@@ -560,7 +580,7 @@ def test_meeting_repository_eager_loads_transcript_segments(client: TestClient) 
         segments=[SegmentData(start=0.0, end=1.0, text="Seg 1")],
     )
 
-    loaded_meeting = meeting_repo.get_by_id(m.id)
+    loaded_meeting = meeting_repo.get_for_pipeline(m.id)
     assert loaded_meeting is not None
     assert loaded_meeting.transcript is not None
     # Verifica que segments foram carregados e estão acessíveis

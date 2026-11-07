@@ -44,7 +44,7 @@ class _Meetings:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def get_by_id(self, meeting_id: int):
+    def get_for_pipeline(self, meeting_id: int):
         return self.db.get(Meeting, meeting_id)
 
 

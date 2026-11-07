@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Security, status
+from fastapi.security import APIKeyCookie, HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -10,19 +11,32 @@ from app.models.user import User
 from app.repositories.user_repository import UserRepository
 from app.services.auth_service import verify_session_token
 
+# Declarados como schemes para que apareçam no OpenAPI: sem isso o Swagger não
+# mostra que as rotas exigem sessão nem oferece o botão "Authorize".
+# auto_error=False porque a ausência dos dois é tratada aqui, com uma mensagem
+# única.
+session_cookie_scheme = APIKeyCookie(
+    name=settings.session_cookie_name,
+    auto_error=False,
+    scheme_name="Cookie de sessão",
+    description=(
+        "Cookie HttpOnly emitido por /auth/login, /auth/register ou /auth/google."
+    ),
+)
+bearer_scheme = HTTPBearer(
+    auto_error=False,
+    scheme_name="Bearer",
+    description="Alternativa ao cookie, para o Swagger e clientes de API.",
+)
+
 
 def get_current_user(
-    request: Request,
+    cookie_token: str | None = Security(session_cookie_scheme),
+    bearer: HTTPAuthorizationCredentials | None = Security(bearer_scheme),
     db: Session = Depends(get_session),
 ) -> User:
     """Extrai e valida a sessão via Cookie HTTP-Only ou cabeçalho Authorization."""
-    token = request.cookies.get(settings.session_cookie_name)
-
-    if not token:
-        # Fallback para cabeçalho Authorization Bearer (testes e Swagger)
-        auth_header = request.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header[len("Bearer ") :].strip()
+    token = cookie_token or (bearer.credentials if bearer else None)
 
     if not token:
         raise HTTPException(

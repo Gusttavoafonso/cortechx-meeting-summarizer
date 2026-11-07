@@ -33,14 +33,16 @@ class Meeting(Base):
         nullable=False,
     )
 
+    # RESTRICT e nao CASCADE: apagar o usuario em cascata removeria as linhas,
+    # mas nao os audios ja gravados em disco (ver docs/autenticacao.md).
     user_id: Mapped[int | None] = mapped_column(
         Integer,
-        ForeignKey("users.id", ondelete="CASCADE"),
+        ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
     )
 
-    user: Mapped[User | None] = relationship("User", back_populates="meetings")
+    owner: Mapped[User | None] = relationship("User", back_populates="meetings")
 
     status: Mapped[MeetingStatus] = mapped_column(
         SqlEnum(

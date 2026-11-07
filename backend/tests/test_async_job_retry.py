@@ -229,7 +229,7 @@ def test_meeting_processor_retries_transient_operation_and_completes():
     """MeetingProcessor aplica retry em falha transitória do provedor e conclui."""
     meeting = FakeMeeting()
     meeting_repo = MagicMock()
-    meeting_repo.get_by_id.return_value = meeting
+    meeting_repo.get_for_pipeline.return_value = meeting
 
     def fake_update(m, status):
         m.status = status
@@ -282,7 +282,7 @@ def test_meeting_processor_marks_failed_on_definitive_error():
     """MeetingProcessor aborta imediatamente e marca FAILED em erro definitivo."""
     meeting = FakeMeeting()
     meeting_repo = MagicMock()
-    meeting_repo.get_by_id.return_value = meeting
+    meeting_repo.get_for_pipeline.return_value = meeting
 
     def fake_update(m, status):
         m.status = status

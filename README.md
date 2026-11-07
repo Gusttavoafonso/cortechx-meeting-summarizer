@@ -44,6 +44,24 @@ python -m pytest
 A API ficará disponível em `http://127.0.0.1:8000`. Verifique o status em
 `http://127.0.0.1:8000/health`.
 
+## Autenticação e posse das reuniões
+
+**Todas as rotas de `/meetings` exigem uma sessão válida.** Apenas `/health` e a
+documentação (`/docs`, `/openapi.json`) são públicas.
+
+Obtenha a sessão em `POST /auth/register`, `POST /auth/login` ou
+`POST /auth/google`: a resposta traz um cookie `HttpOnly`. Clientes de API e o
+Swagger podem usar o mesmo token em `Authorization: Bearer <token>` (o botão
+**Authorize** do `/docs` aceita os dois).
+
+Cada reunião pertence ao usuário que a criou. Uma reunião de outro usuário —
+ou sem dono, criada antes do controle de posse — responde **404**, e não 403,
+para não revelar que ela existe. Sem token ou com token inválido, a resposta é
+**401**.
+
+O modelo de posse, o comportamento de 404 e a decisão sobre as reuniões
+anteriores estão em [`docs/autenticacao.md`](docs/autenticacao.md).
+
 ## Upload de Áudio e Formatos Suportados
 
 O endpoint `POST /meetings/{meeting_id}/audio` recebe gravações de reuniões via `multipart/form-data`.
@@ -182,6 +200,9 @@ versões. Essa abordagem evita resultados duplicados ou inconsistentes no
 banco.
 
 ## Endpoints de resumo
+
+Como todas as rotas de `/meetings`, as duas exigem sessão válida e só alcançam
+reuniões do próprio usuário.
 
 | Método | Rota | Descrição |
 |---|---|---|

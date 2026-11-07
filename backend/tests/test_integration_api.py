@@ -12,13 +12,12 @@ BASE_URL = "/meetings"
 @patch("app.api.v1.integrations.IntegrationDeliveryRepository")
 @patch("app.api.v1.integrations.enqueue_integration_delivery")
 def test_retry_integrations_enqueues_task_and_returns_202(
-    mock_enqueue, mock_delivery_repo_class, mock_meeting_repo_class, client
+    mock_enqueue, mock_delivery_repo_class, mock_meeting_repo_class, auth_client
 ):
     # Setup da reunião simulada (Mock do banco de dados)
     mock_meeting = MagicMock()
     mock_meeting.status = MeetingStatus.COMPLETED
     mock_meeting_repo_class.return_value.get_by_id.return_value = mock_meeting
-    mock_meeting_repo_class.return_value.get_by_id_and_user.return_value = mock_meeting
 
     # Setup dos providers simulados com os seus status
     mock_delivery_repo_class.return_value.list_by_meeting.return_value = [
@@ -29,7 +28,7 @@ def test_retry_integrations_enqueues_task_and_returns_202(
     app.dependency_overrides[get_enabled_providers] = lambda: ["discord", "notion"]
     app.dependency_overrides[get_integration_dispatcher] = lambda: mock_enqueue
     try:
-        response = client.post(
+        response = auth_client.post(
             f"{BASE_URL}/1/integrations/retry",
             json={"providers": ["notion", "discord"]},
         )
@@ -50,41 +49,42 @@ def test_retry_integrations_enqueues_task_and_returns_202(
 
 @patch("app.api.v1.integrations.MeetingRepository")
 def test_retry_integrations_rejects_in_progress_meeting(
-    mock_meeting_repo_class, client
+    mock_meeting_repo_class, auth_client
 ):
     # Setup de uma reunião ainda não concluída
     mock_meeting = MagicMock()
     mock_meeting.status = MeetingStatus.PROCESSING
     mock_meeting_repo_class.return_value.get_by_id.return_value = mock_meeting
-    mock_meeting_repo_class.return_value.get_by_id_and_user.return_value = mock_meeting
 
     # Chamada POST corrigida
-    response = client.post(f"{BASE_URL}/1/integrations/retry")
+    response = auth_client.post(f"{BASE_URL}/1/integrations/retry")
 
     assert response.status_code == 409
     assert "não foi concluída" in response.json()["detail"]
 
 
 @patch("app.api.v1.integrations.MeetingRepository")
-def test_list_integrations_returns_delivery_status(mock_meeting_repo_class, client):
+def test_list_integrations_returns_delivery_status(
+    mock_meeting_repo_class, auth_client
+):
     # Setup forçando a não encontrar nenhuma reunião
     mock_meeting_repo_class.return_value.get_by_id.return_value = None
-    mock_meeting_repo_class.return_value.get_by_id_and_user.return_value = None
 
     # Chamada POST corrigida (testando um ID que não existe)
-    response = client.post(f"{BASE_URL}/999/integrations/retry")
+    response = auth_client.post(f"{BASE_URL}/999/integrations/retry")
 
     assert response.status_code == 404
 
 
 @patch("app.api.v1.integrations.MeetingRepository")
-def test_integrations_cross_tenant_idor_blocked(mock_meeting_repo_class, client):
-    """Testa que get_by_id_and_user retornando None bloqueia IDOR com 404."""
-    # get_by_id encontraria a reunião de outro usuário, mas scoping bloqueia
-    mock_other_meeting = MagicMock(id=5, user_id=99)
-    mock_meeting_repo_class.return_value.get_by_id.return_value = mock_other_meeting
-    mock_meeting_repo_class.return_value.get_by_id_and_user.return_value = None
+def test_integrations_cross_tenant_idor_blocked(mock_meeting_repo_class, auth_client):
+    """A consulta filtrada por dono não acha a reunião de outro: 404."""
+    # get_for_pipeline acharia a reunião, mas a rota usa a consulta com dono
+    mock_meeting_repo_class.return_value.get_for_pipeline.return_value = MagicMock(
+        id=5, user_id=99
+    )
+    mock_meeting_repo_class.return_value.get_by_id.return_value = None
 
-    response = client.get(f"{BASE_URL}/5/integrations")
+    response = auth_client.get(f"{BASE_URL}/5/integrations")
     assert response.status_code == 404
     assert "não encontrada" in response.json()["detail"]
