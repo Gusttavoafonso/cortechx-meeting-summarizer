@@ -130,7 +130,7 @@ def test_meeting_state_never_completed_when_required_stage_fails():
     """Evitar COMPLETED quando uma etapa obrigatória falhar."""
     meeting = FakeMeeting(status=MeetingStatus.AUDIO_UPLOADED)
     meeting_repo = MagicMock()
-    meeting_repo.get_by_id.return_value = meeting
+    meeting_repo.get_for_pipeline.return_value = meeting
 
     def fake_update(m, status):
         m.status = status

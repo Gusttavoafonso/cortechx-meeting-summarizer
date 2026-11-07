@@ -28,7 +28,7 @@ class SummaryService:
         self.meeting_service = MeetingService(meeting_repository)
 
     def generate_and_persist(self, meeting_id: int) -> SummaryResponse:
-        meeting = self.meeting_repository.get_by_id(meeting_id)
+        meeting = self.meeting_repository.get_for_pipeline(meeting_id)
         if meeting is None:
             raise MeetingNotFoundError(meeting_id)
 

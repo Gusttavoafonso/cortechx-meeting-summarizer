@@ -39,11 +39,13 @@ def setup_diarization_environment(tmp_path: Path):
 
 
 def create_meeting_with_audio_and_transcript(
-    client: TestClient, db_session: Session
+    auth_client: TestClient, db_session: Session
 ) -> int:
-    meeting_response = client.post("/meetings", json={"title": "Reunião com falantes"})
+    meeting_response = auth_client.post(
+        "/meetings", json={"title": "Reunião com falantes"}
+    )
     meeting_id = meeting_response.json()["id"]
-    upload_response = client.post(
+    upload_response = auth_client.post(
         f"/meetings/{meeting_id}/audio",
         files={"file": ("meeting.wav", b"audio", "audio/wav")},
     )
@@ -61,7 +63,7 @@ def create_meeting_with_audio_and_transcript(
 
 
 def test_diarize_meeting_assigns_speakers(
-    client: TestClient, db_session: Session
+    auth_client: TestClient, db_session: Session
 ) -> None:
     app.dependency_overrides[get_diarization_service] = lambda: DiarizationService(
         FakeDiarizationProvider(
@@ -71,9 +73,9 @@ def test_diarize_meeting_assigns_speakers(
             ]
         )
     )
-    meeting_id = create_meeting_with_audio_and_transcript(client, db_session)
+    meeting_id = create_meeting_with_audio_and_transcript(auth_client, db_session)
 
-    response = client.post(f"/meetings/{meeting_id}/diarize")
+    response = auth_client.post(f"/meetings/{meeting_id}/diarize")
 
     assert response.status_code == 200
     assert [segment["speaker"] for segment in response.json()["segments"]] == [
@@ -82,29 +84,31 @@ def test_diarize_meeting_assigns_speakers(
     ]
 
 
-def test_diarize_meeting_requires_transcript(client: TestClient) -> None:
-    meeting_response = client.post("/meetings", json={"title": "Sem transcrição"})
+def test_diarize_meeting_requires_transcript(auth_client: TestClient) -> None:
+    meeting_response = auth_client.post("/meetings", json={"title": "Sem transcrição"})
     meeting_id = meeting_response.json()["id"]
-    client.post(
+    auth_client.post(
         f"/meetings/{meeting_id}/audio",
         files={"file": ("meeting.wav", b"audio", "audio/wav")},
     )
 
-    response = client.post(f"/meetings/{meeting_id}/diarize")
+    response = auth_client.post(f"/meetings/{meeting_id}/diarize")
 
     assert response.status_code == 409
     assert "transcrita" in response.json()["detail"]
 
 
 def test_diarize_meeting_accepts_timestamp_difference_within_tolerance(
-    client: TestClient, db_session: Session
+    auth_client: TestClient, db_session: Session
 ) -> None:
     app.dependency_overrides[get_diarization_service] = lambda: DiarizationService(
         FakeDiarizationProvider([DiarizationSegment("host", 1.2, 2.0)])
     )
-    meeting_response = client.post("/meetings", json={"title": "Tolerancia de tempo"})
+    meeting_response = auth_client.post(
+        "/meetings", json={"title": "Tolerancia de tempo"}
+    )
     meeting_id = meeting_response.json()["id"]
-    client.post(
+    auth_client.post(
         f"/meetings/{meeting_id}/audio",
         files={"file": ("meeting.wav", b"audio", "audio/wav")},
     )
@@ -114,16 +118,16 @@ def test_diarize_meeting_accepts_timestamp_difference_within_tolerance(
         segments=[SegmentData(start=0.0, end=1.0, text="Bom dia.")],
     )
 
-    response = client.post(f"/meetings/{meeting_id}/diarize")
+    response = auth_client.post(f"/meetings/{meeting_id}/diarize")
 
     assert response.status_code == 200
     assert response.json()["segments"][0]["speaker"] == "SPEAKER_00"
 
 
 def test_diarize_meeting_preserves_speakers_when_a_segment_has_no_match(
-    client: TestClient, db_session: Session
+    auth_client: TestClient, db_session: Session
 ) -> None:
-    meeting_id = create_meeting_with_audio_and_transcript(client, db_session)
+    meeting_id = create_meeting_with_audio_and_transcript(auth_client, db_session)
     app.dependency_overrides[get_diarization_service] = lambda: DiarizationService(
         FakeDiarizationProvider(
             [
@@ -132,16 +136,16 @@ def test_diarize_meeting_preserves_speakers_when_a_segment_has_no_match(
             ]
         )
     )
-    assert client.post(f"/meetings/{meeting_id}/diarize").status_code == 200
+    assert auth_client.post(f"/meetings/{meeting_id}/diarize").status_code == 200
 
     app.dependency_overrides[get_diarization_service] = lambda: DiarizationService(
         FakeDiarizationProvider([DiarizationSegment("host", 4.31, 5.0)])
     )
-    response = client.post(f"/meetings/{meeting_id}/diarize")
+    response = auth_client.post(f"/meetings/{meeting_id}/diarize")
 
     assert response.status_code == 422
     assert "associar um locutor" in response.json()["detail"]
-    transcript_response = client.get(f"/meetings/{meeting_id}/transcript")
+    transcript_response = auth_client.get(f"/meetings/{meeting_id}/transcript")
     assert [
         segment["speaker"] for segment in transcript_response.json()["segments"]
     ] == [
@@ -151,11 +155,11 @@ def test_diarize_meeting_preserves_speakers_when_a_segment_has_no_match(
 
 
 def test_diarize_meeting_rolls_back_when_persistence_fails(
-    client: TestClient,
+    auth_client: TestClient,
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    meeting_id = create_meeting_with_audio_and_transcript(client, db_session)
+    meeting_id = create_meeting_with_audio_and_transcript(auth_client, db_session)
     transcript = TranscriptRepository(db_session).get_by_meeting_id(meeting_id)
     assert transcript is not None
     transcript.segments[0].speaker = "ORIGINAL_00"
@@ -176,11 +180,11 @@ def test_diarize_meeting_rolls_back_when_persistence_fails(
 
     monkeypatch.setattr(db_session, "commit", failing_commit)
 
-    response = client.post(f"/meetings/{meeting_id}/diarize")
+    response = auth_client.post(f"/meetings/{meeting_id}/diarize")
 
     assert response.status_code == 500
     assert response.json()["detail"] == "Falha ao persistir a diarização."
-    transcript_response = client.get(f"/meetings/{meeting_id}/transcript")
+    transcript_response = auth_client.get(f"/meetings/{meeting_id}/transcript")
     assert [
         segment["speaker"] for segment in transcript_response.json()["segments"]
     ] == [
@@ -190,9 +194,11 @@ def test_diarize_meeting_rolls_back_when_persistence_fails(
 
 
 def test_get_transcript_returns_segments_in_chronological_order(
-    client: TestClient, db_session: Session
+    auth_client: TestClient, db_session: Session
 ) -> None:
-    meeting_response = client.post("/meetings", json={"title": "Ordem cronológica"})
+    meeting_response = auth_client.post(
+        "/meetings", json={"title": "Ordem cronológica"}
+    )
     meeting_id = meeting_response.json()["id"]
     TranscriptRepository(db_session).save_transcript(
         meeting_id=meeting_id,
@@ -204,7 +210,7 @@ def test_get_transcript_returns_segments_in_chronological_order(
         ],
     )
 
-    response = client.get(f"/meetings/{meeting_id}/transcript")
+    response = auth_client.get(f"/meetings/{meeting_id}/transcript")
 
     assert response.status_code == 200
     assert [segment["text"] for segment in response.json()["segments"]] == [

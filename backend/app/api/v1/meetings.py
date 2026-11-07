@@ -225,7 +225,7 @@ def upload_audio(
     storage_service: AudioStorageService = Depends(get_audio_storage_service),
 ) -> AudioUploadResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
+    meeting = meeting_repo.get_by_id(meeting_id, current_user.id)
     if not meeting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -309,7 +309,7 @@ def get_audio_metadata(
     audio_repo: AudioRepository = Depends(get_audio_repository),
 ) -> AudioUploadResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
+    meeting = meeting_repo.get_by_id(meeting_id, current_user.id)
     if not meeting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -355,7 +355,7 @@ def transcribe_meeting(
     stt_service: BaseSpeechToTextService = Depends(get_transcription_service),
 ) -> TranscriptResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
+    meeting = meeting_repo.get_by_id(meeting_id, current_user.id)
     if not meeting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -515,7 +515,7 @@ def diarize_meeting(
     diarization_service: DiarizationService = Depends(get_diarization_service),
 ) -> TranscriptResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
+    meeting = meeting_repo.get_by_id(meeting_id, current_user.id)
 
     # trata erros de reunião inexistente, áudio ausente ou transcrição não realizada
     if not meeting:
@@ -597,7 +597,7 @@ def get_meeting_transcript(
     transcript_repo: TranscriptRepository = Depends(get_transcript_repository),
 ) -> TranscriptResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
+    meeting = meeting_repo.get_by_id(meeting_id, current_user.id)
 
     # trata erros de reunião inexistente ou transcrição não realizada
     if not meeting:
@@ -638,7 +638,7 @@ def process_meeting_async(
     ),
 ) -> MeetingProcessResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
+    meeting = meeting_repo.get_by_id(meeting_id, current_user.id)
 
     if not meeting:
         raise HTTPException(
@@ -701,7 +701,7 @@ def create_summary(
     summary_service: SummaryService = Depends(get_summary_service),
 ) -> SummaryResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
+    meeting = meeting_repo.get_by_id(meeting_id, current_user.id)
     if not meeting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -747,7 +747,7 @@ def get_summary(
 ) -> SummaryResponse:
     validate_meeting_id(meeting_id)
 
-    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
+    meeting = meeting_repo.get_by_id(meeting_id, current_user.id)
     if meeting is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -789,7 +789,7 @@ def retry_meeting(
     storage_service: AudioStorageService = Depends(get_audio_storage_service),
 ) -> MeetingResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
+    meeting = meeting_repo.get_by_id(meeting_id, current_user.id)
     if not meeting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

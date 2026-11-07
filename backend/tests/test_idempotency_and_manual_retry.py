@@ -274,11 +274,13 @@ def test_meeting_processor_rolls_back_partial_data_on_error(db_session, tmp_path
 # ==============================================================================
 
 
-def test_manual_retry_success_on_failed_meeting(client, db_session, monkeypatch):
+def test_manual_retry_success_on_failed_meeting(
+    auth_client, db_session, monkeypatch, test_user
+):
     """Verifica que POST /meetings/{id}/retry aceita retry de reunião FAILED."""
     meeting_repo = MeetingRepository(db_session)
     meeting = meeting_repo.create(
-        "Reunião Pronta para Retry", status=MeetingStatus.FAILED
+        "Reunião Pronta para Retry", status=MeetingStatus.FAILED, user_id=test_user.id
     )
 
     audio = AudioFile(
@@ -301,7 +303,7 @@ def test_manual_retry_success_on_failed_meeting(client, db_session, monkeypatch)
     mock_enqueue = MagicMock()
     monkeypatch.setattr("app.api.v1.meetings.enqueue_meeting_processing", mock_enqueue)
 
-    response = client.post(f"/meetings/{meeting.id}/retry")
+    response = auth_client.post(f"/meetings/{meeting.id}/retry")
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == meeting.id
@@ -311,28 +313,32 @@ def test_manual_retry_success_on_failed_meeting(client, db_session, monkeypatch)
     mock_enqueue.assert_called_once()
 
 
-def test_manual_retry_blocks_not_found(client):
+def test_manual_retry_blocks_not_found(auth_client):
     """Retorna 404 para reunião inexistente."""
-    response = client.post("/meetings/99999/retry")
+    response = auth_client.post("/meetings/99999/retry")
     assert response.status_code == 404
     assert "não encontrada" in response.json()["detail"]
 
 
-def test_manual_retry_blocks_missing_audio(client, db_session):
+def test_manual_retry_blocks_missing_audio(auth_client, db_session, test_user):
     """Retorna 422 se a reunião não possui arquivo de áudio."""
     meeting_repo = MeetingRepository(db_session)
-    meeting = meeting_repo.create("Reunião Sem Áudio", status=MeetingStatus.FAILED)
+    meeting = meeting_repo.create(
+        "Reunião Sem Áudio", status=MeetingStatus.FAILED, user_id=test_user.id
+    )
 
-    response = client.post(f"/meetings/{meeting.id}/retry")
+    response = auth_client.post(f"/meetings/{meeting.id}/retry")
     assert response.status_code == 422
     assert "Arquivo de áudio não encontrado" in response.json()["detail"]
 
 
-def test_manual_retry_blocks_concurrent_processing(client, db_session, monkeypatch):
+def test_manual_retry_blocks_concurrent_processing(
+    auth_client, db_session, monkeypatch, test_user
+):
     """Retorna 409 se a reunião já está em processamento."""
     meeting_repo = MeetingRepository(db_session)
     meeting = meeting_repo.create(
-        "Reunião em Execução", status=MeetingStatus.PROCESSING
+        "Reunião em Execução", status=MeetingStatus.PROCESSING, user_id=test_user.id
     )
 
     audio = AudioFile(
@@ -351,16 +357,18 @@ def test_manual_retry_blocks_concurrent_processing(client, db_session, monkeypat
         lambda self, path: True,
     )
 
-    response = client.post(f"/meetings/{meeting.id}/retry")
+    response = auth_client.post(f"/meetings/{meeting.id}/retry")
     assert response.status_code == 409
     assert "já está em processamento" in response.json()["detail"]
 
 
-def test_manual_retry_blocks_completed_meeting(client, db_session, monkeypatch):
+def test_manual_retry_blocks_completed_meeting(
+    auth_client, db_session, monkeypatch, test_user
+):
     """Retorna 409 se a reunião já foi concluída com sucesso."""
     meeting_repo = MeetingRepository(db_session)
     meeting = meeting_repo.create(
-        "Reunião Já Concluída", status=MeetingStatus.COMPLETED
+        "Reunião Já Concluída", status=MeetingStatus.COMPLETED, user_id=test_user.id
     )
 
     audio = AudioFile(
@@ -379,15 +387,19 @@ def test_manual_retry_blocks_completed_meeting(client, db_session, monkeypatch):
         lambda self, path: True,
     )
 
-    response = client.post(f"/meetings/{meeting.id}/retry")
+    response = auth_client.post(f"/meetings/{meeting.id}/retry")
     assert response.status_code == 409
     assert "já foi processada com sucesso" in response.json()["detail"]
 
 
-def test_manual_retry_blocks_non_failed_status(client, db_session, monkeypatch):
+def test_manual_retry_blocks_non_failed_status(
+    auth_client, db_session, monkeypatch, test_user
+):
     """Retorna 409 se o status for RECEIVED (ainda não falhou)."""
     meeting_repo = MeetingRepository(db_session)
-    meeting = meeting_repo.create("Reunião Received", status=MeetingStatus.RECEIVED)
+    meeting = meeting_repo.create(
+        "Reunião Received", status=MeetingStatus.RECEIVED, user_id=test_user.id
+    )
 
     audio = AudioFile(
         meeting_id=meeting.id,
@@ -405,7 +417,7 @@ def test_manual_retry_blocks_non_failed_status(client, db_session, monkeypatch):
         lambda self, path: True,
     )
 
-    response = client.post(f"/meetings/{meeting.id}/retry")
+    response = auth_client.post(f"/meetings/{meeting.id}/retry")
     assert response.status_code == 409
     assert "exclusivamente a reuniões com falha" in response.json()["detail"]
 
@@ -415,10 +427,14 @@ def test_manual_retry_blocks_non_failed_status(client, db_session, monkeypatch):
 # ==============================================================================
 
 
-def test_process_endpoint_starts_pipeline(client, db_session, monkeypatch):
+def test_process_endpoint_starts_pipeline(
+    auth_client, db_session, monkeypatch, test_user
+):
     """Verifica que POST /meetings/{id}/process aceita reunião com áudio pronto."""
     meeting_repo = MeetingRepository(db_session)
-    meeting = meeting_repo.create("Reunião Nova", status=MeetingStatus.AUDIO_UPLOADED)
+    meeting = meeting_repo.create(
+        "Reunião Nova", status=MeetingStatus.AUDIO_UPLOADED, user_id=test_user.id
+    )
 
     audio = AudioFile(
         meeting_id=meeting.id,
@@ -439,7 +455,7 @@ def test_process_endpoint_starts_pipeline(client, db_session, monkeypatch):
     mock_enqueue = MagicMock()
     monkeypatch.setattr("app.api.v1.meetings.enqueue_meeting_processing", mock_enqueue)
 
-    response = client.post(f"/meetings/{meeting.id}/process")
+    response = auth_client.post(f"/meetings/{meeting.id}/process")
     assert response.status_code in (200, 202)
     assert response.json()["status"] == MeetingStatus.PROCESSING.value
     mock_enqueue.assert_called_once()

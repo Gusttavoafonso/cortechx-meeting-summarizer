@@ -167,7 +167,7 @@ class IntegrationDeliveryService:
         estão habilitados são ignorados. Entregas já bem-sucedidas nunca são
         repetidas, e uma falha em um provider não impede os demais.
         """
-        meeting = self._meetings.get_by_id(meeting_id)
+        meeting = self._meetings.get_for_pipeline(meeting_id)
         if meeting is None:
             raise DeliveryMeetingNotFoundError(f"Reunião {meeting_id} não encontrada.")
 

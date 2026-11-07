@@ -63,8 +63,10 @@ class User(Base):
         nullable=False,
     )
 
+    # passive_deletes="all" impede o ORM de apagar ou desvincular as reunioes:
+    # a exclusao de um usuario com reunioes e barrada pelo RESTRICT do banco.
     meetings: Mapped[list[Meeting]] = relationship(
         "Meeting",
-        back_populates="user",
-        cascade="all, delete-orphan",
+        back_populates="owner",
+        passive_deletes="all",
     )

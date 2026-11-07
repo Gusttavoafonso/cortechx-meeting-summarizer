@@ -294,7 +294,7 @@ class MeetingProcessor:
                 db.expire_all()
 
     def _get_meeting(self, meeting_id: int) -> Meeting:
-        meeting = self._meeting_repository.get_by_id(meeting_id)
+        meeting = self._meeting_repository.get_for_pipeline(meeting_id)
         if meeting is None:
             raise ValueError(f"Meeting with ID {meeting_id} not found.")
         return meeting
