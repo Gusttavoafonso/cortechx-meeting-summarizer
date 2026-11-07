@@ -34,7 +34,14 @@ from app.workers.integration_job import enqueue_integration_delivery
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    dependencies=[Depends(get_current_user)],
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "description": "Sessão ausente, inválida ou expirada."
+        }
+    },
+)
 
 _NOT_RETRYABLE = {
     IntegrationDeliveryStatus.SUCCESS.value,

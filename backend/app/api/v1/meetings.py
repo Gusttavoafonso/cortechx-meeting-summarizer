@@ -61,7 +61,14 @@ from app.services.transcription import (
 )
 from app.workers.meeting_job import enqueue_meeting_processing
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    dependencies=[Depends(get_current_user)],
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "description": "Sessão ausente, inválida ou expirada."
+        }
+    },
+)
 
 
 def get_meeting_repository(db: Session = Depends(get_session)) -> MeetingRepository:
