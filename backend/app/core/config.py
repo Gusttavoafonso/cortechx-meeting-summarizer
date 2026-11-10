@@ -2,7 +2,14 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from pydantic import AliasChoices, Field, HttpUrl, SecretStr, field_validator
+from pydantic import (
+    AliasChoices,
+    Field,
+    HttpUrl,
+    SecretStr,
+    ValidationError,
+    field_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -111,26 +118,24 @@ class Settings(BaseSettings):
         validation_alias="CELERY_TASK_ALWAYS_EAGER",
     )
 
-    # Configurações de Autenticação Google e Sessão
+    # Configurações de Autenticação Google (cookie de sessão)
     google_client_id: str | None = Field(
         default=None,
         validation_alias="GOOGLE_CLIENT_ID",
     )
-    jwt_secret_key: str = Field(
-        default="dev-secret-key-change-in-production",
-        validation_alias="JWT_SECRET_KEY",
+    # Configurações do JWT de acesso (sem valor padrão para o segredo: a aplicação
+    # não sobe sem JWT_SECRET_KEY definida).
+    JWT_SECRET_KEY: SecretStr = Field(validation_alias="JWT_SECRET_KEY")
+    JWT_ALGORITHM: str = Field(default="HS256", validation_alias="JWT_ALGORITHM")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
+        default=60,
+        gt=0,
+        validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES",
     )
-    jwt_algorithm: str = Field(
-        default="HS256",
-        validation_alias="JWT_ALGORITHM",
-    )
+
     session_cookie_name: str = Field(
         default="session_token",
         validation_alias="SESSION_COOKIE_NAME",
-    )
-    session_max_age_seconds: int = Field(
-        default=604800,  # 7 dias
-        validation_alias="SESSION_MAX_AGE_SECONDS",
     )
     session_cookie_secure: bool = Field(
         default=False,
@@ -150,6 +155,13 @@ class Settings(BaseSettings):
                 return BACKEND_DIR / path
             return path
         return BACKEND_DIR / "storage" / "meetings"
+
+    @field_validator("JWT_SECRET_KEY", mode="after")
+    @classmethod
+    def jwt_secret_must_not_be_blank(cls, v: SecretStr) -> SecretStr:
+        if not v.get_secret_value().strip():
+            raise ValueError("JWT_SECRET_KEY não pode ser vazia")
+        return v
 
     @field_validator(
         "discord_webhook_url",
@@ -195,7 +207,16 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    try:
+        return Settings()
+    except ValidationError as exc:
+        if any("JWT_SECRET_KEY" in map(str, err["loc"]) for err in exc.errors()):
+            raise RuntimeError(
+                "Configuração inválida: JWT_SECRET_KEY ausente ou vazia. "
+                "Defina JWT_SECRET_KEY no .env ou no ambiente. Para gerar um "
+                'valor: python -c "import secrets; print(secrets.token_urlsafe(64))"'
+            ) from exc
+        raise
 
 
 settings = get_settings()

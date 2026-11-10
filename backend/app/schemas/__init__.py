@@ -18,9 +18,7 @@ from app.schemas.transcription import (
 )
 from app.schemas.user import (
     GoogleAuthRequest,
-    UserLoginRequest,
     UserPublic,
-    UserRegisterRequest,
 )
 
 __all__ = [
@@ -40,7 +38,5 @@ __all__ = [
     "TaskResponse",
     "TranscriptResponse",
     "TranscriptSegmentResponse",
-    "UserLoginRequest",
     "UserPublic",
-    "UserRegisterRequest",
 ]

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.user import User
+from app.core.exceptions import UserAlreadyExistsError
+from app.models.user import User, normalize_email
 
 
 class UserRepository:
@@ -15,7 +17,7 @@ class UserRepository:
         return self.db.scalars(stmt).first()
 
     def get_by_email(self, email: str) -> User | None:
-        stmt = select(User).where(User.email == email.strip().lower())
+        stmt = select(User).where(User.email == normalize_email(email))
         return self.db.scalars(stmt).first()
 
     def get_by_google_id(self, google_id: str) -> User | None:
@@ -23,8 +25,16 @@ class UserRepository:
         return self.db.scalars(stmt).first()
 
     def create(self, user: User) -> User:
+        user.email = normalize_email(user.email)
         self.db.add(user)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            # Corrida entre duas requisições com o mesmo e-mail (índice único).
+            self.db.rollback()
+            raise UserAlreadyExistsError(
+                "Já existe uma conta cadastrada com este e-mail."
+            ) from exc
         self.db.refresh(user)
         return user
 

@@ -19,6 +19,9 @@ x-backend-base: &backend_base
     WHISPER_DEVICE: ${WHISPER_DEVICE:-auto}
     WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-auto}
     MAX_AUDIO_SIZE_MB: ${MAX_AUDIO_SIZE_MB:-250}
+    JWT_SECRET_KEY: ${JWT_SECRET_KEY:-}
+    JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+    ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
   volumes:
     - ./backend:/app
     - audio_storage:/app/storage
