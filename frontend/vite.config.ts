@@ -15,12 +15,22 @@ export default defineConfig({
     host: true,
     proxy: {
       '/meetings': {
-        target: 'http://localhost:8001',
+        target: 'http://localhost:8000',
         changeOrigin: true,
+        bypass(req) {
+          if (req.headers.accept?.includes('text/html')) {
+            return '/index.html'
+          }
+        },
       },
       '/auth': {
-        target: 'http://localhost:8001',
+        target: 'http://localhost:8000',
         changeOrigin: true,
+        bypass(req) {
+          if (req.headers.accept?.includes('text/html')) {
+            return '/index.html'
+          }
+        },
       },
     },
   },
