@@ -111,22 +111,46 @@ export const NewMeeting: React.FC = () => {
       return
     }
 
+    let cancelled = false
     const url = URL.createObjectURL(selectedFile)
     setAudioUrl(url)
 
+    if (recordingCtx.durationMs && recordingCtx.durationMs > 0) {
+      setAudioDuration(recordingCtx.durationMs / 1000)
+    }
+
     const audio = new Audio()
     audio.src = url
-    audio.onloadedmetadata = () => {
-      if (!isNaN(audio.duration) && isFinite(audio.duration)) {
+    audio.onloadedmetadata = async () => {
+      if (cancelled) return
+      if (!isNaN(audio.duration) && isFinite(audio.duration) && audio.duration > 0) {
         setAudioDuration(audio.duration)
+        return
+      }
+      // WebM gravado via MediaRecorder frequentemente retorna Infinity em <audio>.duration
+      try {
+        const AudioCtx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext })
+            .webkitAudioContext
+        const ctx = new AudioCtx()
+        const arrayBuf = await selectedFile.arrayBuffer()
+        const decoded = await ctx.decodeAudioData(arrayBuf)
+        if (!cancelled && decoded.duration > 0) {
+          setAudioDuration(decoded.duration)
+        }
+        await ctx.close()
+      } catch {
+        // Fallback já coberto por recordingCtx.durationMs quando gravado ao vivo
       }
     }
 
     return () => {
+      cancelled = true
       URL.revokeObjectURL(url)
       setAudioUrl(null)
     }
-  }, [selectedFile])
+  }, [selectedFile, recordingCtx.durationMs])
 
   // Audio playback controls
   const togglePlay = () => {
@@ -291,11 +315,17 @@ export const NewMeeting: React.FC = () => {
       }
     }
 
-    // Etapa 3: Iniciar processamento assíncrono
+    // Etapa 3: Iniciar processamento assíncrono com as opções configuradas no modal
     try {
       setCurrentStep('processing')
       setFailedStep(null)
-      await processMeeting(meetingId)
+      await processMeeting(meetingId, {
+        language: recordingCtx.options.language,
+        diarization: recordingCtx.options.diarization,
+        provider: recordingCtx.options.provider,
+        auto_tasks: recordingCtx.options.autoTasks,
+        export_notion: recordingCtx.options.exportNotion,
+      })
       setCurrentStep('done')
       recordingCtx.clearRecording()
 
@@ -562,7 +592,7 @@ export const NewMeeting: React.FC = () => {
                 ? isPlaying
                   ? `${formatSecondsToTime(currentTime)} / ${formatSecondsToTime(audioDuration)}`
                   : formatSecondsToTime(audioDuration)
-                : '48:12'}
+                : '--:--'}
             </span>
           </div>
         </Card>

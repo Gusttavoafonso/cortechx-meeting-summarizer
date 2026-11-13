@@ -71,24 +71,31 @@ export const MeetingsList: React.FC = () => {
     }
   }
 
+  const formatExactDuration = (totalSeconds: number) => {
+    const rounded = Math.max(1, Math.round(totalSeconds))
+    if (rounded < 60) {
+      return `${rounded} ${rounded === 1 ? 'segundo' : 'segundos'}`
+    }
+    const mins = Math.floor(rounded / 60)
+    const secs = rounded % 60
+    if (secs === 0 || mins >= 10) {
+      return `${mins} ${mins === 1 ? 'minuto' : 'minutos'}`
+    }
+    return `${mins}m ${secs}s`
+  }
+
   const getEstimatedDuration = (meeting: Meeting) => {
+    if (meeting.audio?.duration_seconds && meeting.audio.duration_seconds > 0) {
+      return formatExactDuration(meeting.audio.duration_seconds)
+    }
     if (meeting.transcript?.segments?.length) {
       const lastSegment =
         meeting.transcript.segments[meeting.transcript.segments.length - 1]
-      if (lastSegment?.end_time) {
-        const minutes = Math.ceil(lastSegment.end_time / 60)
-        return `${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}`
+      if (lastSegment?.end_time && lastSegment.end_time > 0) {
+        return formatExactDuration(lastSegment.end_time)
       }
     }
-    if (meeting.audio?.file_size_bytes) {
-      // Rough estimate if not transcribed yet (1MB approx 1 min for compressed audio)
-      const approxMins = Math.max(
-        1,
-        Math.round(meeting.audio.file_size_bytes / (1024 * 1024))
-      )
-      return `~${approxMins} min`
-    }
-    return '30 minutos'
+    return '—'
   }
 
   return (

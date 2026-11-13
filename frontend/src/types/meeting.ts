@@ -13,8 +13,17 @@ export interface AudioMetadata {
   original_filename: string
   content_type: string
   file_size_bytes: number
+  duration_seconds?: number | null
   file_path: string
   uploaded_at: string
+}
+
+export interface MeetingProcessOptions {
+  language?: 'pt' | 'en' | 'es' | 'auto'
+  diarization?: boolean
+  provider?: 'auto' | 'groq' | 'local'
+  auto_tasks?: boolean
+  export_notion?: boolean
 }
 
 export interface TranscriptSegment {

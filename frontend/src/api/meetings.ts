@@ -3,6 +3,7 @@ import {
   AudioMetadata,
   Meeting,
   MeetingCreate,
+  MeetingProcessOptions,
   MeetingProcessResponse,
   MeetingStatusResponse,
   SummaryResponse,
@@ -37,9 +38,13 @@ export async function uploadMeetingAudio(
   })
 }
 
-export async function processMeeting(meetingId: number): Promise<MeetingProcessResponse> {
+export async function processMeeting(
+  meetingId: number,
+  options?: MeetingProcessOptions
+): Promise<MeetingProcessResponse> {
   return request<MeetingProcessResponse>(`/meetings/${meetingId}/process`, {
     method: 'POST',
+    ...(options ? { body: JSON.stringify(options) } : {}),
   })
 }
 
