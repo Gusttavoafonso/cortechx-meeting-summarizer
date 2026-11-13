@@ -22,12 +22,18 @@ export function formatSecondsToTime(seconds: number): string {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
 }
 
+function parseUtcDate(dateStr: string): Date {
+  const trimmed = dateStr.trim()
+  const hasTimezone = /([zZ]|[+-]\d{2}:?\d{2})$/.test(trimmed)
+  return new Date(hasTimezone ? trimmed : `${trimmed}Z`)
+}
+
 export function formatMeetingTimeBadge(dateStr: string): {
   time: string
   period: string
 } {
   try {
-    const d = new Date(dateStr)
+    const d = parseUtcDate(dateStr)
     if (isNaN(d.getTime())) {
       return { time: '10:00', period: 'AM' }
     }
@@ -47,7 +53,7 @@ export function formatMeetingTimeBadge(dateStr: string): {
 
 export function formatMeetingDate(dateStr: string): string {
   try {
-    const d = new Date(dateStr)
+    const d = parseUtcDate(dateStr)
     if (isNaN(d.getTime())) return dateStr
     return new Intl.DateTimeFormat('pt-BR', {
       day: '2-digit',
