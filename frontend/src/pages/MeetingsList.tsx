@@ -96,7 +96,7 @@ export const MeetingsList: React.FC = () => {
       {/* Page Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-ink font-fredoka">
+          <h1 className="text-3xl font-bold tracking-tight text-ink font-sans">
             Reuniões
           </h1>
           <p className="text-sm text-muted mt-1">Todas as suas reuniões transcritas</p>

@@ -49,10 +49,10 @@ export const Sidebar: React.FC = () => {
       <div className="mb-6">
         <Button
           onClick={() => navigate('/meetings/new')}
-          className="w-full h-11 justify-center gap-2 font-bold text-sm shadow-sm"
+          leftIcon={<Plus className="w-4 h-4 stroke-[2.5]" />}
+          className="w-full h-11 justify-center font-bold text-sm shadow-sm"
         >
-          <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>Nova Reunião</span>
+          Nova Reunião
         </Button>
       </div>
 

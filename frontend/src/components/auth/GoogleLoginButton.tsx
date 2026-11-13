@@ -86,6 +86,9 @@ export const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
         },
       })
 
+      const containerWidth = containerRef.current.clientWidth || 384
+      const buttonWidth = Math.min(400, Math.max(240, containerWidth))
+
       containerRef.current.innerHTML = ''
       window.google?.accounts.id.renderButton(containerRef.current, {
         type: 'standard',
@@ -93,8 +96,8 @@ export const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
         size: 'large',
         text: text,
         shape: 'rectangular',
-        logo_alignment: 'left',
-        width: '100%',
+        logo_alignment: 'center',
+        width: buttonWidth,
       })
     } catch (e) {
       onError?.(e instanceof Error ? e : new Error(String(e)))

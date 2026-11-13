@@ -143,27 +143,26 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
   }
 
   return (
-    <Card className="p-6 sm:p-8 border-slate-200 shadow-card bg-white/70 backdrop-blur-xs">
+    <Card className="p-5 border-slate-200 shadow-card bg-white/70 backdrop-blur-xs">
       {/* Estado 1: Pronto para Gravar (Idle) */}
       {!isRecording ? (
         <div className="flex flex-col items-center text-center">
-          <div className="mb-6">
-            <h3 className="font-fredoka text-xl font-semibold text-ink mb-1">
+          <div className="mb-3">
+            <h3 className="font-sans text-lg font-semibold text-ink mb-0.5">
               Gravação ao vivo
             </h3>
-            <p className="text-xs sm:text-sm text-muted max-w-md mx-auto">
-              Grave o áudio da chamada e do seu microfone em tempo real sem precisar gerar
-              e anexar arquivos externos.
+            <p className="text-xs text-muted max-w-md mx-auto">
+              Capture o áudio da chamada e do seu microfone em tempo real.
             </p>
           </div>
 
           {/* Seletor de modo minimalista */}
-          <div className="flex flex-wrap items-center justify-center gap-2 mb-8 bg-surface/50 p-1.5 rounded-2xl border border-[#DCE2FB]/70">
+          <div className="flex flex-wrap items-center justify-center gap-2 mb-4 bg-surface/50 p-1 rounded-2xl border border-[#DCE2FB]/70">
             <button
               type="button"
               disabled={disabled}
               onClick={() => setMode('both')}
-              className={`flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-xl transition-all ${
+              className={`flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-xl transition-all ${
                 mode === 'both'
                   ? 'bg-primary-btn text-white shadow-xs'
                   : 'text-muted hover:text-ink'
@@ -177,7 +176,7 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
               type="button"
               disabled={disabled}
               onClick={() => setMode('mic_only')}
-              className={`flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-xl transition-all ${
+              className={`flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-xl transition-all ${
                 mode === 'mic_only'
                   ? 'bg-primary-btn text-white shadow-xs'
                   : 'text-muted hover:text-ink'
@@ -189,16 +188,16 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
           </div>
 
           {/* Botão de Gravação Minimalista com Ícone de Microfone */}
-          <div className="flex flex-col items-center gap-3 mb-6">
+          <div className="flex flex-col items-center gap-2 mb-4">
             <button
               type="button"
               disabled={disabled}
               onClick={handleStart}
               title="Iniciar gravação agora"
-              className="relative w-20 h-20 rounded-full border-2 border-rose-500 bg-rose-50/70 text-rose-600 hover:bg-rose-100/90 active:scale-95 transition-all flex items-center justify-center shadow-sm group focus:outline-none focus:ring-4 focus:ring-rose-200"
+              className="relative w-16 h-16 rounded-full border-2 border-rose-500 bg-rose-50/70 text-rose-600 hover:bg-rose-100/90 active:scale-95 transition-all flex items-center justify-center shadow-sm group focus:outline-none focus:ring-4 focus:ring-rose-200"
             >
               <span className="absolute -inset-1 rounded-full bg-rose-400/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-              <Mic className="w-8 h-8 stroke-[2.2] group-hover:scale-105 transition-transform" />
+              <Mic className="w-7 h-7 stroke-[2.2] group-hover:scale-105 transition-transform" />
             </button>
             <span className="text-xs font-semibold text-ink tracking-tight">
               Iniciar gravação
@@ -206,12 +205,11 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
           </div>
 
           {/* Dica de Permissão no Navegador */}
-          <div className="flex items-start gap-2.5 max-w-lg bg-surface/60 border border-[#DCE2FB] rounded-xl px-4 py-3 text-left">
-            <Info className="w-4 h-4 text-brand shrink-0 mt-0.5 stroke-[2]" />
-            <p className="text-xs text-ink-light leading-relaxed">
-              Ao clicar no botão, selecione a aba da reunião (Google Meet, Discord, etc.)
-              e confirme a opção de <strong>compartilhar áudio da aba</strong> no diálogo
-              do navegador.
+          <div className="flex items-center gap-2 max-w-lg bg-surface/60 border border-[#DCE2FB] rounded-xl px-3.5 py-2 text-left">
+            <Info className="w-4 h-4 text-brand shrink-0 stroke-[2]" />
+            <p className="text-[11px] text-ink-light leading-snug">
+              Selecione a aba da reunião (Meet, Discord, etc.) e marque{' '}
+              <strong>compartilhar áudio da aba</strong> no navegador.
             </p>
           </div>
         </div>

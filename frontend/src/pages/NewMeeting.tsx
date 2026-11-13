@@ -337,7 +337,7 @@ export const NewMeeting: React.FC = () => {
   }
 
   return (
-    <div className="flex-1 px-8 py-10 max-w-5xl mx-auto w-full">
+    <div className="flex-1 px-8 py-5 max-w-5xl mx-auto w-full">
       {/* Hidden audio player for actual playback */}
       {audioUrl && (
         <audio
@@ -350,7 +350,7 @@ export const NewMeeting: React.FC = () => {
       )}
 
       {/* Top Header Row: Breadcrumb & Secondary Actions */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-4">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-sm text-muted">
           <Link
@@ -386,7 +386,7 @@ export const NewMeeting: React.FC = () => {
       </div>
 
       {/* Title Input */}
-      <div className="mb-6">
+      <div className="mb-4">
         <input
           ref={titleInputRef}
           type="text"
@@ -394,17 +394,17 @@ export const NewMeeting: React.FC = () => {
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Alinhamento de Produto — Sprint 04"
           disabled={currentStep !== 'idle' && currentStep !== 'failed'}
-          className="w-full text-2xl sm:text-3xl font-bold font-fredoka text-ink bg-transparent border-b-2 border-transparent hover:border-slate-200 focus:border-brand focus:outline-none transition-colors pb-1 placeholder:text-muted/40"
+          className="w-full text-2xl font-bold font-sans text-ink bg-transparent border-b-2 border-transparent hover:border-slate-200 focus:border-brand focus:outline-none transition-colors pb-1 placeholder:text-muted/40"
         />
       </div>
 
       {/* Mode Selector Tabs (Gravar ou Enviar arquivo) */}
       {!selectedFile && (
-        <div className="flex items-center gap-2 mb-6">
+        <div className="flex items-center gap-2 mb-4">
           <button
             type="button"
             onClick={() => setInputMethod('record')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all ${
               inputMethod === 'record'
                 ? 'bg-primary-btn text-white shadow-xs'
                 : 'bg-white text-muted hover:text-ink border border-slate-200'
@@ -417,7 +417,7 @@ export const NewMeeting: React.FC = () => {
           <button
             type="button"
             onClick={() => setInputMethod('upload')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all ${
               inputMethod === 'upload'
                 ? 'bg-primary-btn text-white shadow-xs'
                 : 'bg-white text-muted hover:text-ink border border-slate-200'
@@ -606,7 +606,7 @@ export const NewMeeting: React.FC = () => {
       )}
 
       {/* Bottom Bar: Opções & Iniciar processo */}
-      <div className="flex items-center justify-between mt-10 pt-4">
+      <div className="flex items-center justify-between mt-5 pt-2">
         {/* Secondary button: Opções */}
         <button
           type="button"
