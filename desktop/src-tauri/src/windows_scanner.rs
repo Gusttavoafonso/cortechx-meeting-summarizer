@@ -4,7 +4,7 @@ use crate::detector::WindowInfo;
 pub fn list_visible_windows() -> Vec<WindowInfo> {
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
-    use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM};
+    use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM, CloseHandle};
     use windows_sys::Win32::System::Threading::{
         OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
     };
@@ -50,6 +50,7 @@ pub fn list_visible_windows() -> Vec<WindowInfo> {
                             }
                         }
                     }
+                    CloseHandle(proc_handle);
                 }
             }
 
