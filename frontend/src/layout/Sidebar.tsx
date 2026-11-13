@@ -34,30 +34,30 @@ export const Sidebar: React.FC = () => {
   const { user, logout } = useAuth()
 
   return (
-    <aside className="w-64 bg-surface shrink-0 min-h-screen flex flex-col px-5 py-6 select-none border-r border-[#DCE2FB]">
+    <aside className="w-56 bg-surface shrink-0 min-h-screen flex flex-col px-3.5 py-4 select-none border-r border-[#DCE2FB]">
       {/* Brand Header */}
-      <div className="flex items-center justify-between mb-8 px-2">
+      <div className="flex items-center justify-between mb-5 px-2">
         <NavLink
           to="/meetings"
           className="hover:opacity-90 transition-opacity focus:outline-hidden"
         >
-          <ZumoLogo size="md" />
+          <ZumoLogo size="sm" />
         </NavLink>
       </div>
 
       {/* Main Action Button */}
-      <div className="mb-6">
+      <div className="mb-4">
         <Button
           onClick={() => navigate('/meetings/new')}
-          leftIcon={<Plus className="w-4 h-4 stroke-[2.5]" />}
-          className="w-full h-11 justify-center font-bold text-sm shadow-sm"
+          leftIcon={<Plus className="w-3.5 h-3.5 stroke-[2.5]" />}
+          className="w-full h-9 justify-center font-semibold text-xs shadow-sm"
         >
           Nova Reunião
         </Button>
       </div>
 
       {/* Navigation Links */}
-      <nav className="flex-1 space-y-1">
+      <nav className="flex-1 space-y-0.5">
         {navItems.map((item) => {
           const Icon = item.icon
           return (
@@ -66,7 +66,7 @@ export const Sidebar: React.FC = () => {
               to={item.to}
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150',
+                  'flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] font-semibold transition-all duration-150',
                   isActive
                     ? 'bg-primary-btn text-white shadow-xs'
                     : 'text-ink-light hover:text-ink hover:bg-slate-200/50'
@@ -81,17 +81,17 @@ export const Sidebar: React.FC = () => {
       </nav>
 
       {/* Bottom Shortcuts / Status */}
-      <div className="pt-4 border-t border-slate-200/60 mb-3 px-2">
-        <div className="bg-white/60 border border-slate-200/80 rounded-xl p-3">
-          <p className="text-xs font-semibold text-ink">Modo Local Ativo</p>
-          <p className="text-[11px] text-muted mt-0.5 leading-snug">
-            Transcrições e resumos processados na nuvem ou localmente.
+      <div className="pt-3 border-t border-slate-200/60 mb-2.5 px-1">
+        <div className="bg-white/60 border border-slate-200/80 rounded-xl p-2.5">
+          <p className="text-[11px] font-semibold text-ink">Modo Local Ativo</p>
+          <p className="text-[10px] text-muted mt-0.5 leading-snug">
+            Transcrições e resumos na nuvem ou localmente.
           </p>
         </div>
       </div>
 
       {/* User / Workspace Footer */}
-      <div className="pt-4 border-t border-slate-200/40 px-2 flex items-center justify-between gap-2.5 text-xs text-muted">
+      <div className="pt-3 border-t border-slate-200/40 px-1.5 flex items-center justify-between gap-2 text-xs text-muted">
         {user ? (
           <>
             <div className="flex items-center gap-2 min-w-0 flex-1">

@@ -337,7 +337,7 @@ export const NewMeeting: React.FC = () => {
   }
 
   return (
-    <div className="flex-1 px-8 py-5 max-w-5xl mx-auto w-full">
+    <div className="flex-1 flex flex-col px-8 py-5 max-w-5xl mx-auto w-full">
       {/* Hidden audio player for actual playback */}
       {audioUrl && (
         <audio
@@ -606,7 +606,7 @@ export const NewMeeting: React.FC = () => {
       )}
 
       {/* Bottom Bar: Opções & Iniciar processo */}
-      <div className="flex items-center justify-between mt-5 pt-2">
+      <div className="flex items-center justify-between mt-auto pt-4">
         {/* Secondary button: Opções */}
         <button
           type="button"
