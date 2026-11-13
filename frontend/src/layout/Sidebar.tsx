@@ -1,115 +1,139 @@
 import React from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate, Link } from 'react-router-dom'
 import {
   LayoutGrid,
   MessagesSquare,
-  CheckCircle2,
+  CheckSquare,
   AudioLines,
   Settings,
   Plus,
+  LogOut,
+  LogIn,
 } from 'lucide-react'
 import { ZumoLogo } from '../components/ZumoLogo'
 import { Button } from '../components/ui/Button'
+import { useAuth } from '../contexts/AuthContext'
 import { cn } from '../lib/utils'
 
 interface NavItem {
   name: string
   to: string
-  icon: React.ComponentType<{ className?: string }>
-  badge?: string
+  icon: React.ElementType
 }
 
 const navItems: NavItem[] = [
   { name: 'Dashboard', to: '/dashboard', icon: LayoutGrid },
   { name: 'Reuniões', to: '/meetings', icon: MessagesSquare },
-  { name: 'Tarefas', to: '/tasks', icon: CheckCircle2 },
+  { name: 'Tarefas', to: '/tasks', icon: CheckSquare },
   { name: 'Transcrições', to: '/transcripts', icon: AudioLines },
-  { name: 'Settings', to: '/settings', icon: Settings },
+  { name: 'Configurações', to: '/settings', icon: Settings },
 ]
 
 export const Sidebar: React.FC = () => {
   const navigate = useNavigate()
+  const { user, logout } = useAuth()
 
   return (
     <aside className="w-64 bg-surface shrink-0 min-h-screen flex flex-col px-5 py-6 select-none border-r border-[#DCE2FB]">
-      {/* Brand Logo */}
-      <div className="px-2 mb-8 flex items-center">
+      {/* Brand Header */}
+      <div className="flex items-center justify-between mb-8 px-2">
         <NavLink
-          to="/dashboard"
-          className="inline-block hover:opacity-90 transition-opacity"
+          to="/meetings"
+          className="hover:opacity-90 transition-opacity focus:outline-hidden"
         >
-          <ZumoLogo size="lg" />
+          <ZumoLogo size="md" />
         </NavLink>
       </div>
 
-      {/* Main Action: + Nova Reunião */}
-      <div className="mb-8">
+      {/* Main Action Button */}
+      <div className="mb-6">
         <Button
           onClick={() => navigate('/meetings/new')}
-          className="w-full justify-center shadow-sm text-sm font-semibold h-11"
-          leftIcon={<Plus className="w-4 h-4 stroke-[2.5]" />}
+          className="w-full h-11 justify-center gap-2 font-bold text-sm shadow-sm"
         >
-          Nova Reunião
+          <Plus className="w-4 h-4 stroke-[2.5]" />
+          <span>Nova Reunião</span>
         </Button>
       </div>
 
-      {/* Workspace Navigation */}
-      <div className="flex-1">
-        <p className="px-3 text-[11px] font-semibold text-muted/80 tracking-wider uppercase mb-3">
-          Workspace
-        </p>
-        <nav className="space-y-1">
-          {navItems.map((item) => {
-            const Icon = item.icon
-            return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) =>
-                  cn(
-                    'relative flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group',
-                    isActive
-                      ? 'text-ink font-semibold bg-white/60 shadow-xs'
-                      : 'text-muted hover:text-ink hover:bg-white/30'
-                  )
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    {isActive ? (
-                      <span className="w-2 h-2 rounded-full bg-brand shrink-0" />
-                    ) : (
-                      <span className="w-2 h-2 shrink-0" />
-                    )}
-                    <Icon
-                      className={cn(
-                        'w-4 h-4 transition-colors',
-                        isActive ? 'text-brand' : 'text-muted group-hover:text-ink'
-                      )}
-                    />
-                    <span className="flex-1">{item.name}</span>
-                    {item.badge && (
-                      <span className="text-[10px] bg-white/70 text-muted px-1.5 py-0.5 rounded-md font-semibold">
-                        {item.badge}
-                      </span>
-                    )}
-                  </>
-                )}
-              </NavLink>
-            )
-          })}
-        </nav>
+      {/* Navigation Links */}
+      <nav className="flex-1 space-y-1">
+        {navItems.map((item) => {
+          const Icon = item.icon
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150',
+                  isActive
+                    ? 'bg-primary-btn text-white shadow-xs'
+                    : 'text-ink-light hover:text-ink hover:bg-slate-200/50'
+                )
+              }
+            >
+              <Icon className="w-4 h-4 stroke-[2]" />
+              <span>{item.name}</span>
+            </NavLink>
+          )
+        })}
+      </nav>
+
+      {/* Bottom Shortcuts / Status */}
+      <div className="pt-4 border-t border-slate-200/60 mb-3 px-2">
+        <div className="bg-white/60 border border-slate-200/80 rounded-xl p-3">
+          <p className="text-xs font-semibold text-ink">Modo Local Ativo</p>
+          <p className="text-[11px] text-muted mt-0.5 leading-snug">
+            Transcrições e resumos processados na nuvem ou localmente.
+          </p>
+        </div>
       </div>
 
       {/* User / Workspace Footer */}
-      <div className="pt-4 border-t border-slate-200/40 px-2 flex items-center gap-2.5 text-xs text-muted">
-        <div className="w-7 h-7 rounded-full bg-brand/10 text-brand flex items-center justify-center font-bold text-[11px]">
-          Z
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="truncate font-medium text-ink">CortechX Workspace</p>
-          <p className="text-[10px] text-muted truncate">Free plan</p>
-        </div>
+      <div className="pt-4 border-t border-slate-200/40 px-2 flex items-center justify-between gap-2.5 text-xs text-muted">
+        {user ? (
+          <>
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              {user.picture_url ? (
+                <img
+                  src={user.picture_url}
+                  alt={user.name}
+                  className="w-7 h-7 rounded-full object-cover shrink-0 border border-slate-200"
+                />
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-brand/10 text-brand flex items-center justify-center font-bold text-[11px] shrink-0">
+                  {user.name.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="truncate font-semibold text-ink leading-tight">
+                  {user.name}
+                </p>
+                <p className="text-[10px] text-muted truncate">Conectado</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                await logout()
+                navigate('/login')
+              }}
+              title="Sair da conta"
+              className="p-1.5 rounded-lg text-muted hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0 cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </>
+        ) : (
+          <Link
+            to="/login"
+            className="flex items-center justify-between w-full p-1 rounded-lg text-xs font-semibold text-brand hover:underline"
+          >
+            <span>Fazer login</span>
+            <LogIn className="w-3.5 h-3.5" />
+          </Link>
+        )}
       </div>
     </aside>
   )

@@ -6,6 +6,7 @@ mod macos_scanner;
 mod windows_scanner;
 
 use detector::{DetectedMeeting, DetectorEngine, MeetingCooldownTracker, WindowInfo};
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::menu::{Menu, MenuItem};
@@ -38,6 +39,22 @@ fn get_active_meeting() -> Option<DetectedMeeting> {
         }
     }
     None
+}
+
+#[tauri::command]
+fn list_meeting_windows() -> Vec<DetectedMeeting> {
+    let engine = DetectorEngine::new();
+    let windows = get_windows();
+    let mut meetings = Vec::new();
+    let mut seen_ids = HashSet::new();
+    for win in windows {
+        if let Some(meeting) = engine.inspect_window(&win) {
+            if seen_ids.insert(meeting.identifier.clone()) {
+                meetings.push(meeting);
+            }
+        }
+    }
+    meetings
 }
 
 #[tauri::command]
@@ -148,6 +165,7 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             get_active_meeting,
+            list_meeting_windows,
             focus_recorder_window
         ])
         .setup(|app| {

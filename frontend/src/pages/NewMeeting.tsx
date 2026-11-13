@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowRight,
   ChevronRight,
@@ -22,7 +22,7 @@ import { RecordingPanel } from '../components/recording/RecordingPanel'
 import { MeetingOptionsModal } from '../components/recording/MeetingOptionsModal'
 import { useRecordingContext } from '../context/RecordingContext'
 import { createMeeting, processMeeting, uploadMeetingAudio } from '../api/meetings'
-import { getMe, loginUser, UserPublic } from '../api/auth'
+import { useAuth } from '../contexts/AuthContext'
 import { formatBytes, formatSecondsToTime } from '../lib/utils'
 
 const MAX_FILE_SIZE_BYTES = 250 * 1024 * 1024 // 250MB
@@ -41,18 +41,19 @@ type ProcessStep = 'idle' | 'creating' | 'uploading' | 'processing' | 'done' | '
 
 export const NewMeeting: React.FC = () => {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const recordingCtx = useRecordingContext()
+  const { user: currentUser } = useAuth()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null)
 
-  const [title, setTitle] = useState('')
+  const [title, setTitle] = useState(recordingCtx.title || '')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [fileError, setFileError] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [inputMethod, setInputMethod] = useState<'record' | 'upload'>('record')
   const [isOptionsOpen, setIsOptionsOpen] = useState(false)
-  const [currentUser, setCurrentUser] = useState<UserPublic | null>(null)
 
   // Audio preview playback state
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
@@ -73,34 +74,22 @@ export const NewMeeting: React.FC = () => {
     titleInputRef.current?.focus()
   }, [])
 
-  // Auto-login / check user session on mount
+  // Sync tab mode with search params (e.g. from Tauri notification/tray)
   useEffect(() => {
-    let isMounted = true
-    const initAuth = async () => {
-      try {
-        const user = await getMe()
-        if (isMounted) setCurrentUser(user)
-      } catch {
-        try {
-          // Auto-login demo user for local test environment
-          const user = await loginUser('demo@cortechx.com', 'Password123!')
-          if (isMounted) setCurrentUser(user)
-        } catch {
-          if (isMounted) {
-            setCurrentUser({
-              id: 1,
-              email: 'demo@cortechx.com',
-              name: 'Demo User',
-            })
-          }
-        }
-      }
+    const tab = searchParams.get('tab')
+    if (tab === 'record') {
+      setInputMethod('record')
+    } else if (tab === 'upload') {
+      setInputMethod('upload')
     }
-    initAuth()
-    return () => {
-      isMounted = false
+  }, [searchParams])
+
+  // Sync title from RecordingContext if updated externally (e.g. Tauri meeting detector)
+  useEffect(() => {
+    if (recordingCtx.title && !title) {
+      setTitle(recordingCtx.title)
     }
-  }, [])
+  }, [recordingCtx.title, title])
 
   // Restore recorded audio from global context if user switched tabs/pages
   useEffect(() => {

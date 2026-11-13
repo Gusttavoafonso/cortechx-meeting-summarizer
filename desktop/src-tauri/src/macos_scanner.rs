@@ -28,19 +28,21 @@ pub fn list_visible_windows() -> Vec<WindowInfo> {
             // 1. kCGWindowOwnerName (Não requer permissão de Screen Recording no macOS)
             let mut owner_name = String::new();
             let key_owner = CFString::from_static_string("kCGWindowOwnerName");
-            let mut owner_ptr: *const c_void = std::ptr::null();
-            if dict.find(key_owner.as_concrete_TypeRef() as *const c_void, &mut owner_ptr) && !owner_ptr.is_null() {
-                let cf_str: CFString = CFString::wrap_under_get_rule(owner_ptr as *const _);
-                owner_name = cf_str.to_string();
+            if let Some(owner_ref) = dict.find(key_owner.as_concrete_TypeRef() as *const c_void) {
+                if !(*owner_ref).is_null() {
+                    let cf_str: CFString = CFString::wrap_under_get_rule(*owner_ref as *const _);
+                    owner_name = cf_str.to_string();
+                }
             }
 
             // 2. kCGWindowName (Título da janela)
             let mut window_title = String::new();
             let key_name = CFString::from_static_string("kCGWindowName");
-            let mut name_ptr: *const c_void = std::ptr::null();
-            if dict.find(key_name.as_concrete_TypeRef() as *const c_void, &mut name_ptr) && !name_ptr.is_null() {
-                let cf_str: CFString = CFString::wrap_under_get_rule(name_ptr as *const _);
-                window_title = cf_str.to_string();
+            if let Some(name_ref) = dict.find(key_name.as_concrete_TypeRef() as *const c_void) {
+                if !(*name_ref).is_null() {
+                    let cf_str: CFString = CFString::wrap_under_get_rule(*name_ref as *const _);
+                    window_title = cf_str.to_string();
+                }
             }
 
             if !owner_name.trim().is_empty() || !window_title.trim().is_empty() {

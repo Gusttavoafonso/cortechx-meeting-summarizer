@@ -266,7 +266,11 @@ export class AudioRecorderEngine {
         const mimeType = this.mediaRecorder?.mimeType || 'audio/webm'
         const blob = new Blob(this.recordedChunks, { type: mimeType })
         const durationMs = this.elapsedTime
-        const ext = mimeType.includes('mp4') ? 'm4a' : 'webm'
+        const ext = mimeType.includes('ogg')
+          ? 'ogg'
+          : mimeType.includes('mp4')
+            ? 'm4a'
+            : 'webm'
 
         const now = new Date()
         const pad = (n: number) => String(n).padStart(2, '0')
