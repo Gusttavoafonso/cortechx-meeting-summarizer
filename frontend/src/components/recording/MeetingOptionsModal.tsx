@@ -40,7 +40,7 @@ export const MeetingOptionsModal: React.FC<MeetingOptionsModalProps> = ({
               <SlidersHorizontal className="w-4 h-4 stroke-[2.2]" />
             </div>
             <div>
-              <h3 className="font-fredoka text-lg font-semibold text-ink">
+              <h3 className="font-sans text-lg font-semibold text-ink">
                 Opções da reunião
               </h3>
               <p className="text-xs text-muted">

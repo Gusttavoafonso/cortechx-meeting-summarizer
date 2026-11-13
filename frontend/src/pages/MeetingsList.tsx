@@ -176,7 +176,7 @@ export const MeetingsList: React.FC = () => {
           <div className="w-16 h-16 rounded-2xl bg-surface text-brand flex items-center justify-center mx-auto mb-4">
             <MessagesSquare className="w-8 h-8 stroke-[1.5]" />
           </div>
-          <h3 className="text-lg font-bold text-ink font-fredoka mb-1">
+          <h3 className="text-lg font-bold text-ink font-sans mb-1">
             {searchTerm ? 'Nenhuma reunião encontrada' : 'Nenhuma reunião cadastrada'}
           </h3>
           <p className="text-sm text-muted max-w-sm mx-auto mb-6">
