@@ -86,7 +86,7 @@ class AudioStorageService(BaseAudioStorage):
                 ),
             )
 
-        content_type = (file.content_type or "").lower().strip()
+        content_type = (file.content_type or "").split(";", 1)[0].lower().strip()
         if not content_type:
             inferred_types = {
                 ".mp3": "audio/mpeg",
@@ -94,6 +94,7 @@ class AudioStorageService(BaseAudioStorage):
                 ".m4a": "audio/mp4",
                 ".mp4": "video/mp4",
                 ".webm": "audio/webm",
+                ".ogg": "audio/ogg",
             }
             content_type = inferred_types.get(ext, "")
 

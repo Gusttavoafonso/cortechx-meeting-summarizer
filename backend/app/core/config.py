@@ -27,6 +27,7 @@ class Settings(BaseSettings):
         ".m4a",
         ".mp4",
         ".webm",
+        ".ogg",
     }
     ALLOWED_AUDIO_MIME_TYPES: set[str] = {
         "audio/mpeg",
@@ -38,6 +39,7 @@ class Settings(BaseSettings):
         "audio/x-m4a",
         "audio/m4a",
         "audio/webm",
+        "audio/ogg",
         "video/mp4",
         "video/webm",
     }
