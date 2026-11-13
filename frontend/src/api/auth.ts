@@ -1,24 +1,52 @@
 import { request } from './client'
+import {
+  UserPublic,
+  UserLoginRequest,
+  UserRegisterRequest,
+  GoogleAuthRequest,
+} from '../types/auth'
 
-export interface UserPublic {
-  id: number
-  email?: string
-  name?: string
-  picture_url?: string | null
+export type { UserPublic, UserLoginRequest, UserRegisterRequest, GoogleAuthRequest }
+
+export const authApi = {
+  login: (data: UserLoginRequest): Promise<UserPublic> =>
+    request<UserPublic>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  register: (data: UserRegisterRequest): Promise<UserPublic> =>
+    request<UserPublic>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  googleAuth: (data: GoogleAuthRequest): Promise<UserPublic> =>
+    request<UserPublic>('/auth/google', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getMe: (): Promise<UserPublic> =>
+    request<UserPublic>('/auth/me', {
+      method: 'GET',
+    }),
+
+  logout: (): Promise<{ message: string }> =>
+    request<{ message: string }>('/auth/logout', {
+      method: 'POST',
+    }),
 }
 
 export async function getMe(): Promise<UserPublic> {
-  return request<UserPublic>('/auth/me', { method: 'GET' })
+  return authApi.getMe()
 }
 
 export async function loginUser(
   email: string,
   password: string
 ): Promise<UserPublic> {
-  return request<UserPublic>('/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ email, password }),
-  })
+  return authApi.login({ email, password })
 }
 
 export async function registerUser(
@@ -26,12 +54,9 @@ export async function registerUser(
   password: string,
   name: string
 ): Promise<UserPublic> {
-  return request<UserPublic>('/auth/register', {
-    method: 'POST',
-    body: JSON.stringify({ email, password, name }),
-  })
+  return authApi.register({ email, password, name })
 }
 
 export async function logoutUser(): Promise<{ message: string }> {
-  return request<{ message: string }>('/auth/logout', { method: 'POST' })
+  return authApi.logout()
 }
