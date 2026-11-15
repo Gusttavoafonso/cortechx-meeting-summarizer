@@ -1,41 +1,27 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import bcrypt
-import jwt
 from google.auth.transport import requests
 from google.oauth2 import id_token
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.exceptions import (
-    GoogleAccountPasswordMissingError,
     InvalidCredentialsError,
     InvalidGoogleTokenError,
-    InvalidSessionTokenError,
     UserAlreadyExistsError,
+    GoogleAccountPasswordMissingError,
 )
-from app.models.user import User
+from app.core.security import (
+    hash_password,
+    verify_dummy_password,
+    verify_password,
+)
+from app.models.user import User, normalize_email
 from app.repositories.user_repository import UserRepository
 
-
-def hash_password(password: str) -> str:
-    """Gera um hash seguro de senha utilizando bcrypt com salt aleatório."""
-    salt = bcrypt.gensalt()
-    return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
-
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verifica se a senha em texto plano confere com o hash bcrypt."""
-    try:
-        return bcrypt.checkpw(
-            plain_password.encode("utf-8"),
-            hashed_password.encode("utf-8"),
-        )
-    except Exception:
-        return False
+INVALID_CREDENTIALS_MESSAGE = "E-mail ou senha incorretos."
 
 
 def register_user(
@@ -46,19 +32,16 @@ def register_user(
 ) -> User:
     """Cadastra um novo usuário com login tradicional por e-mail e senha."""
     user_repo = UserRepository(db)
-    normalized_email = email.strip().lower()
-    existing = user_repo.get_by_email(normalized_email)
-    if existing:
+    normalized_email = normalize_email(email)
+    if user_repo.get_by_email(normalized_email):
         raise UserAlreadyExistsError(
-            f"Já existe uma conta cadastrada com o e-mail '{email}'."
+            "Já existe uma conta cadastrada com este e-mail."
         )
 
     user = User(
         email=normalized_email,
         name=name.strip(),
         hashed_password=hash_password(password),
-        google_id=None,
-        picture_url=None,
     )
     return user_repo.create(user)
 
@@ -68,20 +51,20 @@ def authenticate_with_credentials(
     email: str,
     password: str,
 ) -> User:
-    """Valida as credenciais de login tradicional (e-mail e senha)."""
-    user_repo = UserRepository(db)
-    normalized_email = email.strip().lower()
-    user = user_repo.get_by_email(normalized_email)
-    if not user:
-        raise InvalidCredentialsError("E-mail ou senha incorretos.")
+    """Valida as credenciais de login tradicional (e-mail e senha).
 
-    if not user.hashed_password:
-        raise GoogleAccountPasswordMissingError(
-            "Esta conta foi cadastrada via Google. Por favor, entre com o Google."
-        )
+    Todas as falhas (e-mail inexistente, senha errada, conta sem senha ou conta
+    inativa) lançam a mesma `InvalidCredentialsError`, para não revelar se o
+    e-mail existe.
+    """
+    user = UserRepository(db).get_by_email(email)
 
-    if not verify_password(password, user.hashed_password):
-        raise InvalidCredentialsError("E-mail ou senha incorretos.")
+    if user is None or not user.hashed_password:
+        verify_dummy_password(password)
+        raise InvalidCredentialsError(INVALID_CREDENTIALS_MESSAGE)
+
+    if not verify_password(password, user.hashed_password) or not user.is_active:
+        raise InvalidCredentialsError(INVALID_CREDENTIALS_MESSAGE)
 
     return user
 
@@ -108,45 +91,6 @@ def verify_google_token(credential: str) -> dict[str, Any]:
         raise InvalidGoogleTokenError(f"Token do Google inválido: {str(exc)}") from exc
 
 
-def create_session_token(user_id: int) -> str:
-    """Gera um JWT de sessão interna da aplicação assinado criptograficamente."""
-    now = datetime.now(timezone.utc)
-    exp_time = now + timedelta(seconds=settings.session_max_age_seconds)
-    payload = {
-        "sub": str(user_id),
-        "iat": int(now.timestamp()),
-        "exp": int(exp_time.timestamp()),
-    }
-    return jwt.encode(
-        payload,
-        settings.jwt_secret_key,
-        algorithm=settings.jwt_algorithm,
-    )
-
-
-def verify_session_token(token: str) -> int:
-    """Decodifica e valida o JWT de sessão interna, retornando o user_id.
-
-    Lança `InvalidSessionTokenError` se o token for inválido, malformado ou expirado.
-    """
-    try:
-        payload = jwt.decode(
-            token,
-            settings.jwt_secret_key,
-            algorithms=[settings.jwt_algorithm],
-        )
-        user_id_str = payload.get("sub")
-        if not user_id_str:
-            raise InvalidSessionTokenError(
-                "Payload do token não contém o identificador do usuário"
-            )
-        return int(user_id_str)
-    except jwt.ExpiredSignatureError as exc:
-        raise InvalidSessionTokenError("Sessão expirada") from exc
-    except (jwt.PyJWTError, ValueError) as exc:
-        raise InvalidSessionTokenError(f"Token de sessão inválido: {str(exc)}") from exc
-
-
 def get_or_create_google_user(
     db: Session,
     google_sub: str,
@@ -157,7 +101,7 @@ def get_or_create_google_user(
     """Localiza ou cria o registro do usuário autenticado via Google no banco."""
     user_repo = UserRepository(db)
     user = user_repo.get_by_google_id(google_sub)
-    normalized_email = email.strip().lower()
+    normalized_email = normalize_email(email)
 
     if user:
         updated = False
@@ -178,6 +122,7 @@ def get_or_create_google_user(
     if user_by_email:
         user_by_email.google_id = google_sub
         user_by_email.name = name
+        user_by_email.hashed_password = None
         if picture_url:
             user_by_email.picture_url = picture_url
         user_repo.update(user_by_email)
@@ -190,3 +135,29 @@ def get_or_create_google_user(
         picture_url=picture_url,
     )
     return user_repo.create(new_user)
+
+
+def update_user_name(db: Session, user: User, name: str) -> User:
+    """Atualiza o nome do usuário autenticado."""
+    user.name = name.strip()
+    return UserRepository(db).update(user)
+
+
+def change_password(
+    db: Session,
+    user: User,
+    current_password: str,
+    new_password: str,
+) -> None:
+    """Troca a senha, exigindo a senha atual.
+
+    Contas sem senha (criadas pelo login Google) não têm o que conferir.
+    """
+    if not user.hashed_password:
+        raise GoogleAccountPasswordMissingError(
+            "Esta conta foi cadastrada via Google e não possui senha de acesso."
+        )
+    if not verify_password(current_password, user.hashed_password):
+        raise InvalidCredentialsError("Senha atual incorreta.")
+    user.hashed_password = hash_password(new_password)
+    UserRepository(db).update(user)

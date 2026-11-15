@@ -1,9 +1,11 @@
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
+from app.core.errors import register_exception_handlers 
 from app.api.v1.auth import router as auth_router
 from app.api.v1.integrations import router as integrations_router
 from app.api.v1.meetings import router as meetings_router
+from app.api.v1.users import router as users_router
 from app.services.meeting_service import InvalidMeetingTransitionError
 
 app = FastAPI(
@@ -11,7 +13,7 @@ app = FastAPI(
     description="API para transcrição e sumarização de reuniões.",
     version="0.1.0",
 )
-
+register_exception_handlers(app)
 
 @app.exception_handler(InvalidMeetingTransitionError)
 def invalid_transition_handler(request: Request, exc: InvalidMeetingTransitionError):
@@ -26,5 +28,6 @@ def health_check():
 
 
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
+app.include_router(users_router, prefix="/users", tags=["Users"])
 app.include_router(meetings_router, prefix="/meetings", tags=["Meetings"])
 app.include_router(integrations_router, prefix="/meetings", tags=["Integrations"])

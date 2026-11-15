@@ -44,6 +44,18 @@ python -m pytest
 A API ficará disponível em `http://127.0.0.1:8000`. Verifique o status em
 `http://127.0.0.1:8000/health`.
 
+## Autenticação
+
+Defina `JWT_SECRET_KEY` no `.env` (obrigatória; a aplicação não inicia sem ela — veja `.env.example`). `JWT_ALGORITHM` (padrão `HS256`) e `ACCESS_TOKEN_EXPIRE_MINUTES` (padrão `60`) são opcionais. Depois de definir as variáveis, rode `alembic upgrade head` dentro de `backend/`.
+
+| Rota | Descrição |
+| --- | --- |
+| `POST /auth/register` | JSON `{name, email, password}` (senha ≥ 8 caracteres). Retorna `201` sem o hash; e-mail duplicado retorna `409`. |
+| `POST /auth/login` | Formulário OAuth2 (`username` = e-mail, `password`). Retorna `{access_token, token_type}`; falhas retornam `401` genérico. |
+| `GET /users/me` | Dados do usuário autenticado (`Authorization: Bearer <token>`). |
+
+As demais rotas (exceto `/health`) exigem o token. Tokens inválidos, expirados ou de usuário inativo retornam `401` com `WWW-Authenticate: Bearer`. Senhas são armazenadas com Argon2.
+
 ## Upload de Áudio e Formatos Suportados
 
 O endpoint `POST /meetings/{meeting_id}/audio` recebe gravações de reuniões via `multipart/form-data`.
