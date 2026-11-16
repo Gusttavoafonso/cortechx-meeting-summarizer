@@ -24,9 +24,35 @@ class MeetingRepository:
         )
         return self.db.scalars(statement).first()
 
+    def get_by_id_and_user(self, meeting_id: int, user_id: int) -> Meeting | None:
+        statement = (
+            select(Meeting)
+            .where(
+                Meeting.id == meeting_id,
+                (Meeting.user_id == user_id) | (Meeting.user_id.is_(None)),
+            )
+            .options(
+                selectinload(Meeting.audio),
+                selectinload(Meeting.transcript).selectinload(Transcript.segments),
+            )
+        )
+        return self.db.scalars(statement).first()
+
     def list_all(self) -> list[Meeting]:
         statement = (
             select(Meeting)
+            .options(
+                selectinload(Meeting.audio),
+                selectinload(Meeting.transcript).selectinload(Transcript.segments),
+            )
+            .order_by(Meeting.created_at.desc())
+        )
+        return list(self.db.scalars(statement).all())
+
+    def list_by_user(self, user_id: int) -> list[Meeting]:
+        statement = (
+            select(Meeting)
+            .where((Meeting.user_id == user_id) | (Meeting.user_id.is_(None)))
             .options(
                 selectinload(Meeting.audio),
                 selectinload(Meeting.transcript).selectinload(Transcript.segments),
@@ -42,6 +68,7 @@ class MeetingRepository:
         meeting: Meeting | None = None,
         title: str | None = None,
         status: str | MeetingStatus = MeetingStatus.RECEIVED,
+        user_id: int | None = None,
     ) -> Meeting:
         if isinstance(meeting_or_title, Meeting):
             target = meeting_or_title
@@ -53,6 +80,9 @@ class MeetingRepository:
             target = Meeting(title=title, status=status)
         else:
             raise ValueError("Either a Meeting instance or title must be provided.")
+
+        if user_id is not None and target.user_id is None:
+            target.user_id = user_id
 
         self.db.add(target)
         self.db.commit()

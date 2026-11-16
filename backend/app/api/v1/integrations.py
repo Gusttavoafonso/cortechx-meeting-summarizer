@@ -13,11 +13,13 @@ from collections.abc import Callable
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_current_user
 from app.core.database import get_session
 from app.integrations.delivery import enabled_providers_from_settings
 from app.models.integration_delivery import IntegrationDeliveryStatus
 from app.models.meeting import Meeting
 from app.models.meeting_status import MeetingStatus
+from app.models.user import User
 from app.repositories.integration_delivery_repository import (
     IntegrationDeliveryRepository,
 )
@@ -32,7 +34,7 @@ from app.workers.integration_job import enqueue_integration_delivery
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 _NOT_RETRYABLE = {
     IntegrationDeliveryStatus.SUCCESS.value,
@@ -56,8 +58,15 @@ def _validate_meeting_id(meeting_id: int) -> None:
         )
 
 
-def _get_meeting_or_404(db: Session, meeting_id: int) -> Meeting:
-    meeting = MeetingRepository(db).get_by_id(meeting_id)
+def _get_meeting_or_404(
+    db: Session, meeting_id: int, user_id: int | None = None
+) -> Meeting:
+    repo = MeetingRepository(db)
+    if user_id is not None:
+        meeting = repo.get_by_id_and_user(meeting_id, user_id)
+    else:
+        meeting = repo.get_by_id(meeting_id)
+
     if meeting is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -73,10 +82,11 @@ def _get_meeting_or_404(db: Session, meeting_id: int) -> Meeting:
 )
 def list_integrations(
     meeting_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session),
 ) -> MeetingIntegrationsResponse:
     _validate_meeting_id(meeting_id)
-    _get_meeting_or_404(db, meeting_id)
+    _get_meeting_or_404(db, meeting_id, current_user.id)
 
     deliveries = IntegrationDeliveryRepository(db).list_by_meeting(meeting_id)
     return MeetingIntegrationsResponse(
@@ -103,12 +113,13 @@ def retry_integrations(
     meeting_id: int,
     background_tasks: BackgroundTasks,
     payload: IntegrationRetryRequest | None = None,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session),
     enabled: list[str] = Depends(get_enabled_providers),
     dispatcher: Callable[..., None] = Depends(get_integration_dispatcher),
 ) -> IntegrationRetryResponse:
     _validate_meeting_id(meeting_id)
-    meeting = _get_meeting_or_404(db, meeting_id)
+    meeting = _get_meeting_or_404(db, meeting_id, current_user.id)
 
     if MeetingStatus(meeting.status) != MeetingStatus.COMPLETED:
         raise HTTPException(

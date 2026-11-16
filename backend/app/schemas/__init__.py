@@ -16,11 +16,16 @@ from app.schemas.transcription import (
     TranscriptResponse,
     TranscriptSegmentResponse,
 )
+from app.schemas.user import (
+    GoogleAuthRequest,
+    UserPublic,
+)
 
 __all__ = [
     "AudioUploadResponse",
     "Chunk",
     "ChunkingConfig",
+    "GoogleAuthRequest",
     "IntegrationResult",
     "MeetingCreate",
     "MeetingIntegrationPayload",
@@ -33,4 +38,5 @@ __all__ = [
     "TaskResponse",
     "TranscriptResponse",
     "TranscriptSegmentResponse",
+    "UserPublic",
 ]

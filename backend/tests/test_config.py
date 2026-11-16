@@ -1,8 +1,8 @@
 from pathlib import Path
 
 import pytest
-from app.core.config import Settings
-from pydantic import SecretStr
+from app.core.config import Settings, get_settings
+from pydantic import SecretStr, ValidationError
 
 
 def test_settings_load_database_defaults() -> None:
@@ -105,4 +105,40 @@ def test_settings_rejects_obsidian_folder_outside_vault(monkeypatch, folder) -> 
     monkeypatch.setenv("OBSIDIAN_NOTES_FOLDER", folder)
 
     with pytest.raises(ValueError):
+def test_jwt_settings_defaults(monkeypatch) -> None:
+    monkeypatch.setenv("JWT_SECRET_KEY", "segredo-de-teste")
+    monkeypatch.delenv("JWT_ALGORITHM", raising=False)
+    monkeypatch.delenv("ACCESS_TOKEN_EXPIRE_MINUTES", raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert isinstance(settings.JWT_SECRET_KEY, SecretStr)
+    assert settings.JWT_SECRET_KEY.get_secret_value() == "segredo-de-teste"
+    assert settings.JWT_ALGORITHM == "HS256"
+    assert settings.ACCESS_TOKEN_EXPIRE_MINUTES == 60
+    assert "segredo-de-teste" not in repr(settings)
+
+
+def test_missing_jwt_secret_fails_clearly(monkeypatch) -> None:
+    monkeypatch.delenv("JWT_SECRET_KEY", raising=False)
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+    get_settings.cache_clear()
+    try:
+        monkeypatch.setattr(
+            "app.core.config.Settings",
+            lambda: Settings(_env_file=None),
+        )
+        with pytest.raises(RuntimeError, match="JWT_SECRET_KEY"):
+            get_settings()
+    finally:
+        get_settings.cache_clear()
+
+
+def test_blank_jwt_secret_rejected(monkeypatch) -> None:
+    monkeypatch.setenv("JWT_SECRET_KEY", "   ")
+
+    with pytest.raises(ValidationError):
         Settings(_env_file=None)
