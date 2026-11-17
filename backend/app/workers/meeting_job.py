@@ -61,10 +61,10 @@ def _get_worker_diarization_service(
 def _get_worker_stt_service(provider_pref: str | None = None):
     if provider_pref == "local":
         from app.services.transcription.faster_whisper_service import (
-            FasterWhisperTranscriptionService,
+            FasterWhisperService,
         )
 
-        return FasterWhisperTranscriptionService(
+        return FasterWhisperService(
             model_size=settings.WHISPER_MODEL_SIZE,
             device=settings.WHISPER_DEVICE,
             compute_type=settings.WHISPER_COMPUTE_TYPE,
@@ -75,10 +75,10 @@ def _get_worker_stt_service(provider_pref: str | None = None):
         )
         if has_groq:
             from app.services.transcription.groq_whisper_service import (
-                GroqWhisperTranscriptionService,
+                GroqWhisperService,
             )
 
-            return GroqWhisperTranscriptionService(
+            return GroqWhisperService(
                 api_key=settings.groq_api_key.get_secret_value().strip()
             )
     return get_speech_to_text_service()
@@ -170,7 +170,10 @@ def process_meeting_task(
     meeting_id: int, options: dict | None = None
 ) -> None:
     """Task Celery que delega a execução para run_meeting_processing_job."""
-    run_meeting_processing_job(meeting_id, options=options)
+    if options is not None:
+        run_meeting_processing_job(meeting_id, options=options)
+    else:
+        run_meeting_processing_job(meeting_id)
 
 
 def enqueue_meeting_processing(

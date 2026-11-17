@@ -11,7 +11,11 @@ import {
   Sparkles,
   ListTodo,
 } from 'lucide-react'
-import { fetchMeetingById, retryMeeting } from '../api/meetings'
+import {
+  fetchMeetingById,
+  fetchMeetingSummary,
+  retryMeeting,
+} from '../api/meetings'
 import { Card } from '../components/ui/Card'
 import { StatusBadge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
@@ -39,6 +43,13 @@ export const MeetingDetails: React.FC = () => {
       }
       return false
     },
+  })
+
+  const { data: summaryData } = useQuery({
+    queryKey: ['meeting-summary', meetingId],
+    queryFn: () => fetchMeetingSummary(meetingId),
+    enabled: !isNaN(meetingId) && meetingId > 0 && meeting?.status === 'completed',
+    retry: false,
   })
 
   const [isRetrying, setIsRetrying] = React.useState(false)
@@ -92,6 +103,7 @@ export const MeetingDetails: React.FC = () => {
 
   const isProcessing =
     meeting.status === 'processing' || meeting.status === 'transcribing'
+  const summary = summaryData ?? meeting.summary
 
   return (
     <div className="flex-1 px-8 py-10 max-w-5xl mx-auto w-full">
@@ -166,34 +178,58 @@ export const MeetingDetails: React.FC = () => {
       )}
 
       {/* Summary Section (if available) */}
-      {meeting.summary && (
+      {summary && (
         <div className="space-y-6 mb-8">
           <Card className="p-6">
             <div className="flex items-center gap-2 text-brand font-semibold text-sm mb-3">
               <Sparkles className="w-4 h-4" />
               <span>Resumo Executivo</span>
             </div>
-            {meeting.summary.objective && (
+            {summary.objective && (
               <div className="mb-4 p-3.5 rounded-xl bg-surface/50 border border-[#DCE2FB]">
                 <p className="text-xs font-semibold text-ink uppercase tracking-wider mb-1">
                   Objetivo
                 </p>
-                <p className="text-sm text-ink">{meeting.summary.objective}</p>
+                <p className="text-sm text-ink">{summary.objective}</p>
               </div>
             )}
             <p className="text-sm text-ink leading-relaxed whitespace-pre-line">
-              {meeting.summary.summary}
+              {summary.summary}
             </p>
+            {summary.key_points?.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-slate-100">
+                <p className="text-xs font-semibold text-ink uppercase tracking-wider mb-2">
+                  Pontos Principais
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-sm text-ink-light">
+                  {summary.key_points.map((point, idx) => (
+                    <li key={idx}>{point}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {summary.decisions?.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-slate-100">
+                <p className="text-xs font-semibold text-ink uppercase tracking-wider mb-2">
+                  Decisões
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-sm text-ink-light">
+                  {summary.decisions.map((decision, idx) => (
+                    <li key={idx}>{decision}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </Card>
 
-          {meeting.summary.tasks?.length > 0 && (
+          {summary.tasks?.length > 0 && (
             <Card className="p-6">
               <div className="flex items-center gap-2 text-ink font-semibold text-sm mb-4">
                 <ListTodo className="w-4 h-4 text-brand" />
-                <span>Tarefas e Próximos Passos ({meeting.summary.tasks.length})</span>
+                <span>Tarefas e Próximos Passos ({summary.tasks.length})</span>
               </div>
               <ul className="space-y-2.5">
-                {meeting.summary.tasks.map((task) => (
+                {summary.tasks.map((task) => (
                   <li
                     key={task.id}
                     className="flex items-start gap-3 p-3 rounded-xl bg-slate-50/70 border border-slate-100 text-sm"

@@ -10,7 +10,7 @@ import {
   Info,
   AlertCircle,
 } from 'lucide-react'
-import { AudioRecorderEngine, CaptureMode } from '../../lib/audioRecorder'
+import { useRecordingContext } from '../../context/RecordingContext'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { formatSecondsToTime } from '../../lib/utils'
@@ -26,121 +26,92 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
   userId = 1,
   disabled = false,
 }) => {
-  const engineRef = useRef<AudioRecorderEngine | null>(null)
   const animFrameRef = useRef<number | null>(null)
+  const {
+    isRecording,
+    isPaused,
+    elapsedMs,
+    captureMode: mode,
+    setCaptureMode: setMode,
+    recordingError: errorMessage,
+    startRecording,
+    pauseRecording,
+    resumeRecording,
+    stopRecording,
+    cancelRecording,
+    getAudioLevels,
+    clearRecordingError,
+  } = useRecordingContext()
 
-  const [mode, setMode] = useState<CaptureMode>('both')
-  const [isRecording, setIsRecording] = useState(false)
-  const [isPaused, setIsPaused] = useState(false)
-  const [elapsedMs, setElapsedMs] = useState(0)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
-
+  const [localError, setLocalError] = useState<string | null>(null)
   const [micLevel, setMicLevel] = useState(0)
   const [systemLevel, setSystemLevel] = useState(0)
 
   useEffect(() => {
-    engineRef.current = new AudioRecorderEngine()
+    if (!isRecording || isPaused) {
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current)
+        animFrameRef.current = null
+      }
+      return
+    }
+
+    const updateLevels = () => {
+      const levels = getAudioLevels()
+      setMicLevel(levels.micLevel)
+      setSystemLevel(levels.systemLevel)
+      animFrameRef.current = requestAnimationFrame(updateLevels)
+    }
+
+    animFrameRef.current = requestAnimationFrame(updateLevels)
 
     return () => {
       if (animFrameRef.current) {
         cancelAnimationFrame(animFrameRef.current)
+        animFrameRef.current = null
       }
-      engineRef.current?.cleanup()
     }
-  }, [])
-
-  const updateLevels = () => {
-    if (engineRef.current?.isRecording && !engineRef.current.isPaused) {
-      const levels = engineRef.current.getAudioLevels()
-      setMicLevel(levels.micLevel)
-      setSystemLevel(levels.systemLevel)
-    }
-    animFrameRef.current = requestAnimationFrame(updateLevels)
-  }
+  }, [isRecording, isPaused, getAudioLevels])
 
   const handleStart = async () => {
-    setErrorMessage(null)
-
-    if (!AudioRecorderEngine.isSupported()) {
-      setErrorMessage(
-        'Seu navegador não possui suporte para gravação com Web Audio API / MediaRecorder.'
-      )
-      return
-    }
-
+    setLocalError(null)
+    clearRecordingError()
     try {
-      await engineRef.current?.start({
-        mode,
-        onTick: (ms) => setElapsedMs(ms),
-        onStateChange: (state) => {
-          if (state === 'paused') {
-            setIsPaused(true)
-          } else if (state === 'recording') {
-            setIsPaused(false)
-            setIsRecording(true)
-          } else if (state === 'stopped') {
-            setIsRecording(false)
-            setIsPaused(false)
-          }
-        },
-        onSourceEnded: (src) => {
-          if (src === 'system') {
-            engineRef.current?.pause()
-            setErrorMessage(
-              'O compartilhamento de áudio da aba foi encerrado no navegador. A gravação foi pausada.'
-            )
-          }
-        },
-      })
-
-      setIsRecording(true)
-      setIsPaused(false)
-      animFrameRef.current = requestAnimationFrame(updateLevels)
+      await startRecording(mode)
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : String(err))
-      setIsRecording(false)
-      setIsPaused(false)
+      setLocalError(err instanceof Error ? err.message : String(err))
     }
   }
 
   const handlePauseToggle = () => {
-    if (!engineRef.current) return
     if (isPaused) {
-      engineRef.current.resume()
-      setIsPaused(false)
+      resumeRecording()
     } else {
-      engineRef.current.pause()
-      setIsPaused(true)
+      pauseRecording()
     }
   }
 
   const handleCancel = () => {
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
-    engineRef.current?.cleanup()
-    setIsRecording(false)
-    setIsPaused(false)
-    setElapsedMs(0)
+    cancelRecording()
     setMicLevel(0)
     setSystemLevel(0)
-    setErrorMessage(null)
+    setLocalError(null)
   }
 
   const handleStop = async () => {
-    if (!engineRef.current) return
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
-
     try {
-      const result = await engineRef.current.stop({ userId })
-      setIsRecording(false)
-      setIsPaused(false)
-      setElapsedMs(0)
+      const result = await stopRecording(userId)
       setMicLevel(0)
       setSystemLevel(0)
       onRecordingComplete(result.file, result.durationMs)
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Falha ao finalizar gravação.')
+      setLocalError(
+        err instanceof Error ? err.message : 'Falha ao finalizar gravação.'
+      )
     }
   }
+
+  const displayError = localError || errorMessage
 
   return (
     <Card className="p-5 border-slate-200 shadow-card bg-white/70 backdrop-blur-xs">
@@ -317,10 +288,10 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
       )}
 
       {/* Erro */}
-      {errorMessage && (
+      {displayError && (
         <div className="flex items-start gap-2 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 mt-5 text-left">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>{errorMessage}</span>
+          <span>{displayError}</span>
         </div>
       )}
     </Card>
