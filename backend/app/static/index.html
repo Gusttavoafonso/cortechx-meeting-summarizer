@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zumo | Gravador e Sumarizador de Reuniões</title>
+  <link rel="icon" type="image/png" href="/static/img/zumo-logo-final.png">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <header class="navbar">
+    <div class="brand">
+      <img src="/static/img/zumo-logo-final.png" alt="Zumo Logo" class="brand-logo">
+      <span class="brand-title">CortechX Zumo</span>
+      <span class="brand-badge">Gravação Direta</span>
+    </div>
+    <nav class="nav-links">
+      <a href="/docs" target="_blank" class="nav-link">📖 Documentação da API</a>
+      <div id="authNavContainer" style="display: flex; align-items: center; gap: 0.75rem;">
+        <button id="btnOpenLogin" class="btn btn-secondary" style="padding: 0.35rem 0.85rem; font-size: 0.85rem;">Entrar</button>
+      </div>
+    </nav>
+  </header>
+
+  <!-- Main Container -->
+  <main class="container">
+
+    <!-- Banner Interativo de Reunião Detectada (Tauri & Background) -->
+    <div id="meetingPromptBanner" class="meeting-prompt-banner" style="display: none;">
+      <div class="prompt-info">
+        <span class="prompt-icon">🔔</span>
+        <div>
+          <strong id="promptPlatform">Reunião Detectada!</strong>
+          <div id="promptDetails" style="font-size: 0.85rem; color: #cbd5e1;">Deseja iniciar a gravação agora?</div>
+        </div>
+      </div>
+      <div class="prompt-actions">
+        <button id="btnPromptRecord" class="btn btn-primary" style="padding: 0.45rem 1rem; font-size: 0.85rem;">🔴 Gravar Agora</button>
+        <button id="btnPromptDismiss" class="btn btn-secondary" style="padding: 0.45rem 1rem; font-size: 0.85rem;">Dispensar</button>
+      </div>
+    </div>
+
+    <!-- Card Principal do Gravador -->
+    <section class="recorder-card">
+
+      <!-- Painel Inicial (Pronto para Gravar) -->
+      <div id="recordIdlePanel">
+        <div class="recorder-header">
+          <h1>Gravar Reunião</h1>
+          <p>Grave as vozes de todos os participantes (áudio da aba ou sistema) em conjunto com o seu microfone em tempo real, sem precisar anexar arquivos.</p>
+        </div>
+
+        <!-- Seleção de Fontes de Áudio -->
+        <div class="source-selection">
+          <label class="source-option">
+            <input type="radio" name="audioSource" id="sourceBoth" value="both" checked>
+            <div class="source-box">
+              <span class="source-icon">🎙️ + 🔊</span>
+              <span>Microfone + Áudio da Aba / Sistema (Recomendado)</span>
+            </div>
+          </label>
+          <label class="source-option">
+            <input type="radio" name="audioSource" id="sourceMic" value="mic_only">
+            <div class="source-box">
+              <span class="source-icon">🎙️</span>
+              <span>Apenas Microfone</span>
+            </div>
+          </label>
+        </div>
+
+        <!-- Título Opcional da Reunião -->
+        <div class="title-input-wrapper">
+          <input 
+            type="text" 
+            id="meetingTitleInput" 
+            class="title-input" 
+            placeholder="Título da Reunião (Ex: Alinhamento Semanal do Time)"
+            autocomplete="off"
+          >
+        </div>
+
+        <!-- Botão Central de Gravação -->
+        <div class="record-action-area">
+          <button id="btnStartRecord" class="btn-record" title="Clique para iniciar a gravação">
+            <div class="btn-record-inner"></div>
+          </button>
+          <span class="record-btn-label">Iniciar Gravação Agora</span>
+
+          <div class="instructions-banner">
+            <span>💡</span>
+            <span><strong>Dica:</strong> Ao clicar no botão, selecione a aba da chamada (Google Meet, Discord, etc.) e certifique-se de marcar a opção <strong>"Compartilhar áudio da aba"</strong> na janela do navegador.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Painel de Gravação Ativa -->
+      <div id="recordingActivePanel" class="recording-active-panel">
+        <div class="recording-pulse-wrapper">
+          <div class="pulse-dot"></div>
+          <span style="font-weight: 700; color: #fca5a5; font-size: 0.95rem;">GRAVANDO ÁUDIO EM TEMPO REAL</span>
+        </div>
+
+        <div id="timerDisplay" class="timer-display">00:00</div>
+
+        <!-- VU Meters de Nível de Som -->
+        <div class="vu-meters-container">
+          <div class="vu-meter-box" id="micVuBox">
+            <div class="vu-label">
+              <span>🎙️ Seu Microfone</span>
+              <span style="font-size: 0.75rem;">Detectando fala...</span>
+            </div>
+            <div class="vu-bar-wrapper">
+              <div id="micVuBar" class="vu-bar"></div>
+            </div>
+          </div>
+
+          <div class="vu-meter-box" id="systemVuBox">
+            <div class="vu-label">
+              <span>🔊 Áudio da Aba / Sistema</span>
+              <span style="font-size: 0.75rem;">Voz dos outros participantes</span>
+            </div>
+            <div class="vu-bar-wrapper">
+              <div id="systemVuBar" class="vu-bar"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Controles de Gravação -->
+        <div class="recording-controls">
+          <button id="btnPause" class="btn btn-secondary">⏸️ Pausar</button>
+          <button id="btnResume" class="btn btn-secondary" style="display: none;">▶️ Retomar</button>
+          <button id="btnCancel" class="btn btn-secondary">✖️ Cancelar</button>
+          <button id="btnStop" class="btn btn-danger">⏹️ Finalizar e Gerar Resumo</button>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Seção de Processamento e Transcrição em Andamento -->
+    <section id="processingSection" class="processing-section">
+      <div class="spinner"></div>
+      <h2 style="margin-bottom: 0.5rem; font-size: 1.5rem;">Processando Reunião com IA...</h2>
+      <p id="processingStatusText" style="color: var(--text-secondary); margin-bottom: 1rem;">Enviando gravação e preparando o pipeline...</p>
+
+      <div class="steps-pipeline">
+        <div id="stepReceived" class="step-node active">1. Criar Reunião</div>
+        <div style="color: var(--text-muted);">➔</div>
+        <div id="stepUploaded" class="step-node">2. Upload do Áudio</div>
+        <div style="color: var(--text-muted);">➔</div>
+        <div id="stepTranscribing" class="step-node">3. Transcrição (Whisper)</div>
+        <div style="color: var(--text-muted);">➔</div>
+        <div id="stepSummarizing" class="step-node">4. Resumo & Tarefas (LLM)</div>
+        <div style="color: var(--text-muted);">➔</div>
+        <div id="stepCompleted" class="step-node">5. Concluído</div>
+      </div>
+    </section>
+
+    <!-- Seção de Resultados e Resumo da Reunião -->
+    <section id="resultSection" class="result-section">
+      <div class="result-header">
+        <div>
+          <h2 id="resultTitle">Resumo da Reunião</h2>
+          <span id="resultStatus" class="status-badge status-completed">Concluída</span>
+        </div>
+        <button id="btnNewRecording" class="btn btn-primary">➕ Gravar Nova Reunião</button>
+      </div>
+
+      <!-- Abas de Navegação do Resultado -->
+      <div class="result-tabs">
+        <button class="tab-btn active" data-tab="tabSummary">📋 Resumo & Decisões</button>
+        <button class="tab-btn" data-tab="tabTasks">✅ Tarefas Identificadas</button>
+        <button class="tab-btn" data-tab="tabTranscript">💬 Transcrição Completa</button>
+      </div>
+
+      <!-- Conteúdo da Aba Resumo -->
+      <div id="tabSummary" class="tab-content active">
+        <div class="summary-box">
+          <h3>🎯 Objetivo da Reunião</h3>
+          <p id="summaryObjective" style="color: var(--text-primary);">-</p>
+        </div>
+
+        <div class="summary-box">
+          <h3>📝 Resumo Executivo</h3>
+          <p id="summaryContent" style="white-space: pre-line; color: var(--text-primary);">-</p>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem;">
+          <div class="summary-box">
+            <h3>💡 Pontos Principais</h3>
+            <ul id="summaryKeyPoints" style="padding-left: 1.2rem; color: var(--text-primary);"></ul>
+          </div>
+          <div class="summary-box">
+            <h3>🔒 Decisões Tomadas</h3>
+            <ul id="summaryDecisions" style="padding-left: 1.2rem; color: var(--text-primary);"></ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Conteúdo da Aba Tarefas -->
+      <div id="tabTasks" class="tab-content">
+        <div class="summary-box">
+          <h3>📌 Tarefas e Planos de Ação</h3>
+          <ul id="taskList" class="task-list"></ul>
+        </div>
+      </div>
+
+      <!-- Conteúdo da Aba Transcrição -->
+      <div id="tabTranscript" class="tab-content">
+        <div class="summary-box">
+          <h3>🎙️ Transcrição com Diarização por Falante</h3>
+          <div id="transcriptList"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Histórico de Reuniões Recentes -->
+    <section class="recent-section">
+      <h3>Histórico de Reuniões</h3>
+      <div id="recentMeetingsContainer" class="meetings-grid">
+        <div style="color: var(--text-muted);">Carregando histórico...</div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal de Autenticação -->
+  <div id="authModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+        <h2 id="authModalTitle" style="font-size: 1.4rem;">Entrar no Zumo</h2>
+        <button id="btnCloseAuth" style="background: none; border: none; color: var(--text-muted); font-size: 1.25rem; cursor: pointer;">✕</button>
+      </div>
+      <p style="color: var(--text-secondary); margin-bottom: 1.5rem; font-size: 0.85rem;">
+        Faça login para salvar suas reuniões e acessar os resumos inteligentes.
+      </p>
+
+      <form id="authForm">
+        <div id="authNameField" style="display: none; margin-bottom: 1rem;">
+          <label style="display: block; font-size: 0.85rem; margin-bottom: 0.3rem;">Nome Completo</label>
+          <input type="text" id="authName" class="title-input" placeholder="Seu Nome">
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+          <label style="display: block; font-size: 0.85rem; margin-bottom: 0.3rem;">E-mail</label>
+          <input type="email" id="authEmail" class="title-input" value="demo@cortechx.com" required>
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+          <label style="display: block; font-size: 0.85rem; margin-bottom: 0.3rem;">Senha</label>
+          <input type="password" id="authPassword" class="title-input" value="Password123!" required>
+        </div>
+
+        <button type="submit" id="btnAuthSubmit" class="btn btn-primary" style="width: 100%; justify-content: center;">
+          Entrar
+        </button>
+
+        <div style="margin-top: 1.25rem; text-align: center; font-size: 0.85rem;">
+          <span id="authToggleText">Não tem uma conta?</span>
+          <button type="button" id="btnAuthToggle" style="background: none; border: none; color: var(--accent-primary); font-weight: 600; cursor: pointer; margin-left: 0.3rem;">
+            Criar Conta
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Notificação Toast -->
+  <div id="toastAlert" class="toast-alert"></div>
+
+  <!-- Scripts -->
+  <script src="/static/js/audio-recorder.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
