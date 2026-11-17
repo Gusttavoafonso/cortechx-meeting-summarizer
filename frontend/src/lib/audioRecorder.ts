@@ -73,46 +73,7 @@ export class AudioRecorderEngine {
     this.onSourceEnded = onSourceEnded
     this.recordedChunks = []
 
-    const AudioContextClass =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext })
-        .webkitAudioContext
-    this.audioContext = new AudioContextClass({ latencyHint: 'interactive' })
-    if (this.audioContext.state === 'suspended') {
-      await this.audioContext.resume()
-    }
-
-    this.destinationNode = this.audioContext.createMediaStreamDestination()
-
-    // 1. Capturar Microfone
-    try {
-      this.micStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-        video: false,
-      })
-    } catch (err) {
-      throw new Error(
-        `Permissão de microfone negada ou dispositivo indisponível: ${err instanceof Error ? err.message : String(err)}`
-      )
-    }
-
-    const micSource = this.audioContext.createMediaStreamSource(this.micStream)
-    this.micAnalyser = this.audioContext.createAnalyser()
-    this.micAnalyser.fftSize = 256
-    this.micDataArray = new Uint8Array(this.micAnalyser.frequencyBinCount)
-
-    const micGain = this.audioContext.createGain()
-    micGain.gain.value = 1.0
-
-    micSource.connect(this.micAnalyser)
-    this.micAnalyser.connect(micGain)
-    micGain.connect(this.destinationNode)
-
-    // 2. Capturar Áudio da Aba / Sistema (se modo 'both')
+    // 1. Capturar Áudio da Aba / Sistema PRIMEIRO (se modo 'both') para preservar o user gesture do clique
     if (mode === 'both') {
       try {
         this.systemStream = await navigator.mediaDevices.getDisplayMedia({
@@ -126,7 +87,7 @@ export class AudioRecorderEngine {
           },
         })
       } catch (err) {
-        this.cleanupStreams()
+        this.cleanup()
         if (err instanceof Error && err.name === 'NotAllowedError') {
           throw new Error('Compartilhamento de tela/aba cancelado pelo usuário.')
         }
@@ -137,11 +98,56 @@ export class AudioRecorderEngine {
 
       const systemAudioTracks = this.systemStream.getAudioTracks()
       if (!systemAudioTracks || systemAudioTracks.length === 0) {
-        this.cleanupStreams()
+        this.cleanup()
         throw new Error(
           'Nenhum áudio detectado na seleção. Certifique-se de marcar a opção "Compartilhar áudio da aba" ao selecionar a janela no navegador.'
         )
       }
+    }
+
+    // 2. Capturar Microfone
+    try {
+      this.micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video: false,
+      })
+    } catch (err) {
+      this.cleanup()
+      throw new Error(
+        `Permissão de microfone negada ou dispositivo indisponível: ${err instanceof Error ? err.message : String(err)}`
+      )
+    }
+
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext })
+        .webkitAudioContext
+    this.audioContext = new AudioContextClass({ latencyHint: 'interactive' })
+    if (this.audioContext.state === 'suspended') {
+      await this.audioContext.resume()
+    }
+
+    this.destinationNode = this.audioContext.createMediaStreamDestination()
+
+    const micSource = this.audioContext.createMediaStreamSource(this.micStream)
+    this.micAnalyser = this.audioContext.createAnalyser()
+    this.micAnalyser.fftSize = 256
+    this.micDataArray = new Uint8Array(this.micAnalyser.frequencyBinCount)
+
+    const micGain = this.audioContext.createGain()
+    micGain.gain.value = 1.0
+
+    micSource.connect(this.micAnalyser)
+    this.micAnalyser.connect(micGain)
+    micGain.connect(this.destinationNode)
+
+    // 3. Conectar Áudio da Aba / Sistema ao mixer (se modo 'both')
+    if (mode === 'both' && this.systemStream) {
+      const systemAudioTracks = this.systemStream.getAudioTracks()
 
       const handleSystemEnded = () => {
         if (this.isRecording) {
