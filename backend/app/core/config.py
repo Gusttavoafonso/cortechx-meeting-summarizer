@@ -182,6 +182,13 @@ class Settings(BaseSettings):
             return None
         return v
 
+    @field_validator("discord_enabled", "notion_enabled", mode="before")
+    @classmethod
+    def empty_str_bool_to_false(cls, v: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            return False
+        return v
+
     model_config = SettingsConfigDict(
         env_file=(PROJECT_DIR / ".env", BACKEND_DIR / ".env", ".env"),
         env_file_encoding="utf-8",
