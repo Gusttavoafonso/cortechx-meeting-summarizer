@@ -59,6 +59,18 @@ Para disponibilizar o executável de aplicativo (.exe / .msi / .dmg) com detecç
 * **System Tray:** Roda minimizado na bandeja do sistema, consumindo cerca de ~30 MB de RAM.
 * **Detecção Automática:** Monitora as janelas e processos do SO e sugere a gravação automaticamente ao identificar reuniões ativas no **Google Meet**, **Discord**, **Zoom** ou **Microsoft Teams**.
 
+### Como baixar e instalar
+
+1. Acesse a página de [Releases](https://github.com/Gusttavoafonso/cortechx-meeting-summarizer/releases/latest).
+2. Baixe o instalador do seu sistema:
+   - Windows: `Zumo_<versão>_x64-setup.exe`
+   - macOS: `Zumo_<versão>_universal.dmg` (compatível com Mac Intel e Apple Silicon)
+3. Rode o backend localmente antes de abrir o app (veja [Backend (Windows)](#backend-windows) ou [Backend (Linux)](#backend-linux) acima) — ainda não há um backend hospedado, então o Zumo sempre se conecta a `localhost`.
+4. Windows vai mostrar o aviso **"Windows protegeu seu PC"** (instalador não assinado) — clique em "Mais informações" → "Executar assim mesmo".
+5. macOS vai bloquear a primeira abertura (Gatekeeper) — clique com o botão direito no app → "Abrir" e confirme.
+
+Mais detalhes (processo de release, como testar o CI) estão em [`desktop/README.md`](desktop/README.md).
+
 ## Autenticação
 
 Defina `JWT_SECRET_KEY` no `.env` (obrigatória; a aplicação não inicia sem ela — veja `.env.example`). `JWT_ALGORITHM` (padrão `HS256`) e `ACCESS_TOKEN_EXPIRE_MINUTES` (padrão `60`) são opcionais. Depois de definir as variáveis, rode `alembic upgrade head` dentro de `backend/`.
