@@ -111,7 +111,7 @@ class DeliveryReport:
 
 
 def enabled_providers_from_settings(settings: Any | None = None) -> list[str]:
-    """Providers habilitados pelas flags globais (DISCORD_ENABLED/NOTION_ENABLED)."""
+    """Providers habilitados pelas flags globais de integração."""
     if settings is None:
         from app.core.config import get_settings
 
@@ -122,6 +122,8 @@ def enabled_providers_from_settings(settings: Any | None = None) -> list[str]:
         providers.append("discord")
     if getattr(settings, "notion_enabled", False):
         providers.append("notion")
+    if getattr(settings, "obsidian_enabled", False):
+        providers.append("obsidian")
     return providers
 
 
