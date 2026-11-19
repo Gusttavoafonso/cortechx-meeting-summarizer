@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -33,6 +34,14 @@ class MeetingResponse(MeetingBase):
     last_error: str | None = None
     audio: AudioUploadResponse | None = None
     transcript: TranscriptResponse | None = None
+
+
+class MeetingProcessOptions(BaseModel):
+    language: str | None = None
+    diarization: bool | None = None
+    provider: Literal["auto", "groq", "local"] | None = None
+    auto_tasks: bool | None = None
+    export_notion: bool | None = None
 
 
 class MeetingProcessResponse(BaseModel):

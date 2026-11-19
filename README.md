@@ -21,7 +21,7 @@ Para rodar os testes execute no Powershell:
 python -m pytest
 ```
 
-A API ficará disponível em `http://127.0.0.1:8000`. Verifique o status em
+A API e a interface web do gravador ficarão disponíveis em `http://127.0.0.1:8000`. Verifique o status da API em
 `http://127.0.0.1:8000/health`.
 
 ## Backend (Linux)
@@ -41,8 +41,35 @@ Para rodar os testes execute no terminal:
 python -m pytest
 ```
 
-A API ficará disponível em `http://127.0.0.1:8000`. Verifique o status em
+A API e a interface web do gravador ficarão disponíveis em `http://127.0.0.1:8000`. Verifique o status da API em
 `http://127.0.0.1:8000/health`.
+
+## Interface Web e Gravação Direta (Sem Anexar Arquivos)
+
+Ao acessar `http://127.0.0.1:8000`, o usuário tem acesso à interface web integrada do Zumo:
+* **Botão Imediato de Gravação:** Inicia a captura em 1 clique sem necessidade de gravar em software externo e anexar arquivos.
+* **Captura Combinada (Dual Source):** Grava o som dos demais participantes (áudio da aba do Google Meet, Discord, etc.) somado ao microfone do próprio usuário via Web Audio API.
+* **VU Meters em Tempo Real:** Medidores de intensidade de som para confirmar visualmente a entrada do microfone e do áudio do sistema.
+* **Processamento Automatizado:** Ao finalizar a gravação, o arquivo é despachado automaticamente para `POST /meetings/{id}/audio` e o pipeline de transcrição/sumarização é disparado, exibindo o resultado diretamente na tela.
+
+## Aplicativo Desktop Standalone (Tauri 2.0 em `desktop/`)
+
+Para disponibilizar o executável de aplicativo (.exe / .msi / .dmg) com detecção em segundo plano:
+* **Estrutura:** Configurado no diretório `desktop/` com casca nativa em Rust e empacotamento multi-plataforma.
+* **System Tray:** Roda minimizado na bandeja do sistema, consumindo cerca de ~30 MB de RAM.
+* **Detecção Automática:** Monitora as janelas e processos do SO e sugere a gravação automaticamente ao identificar reuniões ativas no **Google Meet**, **Discord**, **Zoom** ou **Microsoft Teams**.
+
+### Como baixar e instalar
+
+1. Acesse a página de [Releases](https://github.com/Gusttavoafonso/cortechx-meeting-summarizer/releases/latest).
+2. Baixe o instalador do seu sistema:
+   - Windows: `Zumo_<versão>_x64-setup.exe`
+   - macOS: `Zumo_<versão>_universal.dmg` (compatível com Mac Intel e Apple Silicon)
+3. Rode o backend localmente antes de abrir o app (veja [Backend (Windows)](#backend-windows) ou [Backend (Linux)](#backend-linux) acima) — ainda não há um backend hospedado, então o Zumo sempre se conecta a `localhost`.
+4. Windows vai mostrar o aviso **"Windows protegeu seu PC"** (instalador não assinado) — clique em "Mais informações" → "Executar assim mesmo".
+5. macOS vai bloquear a primeira abertura (Gatekeeper) — clique com o botão direito no app → "Abrir" e confirme.
+
+Mais detalhes (processo de release, como testar o CI) estão em [`desktop/README.md`](desktop/README.md).
 
 ## Autenticação
 

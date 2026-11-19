@@ -35,6 +35,7 @@ class Settings(BaseSettings):
         ".m4a",
         ".mp4",
         ".webm",
+        ".ogg",
     }
     ALLOWED_AUDIO_MIME_TYPES: set[str] = {
         "audio/mpeg",
@@ -46,6 +47,7 @@ class Settings(BaseSettings):
         "audio/x-m4a",
         "audio/m4a",
         "audio/webm",
+        "audio/ogg",
         "video/mp4",
         "video/webm",
     }
@@ -207,6 +209,12 @@ class Settings(BaseSettings):
                 "OBSIDIAN_NOTES_FOLDER deve ser um caminho relativo dentro do vault."
             )
         return folder
+    @field_validator("discord_enabled", "notion_enabled", mode="before")
+    @classmethod
+    def empty_str_bool_to_false(cls, v: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            return False
+        return v
 
     model_config = SettingsConfigDict(
         env_file=(PROJECT_DIR / ".env", BACKEND_DIR / ".env", ".env"),

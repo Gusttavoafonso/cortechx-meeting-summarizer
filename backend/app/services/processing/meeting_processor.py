@@ -72,6 +72,9 @@ class MeetingProcessor:
         meeting_id: int,
         *,
         allow_already_processing: bool = False,
+        language: str | None = None,
+        skip_tasks: bool = False,
+        skip_integrations: bool = False,
     ) -> None:
         """Executa o processamento da reunião sob controle de retry e ciclo de vida."""
         meeting = self._get_meeting(meeting_id)
@@ -108,9 +111,18 @@ class MeetingProcessor:
             )
 
             # 1. Operação Speech-to-Text via JobRunner
+            def _run_stt() -> Any:
+                if language:
+                    try:
+                        return self._speech_to_text_service.transcribe(
+                            audio_path, language=language
+                        )
+                    except TypeError:
+                        return self._speech_to_text_service.transcribe(audio_path)
+                return self._speech_to_text_service.transcribe(audio_path)
+
             stt = self._job_runner.execute_operation(
-                self._speech_to_text_service.transcribe,
-                audio_path,
+                _run_stt,
                 meeting=meeting,
                 stage="speech_to_text",
             )
@@ -180,7 +192,7 @@ class MeetingProcessor:
                 )
 
             extracted_tasks = []
-            if self._task_extraction_service is not None:
+            if not skip_tasks and self._task_extraction_service is not None:
 
                 def _run_task_extraction() -> Any:
                     if hasattr(self._task_extraction_service, "extract_tasks"):
@@ -243,14 +255,15 @@ class MeetingProcessor:
             # Dispara as integrações em background informando que é um novo resultado.
             # Falhas no agendamento/disparo externo não devem abortar o pipeline já
             # concluído.
-            try:
-                self._integration_dispatcher(meeting_id, reset=True)
-            except Exception:
-                logger.exception(
-                    "Falha ao agendar integrações para a reunião %s; "
-                    "o status da reunião permanece COMPLETED.",
-                    meeting_id,
-                )
+            if not skip_integrations:
+                try:
+                    self._integration_dispatcher(meeting_id, reset=True)
+                except Exception:
+                    logger.exception(
+                        "Falha ao agendar integrações para a reunião %s; "
+                        "o status da reunião permanece COMPLETED.",
+                        meeting_id,
+                    )
 
         except Exception as exc:
             logger.exception("Falha no pipeline da reunião %s", meeting_id)

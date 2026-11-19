@@ -3,6 +3,7 @@ from collections.abc import Callable
 from fastapi import (
     APIRouter,
     BackgroundTasks,
+    Body,
     Depends,
     File,
     HTTPException,
@@ -31,6 +32,7 @@ from app.repositories.transcript_repository import (
 from app.schemas.audio import AudioUploadResponse
 from app.schemas.meeting import (
     MeetingCreate,
+    MeetingProcessOptions,
     MeetingProcessResponse,
     MeetingResponse,
     MeetingStatusResponse,
@@ -256,6 +258,9 @@ def upload_audio(
             file=file,
         )
     )
+    duration_seconds = storage_service.extract_audio_duration(
+        storage_service.get_file_path(relative_path)
+    )
 
     try:
         audio_record = audio_repo.save_audio_metadata(
@@ -265,6 +270,7 @@ def upload_audio(
             file_path=relative_path,
             content_type=resolved_content_type,
             file_size_bytes=total_bytes,
+            duration_seconds=duration_seconds,
         )
 
         # Se já existia transcrição para o áudio anterior, invalida/limpa
@@ -292,6 +298,7 @@ def upload_audio(
         original_filename=audio_record.original_filename,
         content_type=audio_record.content_type,
         file_size_bytes=audio_record.file_size_bytes,
+        duration_seconds=audio_record.duration_seconds,
         file_path=audio_record.file_path,
         uploaded_at=audio_record.created_at,
     )
@@ -329,6 +336,7 @@ def get_audio_metadata(
         original_filename=audio_record.original_filename,
         content_type=audio_record.content_type,
         file_size_bytes=audio_record.file_size_bytes,
+        duration_seconds=audio_record.duration_seconds,
         file_path=audio_record.file_path,
         uploaded_at=audio_record.created_at,
     )
@@ -629,11 +637,12 @@ def get_meeting_transcript(
 def process_meeting_async(
     meeting_id: int,
     background_tasks: BackgroundTasks,
+    options: MeetingProcessOptions | None = Body(default=None),
     current_user: User = Depends(get_current_user),
     meeting_repo: MeetingRepository = Depends(get_meeting_repository),
     audio_repo: AudioRepository = Depends(get_audio_repository),
     storage_service: AudioStorageService = Depends(get_audio_storage_service),
-    job_dispatcher: Callable[[int, BackgroundTasks | None], None] = Depends(
+    job_dispatcher: Callable[..., None] = Depends(
         get_meeting_job_dispatcher
     ),
 ) -> MeetingProcessResponse:
@@ -668,8 +677,13 @@ def process_meeting_async(
             detail=f"A reunião com ID {meeting_id} já está em processamento.",
         )
 
+    options_dict = options.model_dump(exclude_none=True) if options else None
+
     try:
-        job_dispatcher(meeting_id, background_tasks)
+        if options_dict:
+            job_dispatcher(meeting_id, background_tasks, options=options_dict)
+        else:
+            job_dispatcher(meeting_id, background_tasks)
     except Exception as exc:
         MeetingService(meeting_repo).update_status(meeting_id, previous_status)
         raise HTTPException(

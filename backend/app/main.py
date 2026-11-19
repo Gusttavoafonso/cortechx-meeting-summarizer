@@ -1,7 +1,9 @@
 from fastapi import FastAPI, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.core.errors import register_exception_handlers 
+from app.api.frontend import configure_frontend
+from app.core.errors import register_exception_handlers
 from app.api.v1.auth import router as auth_router
 from app.api.v1.integrations import router as integrations_router
 from app.api.v1.meetings import router as meetings_router
@@ -13,6 +15,25 @@ app = FastAPI(
     description="API para transcrição e sumarização de reuniões.",
     version="0.1.0",
 )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5172",
+        "http://127.0.0.1:5172",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "tauri://localhost",
+        "http://tauri.localhost",
+        "https://tauri.localhost",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+configure_frontend(app)
 register_exception_handlers(app)
 
 @app.exception_handler(InvalidMeetingTransitionError)
