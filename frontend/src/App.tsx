@@ -14,6 +14,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { TasksPage } from './pages/TasksPage'
 import { TranscriptsPage } from './pages/TranscriptsPage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { IncrementalAudioPage } from './pages/IncrementalAudioPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -46,6 +47,7 @@ export const App: React.FC = () => {
                 <Route path="tasks" element={<TasksPage />} />
                 <Route path="transcripts" element={<TranscriptsPage />} />
                 <Route path="settings" element={<SettingsPage />} />
+                <Route path="dev/incremental-audio" element={<IncrementalAudioPage />} />
                 <Route path="*" element={<NotFoundPage />} />
               </Route>
             </Routes>
