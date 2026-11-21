@@ -25,6 +25,7 @@ export interface LiveTranscriptionState {
   pendingChunks?: number
   lagSeconds?: number
   revision?: number
+  isRevealing?: boolean
   error: string | null
 }
 
@@ -47,6 +48,7 @@ export const INITIAL_LIVE_TRANSCRIPTION_STATE: LiveTranscriptionState = {
   interimStartMs: null,
   chunksReceived: 0,
   wordCount: 0,
+  isRevealing: false,
   error: null,
 }
 
@@ -74,8 +76,46 @@ export const AI_COMPUTING_SCRIPT_BLOCKS: readonly string[] = [
 ]
 
 const WORDS_PER_CHUNK_BUDGET = 5
-const REVEAL_INTERVAL_MS = 190
 const CONNECTING_DELAY_MS = 250
+
+function computeHumanizedWordDelayMs(
+  prevWord: string,
+  nextWord: string,
+  backlog: number,
+  isFinishing: boolean
+): number {
+  if (isFinishing) {
+    let finishingDelay = backlog > 30 ? 32 : 52
+    if (/[.!?…]$/.test(prevWord)) {
+      finishingDelay += 40
+    }
+    return Math.round(finishingDelay)
+  }
+
+  let base: number
+  if (backlog <= 12) {
+    base = 235
+  } else if (backlog <= 24) {
+    base = 235 - ((backlog - 12) / 12) * 105
+  } else {
+    base = Math.max(65, 130 - (backlog - 24) * 3)
+  }
+
+  const coreWord = nextWord.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
+  const coreLen = coreWord.length
+  const lengthFactor = coreLen <= 3 ? 0.72 : coreLen >= 9 ? 1.18 : 1.0
+
+  let punctuationPause = 0
+  if (/[.!?…]$/.test(prevWord)) {
+    punctuationPause = backlog > 18 ? 110 : 270
+  } else if (/[,;:]$/.test(prevWord)) {
+    punctuationPause = backlog > 18 ? 60 : 140
+  }
+
+  const jitter = 0.9 + Math.random() * 0.2
+  const total = (base * lengthFactor + punctuationPause) * jitter
+  return Math.round(Math.min(620, Math.max(40, total)))
+}
 
 function countWords(text: string): number {
   const trimmed = text.trim()
@@ -111,7 +151,7 @@ export class SimulatedLiveTranscriptionTransport implements LiveTranscriptionTra
   private listeners = new Set<(state: LiveTranscriptionState) => void>()
 
   private connectTimer: ReturnType<typeof setTimeout> | null = null
-  private revealTimer: ReturnType<typeof setInterval> | null = null
+  private revealTimer: ReturnType<typeof setTimeout> | null = null
 
   private blockIndex = 0
   private blockWords: string[] = []
@@ -134,7 +174,7 @@ export class SimulatedLiveTranscriptionTransport implements LiveTranscriptionTra
       this.connectTimer = null
     }
     if (this.revealTimer) {
-      clearInterval(this.revealTimer)
+      clearTimeout(this.revealTimer)
       this.revealTimer = null
     }
   }
@@ -149,30 +189,31 @@ export class SimulatedLiveTranscriptionTransport implements LiveTranscriptionTra
   }
 
   private startRevealLoop() {
-    if (this.revealTimer || this.state.status !== 'streaming') {
+    const canReveal = this.state.status === 'streaming' || this.state.status === 'paused'
+    if (
+      this.revealTimer !== null ||
+      !canReveal ||
+      this.wordCursor >= this.allowedWordLimit
+    ) {
       return
     }
 
-    this.revealTimer = setInterval(() => {
-      if (this.state.status !== 'streaming') {
-        if (this.revealTimer) {
-          clearInterval(this.revealTimer)
-          this.revealTimer = null
-        }
+    const backlog = this.allowedWordLimit - this.wordCursor
+    const prevWord = this.wordCursor > 0 ? this.blockWords[this.wordCursor - 1] : ''
+    const nextWord = this.blockWords[this.wordCursor] ?? ''
+    const delayMs = computeHumanizedWordDelayMs(prevWord, nextWord, backlog, false)
+
+    this.revealTimer = setTimeout(() => {
+      this.revealTimer = null
+      const stillCanReveal =
+        this.state.status === 'streaming' || this.state.status === 'paused'
+      if (!stillCanReveal || this.wordCursor >= this.allowedWordLimit) {
         return
       }
 
-      if (this.wordCursor >= this.allowedWordLimit) {
-        if (this.revealTimer) {
-          clearInterval(this.revealTimer)
-          this.revealTimer = null
-        }
-        return
-      }
-
-      const step = this.allowedWordLimit - this.wordCursor > 3 ? 2 : 1
-      this.wordCursor = Math.min(this.allowedWordLimit, this.wordCursor + step)
+      this.wordCursor = Math.min(this.allowedWordLimit, this.wordCursor + 1)
       const revealedText = this.blockWords.slice(0, this.wordCursor).join(' ')
+      const hasMore = this.wordCursor < this.allowedWordLimit
 
       if (this.wordCursor >= this.blockWords.length) {
         this.consolidateCurrentBlock(revealedText)
@@ -182,10 +223,17 @@ export class SimulatedLiveTranscriptionTransport implements LiveTranscriptionTra
           interimText: revealedText,
           interimStartMs: this.currentBlockStartMs ?? this.lastChunkElapsedMs,
           wordCount: computeTotalWords(this.state.segments, revealedText),
+          isRevealing: hasMore,
         }
         this.emit()
       }
-    }, REVEAL_INTERVAL_MS)
+
+      const continueReveal =
+        this.state.status === 'streaming' || this.state.status === 'paused'
+      if (continueReveal && this.wordCursor < this.allowedWordLimit) {
+        this.startRevealLoop()
+      }
+    }, delayMs)
   }
 
   private consolidateCurrentBlock(text: string) {
@@ -219,6 +267,7 @@ export class SimulatedLiveTranscriptionTransport implements LiveTranscriptionTra
       interimText: '',
       interimStartMs: null,
       wordCount: computeTotalWords(nextSegments, ''),
+      isRevealing: false,
     }
     this.emit()
   }
@@ -285,10 +334,11 @@ export class SimulatedLiveTranscriptionTransport implements LiveTranscriptionTra
       status: nextStatus,
       chunksReceived: nextChunksReceived,
       interimStartMs: this.state.interimStartMs ?? this.currentBlockStartMs,
+      isRevealing: this.wordCursor < this.allowedWordLimit,
     }
     this.emit()
 
-    if (nextStatus === 'streaming') {
+    if (nextStatus === 'streaming' || nextStatus === 'paused') {
       this.startRevealLoop()
     }
   }
@@ -297,12 +347,20 @@ export class SimulatedLiveTranscriptionTransport implements LiveTranscriptionTra
     if (this.state.status !== 'streaming' && this.state.status !== 'connecting') {
       return
     }
-    this.clearTimers()
+    if (this.connectTimer) {
+      clearTimeout(this.connectTimer)
+      this.connectTimer = null
+    }
+    const hasPending = this.wordCursor < this.allowedWordLimit
     this.state = {
       ...this.state,
       status: 'paused',
+      isRevealing: hasPending,
     }
     this.emit()
+    if (hasPending) {
+      this.startRevealLoop()
+    }
   }
 
   resume() {
@@ -397,8 +455,13 @@ export class SimulatedLiveTranscriptionTransport implements LiveTranscriptionTra
 function splitBackendTranscript(
   fullText: string,
   processedSeconds: number,
-  isFinal: boolean
-): { segments: LiveTranscriptSegment[]; interimText: string; interimStartMs: number | null } {
+  isFinal: boolean,
+  segmentStartMsCache: number[]
+): {
+  segments: LiveTranscriptSegment[]
+  interimText: string
+  interimStartMs: number | null
+} {
   const cleaned = fullText.trim()
   if (!cleaned) {
     return { segments: [], interimText: '', interimStartMs: null }
@@ -430,13 +493,20 @@ function splitBackendTranscript(
     confirmedBlocks = blocks.slice(0, -1)
   }
 
-  const totalBlocks = Math.max(1, confirmedBlocks.length + (interimText ? 1 : 0))
-  const totalMs = Math.max(0, Math.round(processedSeconds * 1000))
-  const stepMs = totalMs > 0 ? Math.round(totalMs / totalBlocks) : 0
+  const currentTimeMs = Math.max(0, Math.round(processedSeconds * 1000))
 
   const segments: LiveTranscriptSegment[] = confirmedBlocks.map((text, idx) => {
-    const startMs = idx * stepMs
-    const endMs = Math.max(startMs, (idx + 1) * stepMs)
+    if (segmentStartMsCache[idx] === undefined) {
+      const prevStart = idx > 0 ? (segmentStartMsCache[idx - 1] ?? 0) : 0
+      const anchoredMs = idx === 0 ? Math.max(0, currentTimeMs - 6000) : currentTimeMs
+      segmentStartMsCache[idx] = Math.max(prevStart, anchoredMs)
+    }
+    const startMs = segmentStartMsCache[idx]
+    const nextStart = segmentStartMsCache[idx + 1]
+    const endMs =
+      nextStart !== undefined
+        ? Math.max(startMs, nextStart)
+        : Math.max(startMs, currentTimeMs)
     return {
       id: `backend-seg-${idx}`,
       seqStart: idx,
@@ -448,7 +518,17 @@ function splitBackendTranscript(
     }
   })
 
-  const interimStartMs = interimText ? confirmedBlocks.length * stepMs : null
+  let interimStartMs: number | null = null
+  if (interimText) {
+    const interimIdx = confirmedBlocks.length
+    if (segmentStartMsCache[interimIdx] === undefined) {
+      const prevStart = interimIdx > 0 ? (segmentStartMsCache[interimIdx - 1] ?? 0) : 0
+      const anchoredMs =
+        interimIdx === 0 ? Math.max(0, currentTimeMs - 6000) : currentTimeMs
+      segmentStartMsCache[interimIdx] = Math.max(prevStart, anchoredMs)
+    }
+    interimStartMs = segmentStartMsCache[interimIdx]
+  }
   return { segments, interimText, interimStartMs }
 }
 
@@ -462,6 +542,12 @@ export class BackendLiveTranscriptionTransport implements LiveTranscriptionTrans
   private client: PartialTranscriptionClient | null = null
   private locallyPaused = false
 
+  private targetWords: string[] = []
+  private displayedWordCount = 0
+  private revealTimer: ReturnType<typeof setTimeout> | null = null
+  private latestPartial: PartialState | null = null
+  private segmentStartMsCache: number[] = []
+
   constructor(options: { language?: 'pt' | 'en' | 'es' | 'auto' } = {}) {
     this.language = options.language ?? 'pt'
   }
@@ -469,6 +555,13 @@ export class BackendLiveTranscriptionTransport implements LiveTranscriptionTrans
   private emit() {
     const snapshot = this.getSnapshot()
     this.listeners.forEach((listener) => listener(snapshot))
+  }
+
+  private clearRevealTimer() {
+    if (this.revealTimer !== null) {
+      clearTimeout(this.revealTimer)
+      this.revealTimer = null
+    }
   }
 
   private mapStatus(partialState: PartialState['state']): LiveTranscriptionStatus {
@@ -489,13 +582,22 @@ export class BackendLiveTranscriptionTransport implements LiveTranscriptionTrans
     }
   }
 
-  private syncFromPartial(partial: PartialState) {
-    const status = this.mapStatus(partial.state)
+  private emitDisplayedSnapshot() {
+    if (!this.latestPartial) return
+    const partial = this.latestPartial
+    const rawStatus = this.mapStatus(partial.state)
+    const status: LiveTranscriptionStatus =
+      rawStatus === 'completed' && this.displayedWordCount < this.targetWords.length
+        ? 'finalizing'
+        : rawStatus
+
+    const displayedText = this.targetWords.slice(0, this.displayedWordCount).join(' ')
     const isFinal = status === 'completed' || status === 'error'
     const { segments, interimText, interimStartMs } = splitBackendTranscript(
-      partial.text,
+      displayedText,
       partial.processedSeconds,
-      isFinal
+      isFinal,
+      this.segmentStartMsCache
     )
     const lagSeconds =
       partial.capturedSeconds > 0
@@ -509,17 +611,87 @@ export class BackendLiveTranscriptionTransport implements LiveTranscriptionTrans
       interimText,
       interimStartMs,
       chunksReceived: partial.uploadedChunks,
-      wordCount: countWords(partial.text),
+      wordCount: this.displayedWordCount,
       pendingChunks: partial.pendingChunks,
       lagSeconds,
       revision: partial.revision,
+      isRevealing:
+        this.displayedWordCount < this.targetWords.length &&
+        status !== 'idle' &&
+        status !== 'error',
       error: partial.error,
     }
     this.emit()
   }
 
+  private scheduleNextWordReveal() {
+    if (
+      this.revealTimer !== null ||
+      !this.latestPartial ||
+      this.state.status === 'idle' ||
+      this.state.status === 'error' ||
+      this.displayedWordCount >= this.targetWords.length
+    ) {
+      return
+    }
+
+    const backlog = this.targetWords.length - this.displayedWordCount
+    const isFinishing =
+      this.latestPartial.state === 'finishing' || this.latestPartial.state === 'completed'
+    const prevWord =
+      this.displayedWordCount > 0 ? this.targetWords[this.displayedWordCount - 1] : ''
+    const nextWord = this.targetWords[this.displayedWordCount] ?? ''
+    const delayMs = computeHumanizedWordDelayMs(prevWord, nextWord, backlog, isFinishing)
+
+    this.revealTimer = setTimeout(() => {
+      this.revealTimer = null
+      if (
+        !this.latestPartial ||
+        this.state.status === 'idle' ||
+        this.state.status === 'error'
+      ) {
+        return
+      }
+      if (this.displayedWordCount < this.targetWords.length) {
+        this.displayedWordCount += 1
+        this.emitDisplayedSnapshot()
+      }
+      if (this.displayedWordCount < this.targetWords.length) {
+        this.scheduleNextWordReveal()
+      }
+    }, delayMs)
+  }
+
+  private syncFromPartial(partial: PartialState) {
+    this.latestPartial = partial
+    const trimmed = partial.text.trim()
+    const nextWords = trimmed ? trimmed.split(/\s+/) : []
+    this.targetWords = nextWords
+    this.displayedWordCount = Math.min(this.displayedWordCount, nextWords.length)
+
+    this.emitDisplayedSnapshot()
+
+    if (
+      this.displayedWordCount < this.targetWords.length &&
+      this.state.status !== 'error' &&
+      this.state.status !== 'idle'
+    ) {
+      if (partial.state === 'finishing' || partial.state === 'completed') {
+        this.clearRevealTimer()
+      }
+      this.scheduleNextWordReveal()
+    } else if (this.displayedWordCount >= this.targetWords.length) {
+      this.clearRevealTimer()
+    }
+  }
+
   start() {
+    this.clearRevealTimer()
     this.locallyPaused = false
+    this.targetWords = []
+    this.displayedWordCount = 0
+    this.latestPartial = null
+    this.segmentStartMsCache = []
     this.client?.cancel()
     this.state = {
       ...INITIAL_LIVE_TRANSCRIPTION_STATE,
@@ -528,9 +700,12 @@ export class BackendLiveTranscriptionTransport implements LiveTranscriptionTrans
     }
     this.emit()
 
-    this.client = new PartialTranscriptionClient({ language: this.language }, (partial) => {
-      this.syncFromPartial(partial)
-    })
+    this.client = new PartialTranscriptionClient(
+      { language: this.language },
+      (partial) => {
+        this.syncFromPartial(partial)
+      }
+    )
     void this.client.start()
   }
 
@@ -542,28 +717,49 @@ export class BackendLiveTranscriptionTransport implements LiveTranscriptionTrans
 
   pause() {
     this.locallyPaused = true
-    if (this.state.status === 'streaming' || this.state.status === 'connecting') {
-      this.state = { ...this.state, status: 'paused' }
+    if (this.latestPartial) {
+      this.emitDisplayedSnapshot()
+    } else if (this.state.status === 'streaming' || this.state.status === 'connecting') {
+      this.state = {
+        ...this.state,
+        status: 'paused',
+        isRevealing: this.displayedWordCount < this.targetWords.length,
+      }
       this.emit()
+    }
+    if (this.displayedWordCount < this.targetWords.length) {
+      this.scheduleNextWordReveal()
     }
   }
 
   resume() {
     this.locallyPaused = false
-    if (this.state.status === 'paused') {
+    if (this.latestPartial) {
+      this.emitDisplayedSnapshot()
+    } else if (this.state.status === 'paused') {
       this.state = { ...this.state, status: 'streaming' }
       this.emit()
     }
+    this.scheduleNextWordReveal()
   }
 
   async finalize(): Promise<LiveTranscriptSegment[]> {
     this.locallyPaused = false
     this.client?.finish()
+    if (this.displayedWordCount < this.targetWords.length) {
+      this.clearRevealTimer()
+      this.scheduleNextWordReveal()
+    }
     return [...this.state.segments]
   }
 
   cancel() {
+    this.clearRevealTimer()
     this.locallyPaused = false
+    this.targetWords = []
+    this.displayedWordCount = 0
+    this.latestPartial = null
+    this.segmentStartMsCache = []
     const activeClient = this.client
     this.client = null
     activeClient?.cancel()

@@ -262,6 +262,11 @@ export class AudioRecorderEngine {
 
   pause() {
     if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
+      try {
+        this.mediaRecorder.requestData()
+      } catch {
+        // Alguns navegadores podem ignorar requestData imediatamente antes de pause
+      }
       this.mediaRecorder.pause()
       this.isPaused = true
       if (this.onStateChange) this.onStateChange('paused')

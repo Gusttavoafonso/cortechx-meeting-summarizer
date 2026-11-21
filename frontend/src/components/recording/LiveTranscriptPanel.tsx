@@ -212,7 +212,7 @@ export const LiveTranscriptPanel: React.FC<LiveTranscriptPanelProps> = ({
         ) : (
           <>
             {transcription.segments.map((segment) => (
-              <div key={segment.id} className="flex items-start gap-3 animate-live-fade">
+              <div key={segment.id} className="flex items-start gap-3">
                 <span className="font-mono text-[11px] text-muted/80 pt-1 shrink-0 select-none">
                   {formatSecondsToTime(Math.floor(segment.startMs / 1000))}
                 </span>
@@ -221,18 +221,31 @@ export const LiveTranscriptPanel: React.FC<LiveTranscriptPanelProps> = ({
             ))}
 
             {transcription.interimText && (
-              <div className="flex items-start gap-3 animate-live-fade">
+              <div className="flex items-start gap-3">
                 <span className="font-mono text-[11px] text-brand/80 pt-1 shrink-0 select-none">
                   {formatSecondsToTime(
                     Math.floor((transcription.interimStartMs ?? 0) / 1000)
                   )}
                 </span>
                 <p className="text-sm leading-relaxed text-ink-light">
-                  <span>{transcription.interimText}</span>
-                  <span
-                    aria-hidden="true"
-                    className="inline-block w-[2px] h-[1em] bg-brand align-middle ml-1 rounded-full animate-live-caret"
-                  />
+                  {transcription.interimText
+                    .trim()
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .map((word, idx) => (
+                      <span
+                        key={`interim-${transcription.segments.length}-${idx}`}
+                        className="inline-block animate-live-word mr-[0.28em]"
+                      >
+                        {word}
+                      </span>
+                    ))}
+                  {(!isPaused || Boolean(transcription.isRevealing)) && (
+                    <span
+                      aria-hidden="true"
+                      className="inline-block w-[2px] h-[1em] bg-brand align-middle rounded-full animate-live-caret"
+                    />
+                  )}
                 </p>
               </div>
             )}
@@ -243,7 +256,9 @@ export const LiveTranscriptPanel: React.FC<LiveTranscriptPanelProps> = ({
       {/* Faixa de pausa inline */}
       {(isPaused || transcription.status === 'paused') && (
         <div className="px-4 py-2 bg-slate-50/90 border-t border-subtle-border text-xs text-muted font-medium">
-          Transcrição pausada. Clique em Retomar para continuar capturando.
+          {transcription.isRevealing
+            ? 'Gravação pausada — finalizando a transcrição do trecho anterior...'
+            : 'Gravação pausada. Clique em Retomar para continuar capturando.'}
         </div>
       )}
 
