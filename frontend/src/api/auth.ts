@@ -9,11 +9,15 @@ import {
 export type { UserPublic, UserLoginRequest, UserRegisterRequest, GoogleAuthRequest }
 
 export const authApi = {
-  login: (data: UserLoginRequest): Promise<UserPublic> =>
-    request<UserPublic>('/auth/login', {
+  login: async (data: UserLoginRequest): Promise<UserPublic> => {
+    await request<{ access_token: string; token_type: string }>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify(data),
-    }),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ username: data.email, password: data.password }),
+      credentials: 'include',
+    })
+    return authApi.getMe()
+  },
 
   register: (data: UserRegisterRequest): Promise<UserPublic> =>
     request<UserPublic>('/auth/register', {
@@ -28,8 +32,9 @@ export const authApi = {
     }),
 
   getMe: (): Promise<UserPublic> =>
-    request<UserPublic>('/auth/me', {
+    request<UserPublic>('/users/me', {
       method: 'GET',
+      credentials: 'include',
     }),
 
   logout: (): Promise<{ message: string }> =>

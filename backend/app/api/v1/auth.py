@@ -30,7 +30,7 @@ router = APIRouter()
 
 
 def _set_session_cookie(response: Response, user_id: int) -> None:
-    """Configura o cookie HTTP-Only com o JWT de acesso (fluxo Google)."""
+    """Configura o cookie HTTP-Only com o JWT de acesso (login, cadastro e Google)."""
     response.set_cookie(
         key=settings.session_cookie_name,
         value=create_access_token(user_id),
@@ -50,9 +50,10 @@ def _set_session_cookie(response: Response, user_id: int) -> None:
 )
 def register(
     payload: UserCreate,
+    response: Response,
     db: Session = Depends(get_session),
 ) -> UserResponse:
-    """Cria o usuário (senha com hash Argon2). Não inicia sessão."""
+    """Cria o usuário com senha Argon2 e inicia a sessão via cookie."""
     try:
         user = register_user(
             db=db,
@@ -66,6 +67,7 @@ def register(
             detail=str(exc),
         ) from exc
 
+    _set_session_cookie(response, user.id)
     return UserResponse.model_validate(user)
 
 
@@ -75,6 +77,7 @@ def register(
     summary="Entrar com e-mail e senha (OAuth2 password flow)",
 )
 def login(
+    response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_session),
 ) -> Token:
@@ -92,6 +95,7 @@ def login(
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
 
+    _set_session_cookie(response, user.id)
     return Token(access_token=create_access_token(user.id), token_type="bearer")
 
 
