@@ -174,6 +174,7 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
           mode: targetMode,
           onTick: (ms) => setElapsedMs(ms),
           onChunk: (chunk) => transportRef.current?.pushChunk(chunk),
+          onPartialSegmentEnd: (epochId) => transportRef.current?.endSegment?.(epochId),
           onStateChange: (state) => {
             if (state === 'paused') {
               setIsPaused(true)
@@ -187,8 +188,8 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
           },
           onSourceEnded: (src) => {
             if (src === 'system') {
-              engineRef.current?.pause()
               transportRef.current?.pause()
+              engineRef.current?.pause()
               setIsPaused(true)
               setRecordingError(
                 'O compartilhamento de áudio da aba foi encerrado no navegador. A gravação foi pausada.'
@@ -216,14 +217,14 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
   )
 
   const pauseRecording = useCallback(() => {
-    engineRef.current?.pause()
     transportRef.current?.pause()
+    engineRef.current?.pause()
     setIsPaused(true)
   }, [])
 
   const resumeRecording = useCallback(() => {
-    engineRef.current?.resume()
     transportRef.current?.resume()
+    engineRef.current?.resume()
     setIsPaused(false)
   }, [])
 

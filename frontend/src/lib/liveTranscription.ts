@@ -32,6 +32,7 @@ export interface LiveTranscriptionState {
 export interface LiveTranscriptionTransport {
   start: () => void
   pushChunk: (chunk: AudioChunkEvent) => void
+  endSegment?: (epochId: number) => void
   pause: () => void
   resume: () => void
   finalize: () => Promise<LiveTranscriptSegment[]>
@@ -532,6 +533,21 @@ function splitBackendTranscript(
   return { segments, interimText, interimStartMs }
 }
 
+interface BackendEpoch {
+  epochId: number
+  client: PartialTranscriptionClient
+  words: string[]
+  enqueuedChunks: number
+  uploadedChunks: number
+  pendingChunks: number
+  processedSeconds: number
+  capturedSeconds: number
+  revision: number
+  state: PartialState['state']
+  error: string | null
+  ended: boolean
+}
+
 export class BackendLiveTranscriptionTransport implements LiveTranscriptionTransport {
   private readonly language: 'pt' | 'en' | 'es' | 'auto'
   private state: LiveTranscriptionState = {
@@ -539,13 +555,15 @@ export class BackendLiveTranscriptionTransport implements LiveTranscriptionTrans
     mode: 'backend',
   }
   private listeners = new Set<(state: LiveTranscriptionState) => void>()
-  private client: PartialTranscriptionClient | null = null
+  private epochs: BackendEpoch[] = []
+  private epochsById = new Map<number, BackendEpoch>()
+  private currentEpochId = 0
   private locallyPaused = false
+  private recordingStopped = false
 
   private targetWords: string[] = []
   private displayedWordCount = 0
   private revealTimer: ReturnType<typeof setTimeout> | null = null
-  private latestPartial: PartialState | null = null
   private segmentStartMsCache: number[] = []
 
   constructor(options: { language?: 'pt' | 'en' | 'es' | 'auto' } = {}) {
@@ -564,45 +582,116 @@ export class BackendLiveTranscriptionTransport implements LiveTranscriptionTrans
     }
   }
 
-  private mapStatus(partialState: PartialState['state']): LiveTranscriptionStatus {
-    switch (partialState) {
-      case 'starting':
-        return 'connecting'
-      case 'recording':
-        return this.locallyPaused ? 'paused' : 'streaming'
-      case 'finishing':
-        return 'finalizing'
-      case 'completed':
-        return 'completed'
-      case 'failed':
-        return 'error'
-      case 'idle':
-      default:
-        return 'idle'
+  private createEpoch(epochId: number): BackendEpoch {
+    const existing = this.epochsById.get(epochId)
+    if (existing) {
+      return existing
     }
+
+    const epoch: BackendEpoch = {
+      epochId,
+      client: null as unknown as PartialTranscriptionClient,
+      words: [],
+      enqueuedChunks: 0,
+      uploadedChunks: 0,
+      pendingChunks: 0,
+      processedSeconds: 0,
+      capturedSeconds: 0,
+      revision: -1,
+      state: 'starting',
+      error: null,
+      ended: false,
+    }
+
+    const client = new PartialTranscriptionClient(
+      { language: this.language },
+      (partial) => {
+        this.handleEpochUpdate(epoch, partial)
+      }
+    )
+    epoch.client = client
+
+    this.epochs.push(epoch)
+    this.epochsById.set(epochId, epoch)
+    void client.start()
+    return epoch
   }
 
-  private emitDisplayedSnapshot() {
-    if (!this.latestPartial) return
-    const partial = this.latestPartial
-    const rawStatus = this.mapStatus(partial.state)
-    const status: LiveTranscriptionStatus =
-      rawStatus === 'completed' && this.displayedWordCount < this.targetWords.length
-        ? 'finalizing'
-        : rawStatus
+  private recomputeAndEmit() {
+    const nextWords = this.epochs.flatMap((epoch) => epoch.words)
+    this.targetWords = nextWords
+    this.displayedWordCount = Math.min(this.displayedWordCount, nextWords.length)
+
+    let totalUploaded = 0
+    let totalPending = 0
+    let totalProcessedSeconds = 0
+    let totalCapturedSeconds = 0
+    let totalRevision = 0
+
+    for (const epoch of this.epochs) {
+      totalUploaded += epoch.uploadedChunks
+      totalPending += epoch.pendingChunks
+      totalProcessedSeconds += epoch.processedSeconds
+      totalCapturedSeconds = Math.max(totalCapturedSeconds, epoch.capturedSeconds)
+      if (epoch.revision > 0) {
+        totalRevision += epoch.revision
+      }
+    }
+
+    const hasFinishingEpoch = this.epochs.some((epoch) => epoch.state === 'finishing')
+    const hasActiveEpoch = this.epochs.some(
+      (epoch) =>
+        epoch.state === 'recording' ||
+        epoch.state === 'starting' ||
+        epoch.state === 'finishing'
+    )
+    const latestError =
+      [...this.epochs].reverse().find((epoch) => epoch.error)?.error ?? null
+    const currentEpoch =
+      this.epochsById.get(this.currentEpochId) ?? this.epochs[this.epochs.length - 1]
+
+    let status: LiveTranscriptionStatus
+    if (this.recordingStopped) {
+      if (hasActiveEpoch || this.displayedWordCount < this.targetWords.length) {
+        status = 'finalizing'
+      } else if (
+        this.targetWords.length === 0 &&
+        this.epochs.length > 0 &&
+        this.epochs.every((epoch) => epoch.state === 'failed')
+      ) {
+        status = 'error'
+      } else {
+        status = 'completed'
+      }
+    } else if (this.locallyPaused) {
+      status = 'paused'
+    } else if (
+      !currentEpoch ||
+      (currentEpoch.state === 'starting' && this.targetWords.length === 0)
+    ) {
+      status = 'connecting'
+    } else if (currentEpoch.state === 'failed') {
+      status = 'error'
+    } else {
+      status = 'streaming'
+    }
 
     const displayedText = this.targetWords.slice(0, this.displayedWordCount).join(' ')
     const isFinal = status === 'completed' || status === 'error'
     const { segments, interimText, interimStartMs } = splitBackendTranscript(
       displayedText,
-      partial.processedSeconds,
+      totalProcessedSeconds,
       isFinal,
       this.segmentStartMsCache
     )
     const lagSeconds =
-      partial.capturedSeconds > 0
-        ? Math.max(0, Math.round(partial.capturedSeconds - partial.processedSeconds))
+      totalCapturedSeconds > 0
+        ? Math.max(0, Math.round(totalCapturedSeconds - totalProcessedSeconds))
         : undefined
+
+    const isRevealing =
+      (this.displayedWordCount < this.targetWords.length || hasFinishingEpoch) &&
+      status !== 'error'
 
     this.state = {
       status,
@@ -610,16 +699,13 @@ export class BackendLiveTranscriptionTransport implements LiveTranscriptionTrans
       segments,
       interimText,
       interimStartMs,
-      chunksReceived: partial.uploadedChunks,
+      chunksReceived: totalUploaded,
       wordCount: this.displayedWordCount,
-      pendingChunks: partial.pendingChunks,
+      pendingChunks: totalPending,
       lagSeconds,
-      revision: partial.revision,
-      isRevealing:
-        this.displayedWordCount < this.targetWords.length &&
-        status !== 'idle' &&
-        status !== 'error',
-      error: partial.error,
+      revision: totalRevision,
+      isRevealing,
+      error: latestError,
     }
     this.emit()
   }
@@ -627,7 +713,7 @@ export class BackendLiveTranscriptionTransport implements LiveTranscriptionTrans
   private scheduleNextWordReveal() {
     if (
       this.revealTimer !== null ||
-      !this.latestPartial ||
+      this.epochs.length === 0 ||
       this.state.status === 'idle' ||
       this.state.status === 'error' ||
       this.displayedWordCount >= this.targetWords.length
@@ -636,8 +722,7 @@ export class BackendLiveTranscriptionTransport implements LiveTranscriptionTrans
     }
 
     const backlog = this.targetWords.length - this.displayedWordCount
-    const isFinishing =
-      this.latestPartial.state === 'finishing' || this.latestPartial.state === 'completed'
+    const isFinishing = this.recordingStopped
     const prevWord =
       this.displayedWordCount > 0 ? this.targetWords[this.displayedWordCount - 1] : ''
     const nextWord = this.targetWords[this.displayedWordCount] ?? ''
@@ -646,7 +731,7 @@ export class BackendLiveTranscriptionTransport implements LiveTranscriptionTrans
     this.revealTimer = setTimeout(() => {
       this.revealTimer = null
       if (
-        !this.latestPartial ||
+        this.epochs.length === 0 ||
         this.state.status === 'idle' ||
         this.state.status === 'error'
       ) {
@@ -654,7 +739,7 @@ export class BackendLiveTranscriptionTransport implements LiveTranscriptionTrans
       }
       if (this.displayedWordCount < this.targetWords.length) {
         this.displayedWordCount += 1
-        this.emitDisplayedSnapshot()
+        this.recomputeAndEmit()
       }
       if (this.displayedWordCount < this.targetWords.length) {
         this.scheduleNextWordReveal()
@@ -662,21 +747,29 @@ export class BackendLiveTranscriptionTransport implements LiveTranscriptionTrans
     }, delayMs)
   }
 
-  private syncFromPartial(partial: PartialState) {
-    this.latestPartial = partial
-    const trimmed = partial.text.trim()
-    const nextWords = trimmed ? trimmed.split(/\s+/) : []
-    this.targetWords = nextWords
-    this.displayedWordCount = Math.min(this.displayedWordCount, nextWords.length)
+  private handleEpochUpdate(epoch: BackendEpoch, partial: PartialState) {
+    if (!this.epochsById.has(epoch.epochId)) {
+      return
+    }
 
-    this.emitDisplayedSnapshot()
+    const trimmed = partial.text.trim()
+    epoch.words = trimmed ? trimmed.split(/\s+/) : []
+    epoch.uploadedChunks = partial.uploadedChunks
+    epoch.pendingChunks = partial.pendingChunks
+    epoch.processedSeconds = partial.processedSeconds
+    epoch.capturedSeconds = partial.capturedSeconds
+    epoch.revision = partial.revision
+    epoch.state = partial.state
+    epoch.error = partial.error
+
+    this.recomputeAndEmit()
 
     if (
       this.displayedWordCount < this.targetWords.length &&
       this.state.status !== 'error' &&
       this.state.status !== 'idle'
     ) {
-      if (partial.state === 'finishing' || partial.state === 'completed') {
+      if (this.recordingStopped) {
         this.clearRevealTimer()
       }
       this.scheduleNextWordReveal()
@@ -687,12 +780,17 @@ export class BackendLiveTranscriptionTransport implements LiveTranscriptionTrans
 
   start() {
     this.clearRevealTimer()
+    for (const epoch of this.epochs) {
+      epoch.client.cancel()
+    }
+    this.epochs = []
+    this.epochsById.clear()
+    this.currentEpochId = 0
     this.locallyPaused = false
+    this.recordingStopped = false
     this.targetWords = []
     this.displayedWordCount = 0
-    this.latestPartial = null
     this.segmentStartMsCache = []
-    this.client?.cancel()
     this.state = {
       ...INITIAL_LIVE_TRANSCRIPTION_STATE,
       mode: 'backend',
@@ -700,33 +798,38 @@ export class BackendLiveTranscriptionTransport implements LiveTranscriptionTrans
     }
     this.emit()
 
-    this.client = new PartialTranscriptionClient(
-      { language: this.language },
-      (partial) => {
-        this.syncFromPartial(partial)
-      }
-    )
-    void this.client.start()
+    this.createEpoch(0)
   }
 
   pushChunk(chunk: AudioChunkEvent) {
-    if (!this.client) return
-    this.client.enqueue(chunk.blob)
-    this.client.captureTime(chunk.elapsedMs)
+    let epoch = this.epochsById.get(chunk.epochId)
+    if (!epoch) {
+      epoch = this.createEpoch(chunk.epochId)
+    }
+    if (epoch.ended) return
+    epoch.enqueuedChunks += 1
+    epoch.client.enqueue(chunk.blob)
+    epoch.client.captureTime(chunk.elapsedMs)
+  }
+
+  endSegment(epochId: number) {
+    const epoch = this.epochsById.get(epochId)
+    if (!epoch || epoch.ended) return
+    epoch.ended = true
+
+    if (epoch.enqueuedChunks === 0) {
+      epoch.client.cancel()
+      epoch.state = 'completed'
+    } else {
+      epoch.client.finish()
+    }
+
+    this.recomputeAndEmit()
   }
 
   pause() {
     this.locallyPaused = true
-    if (this.latestPartial) {
-      this.emitDisplayedSnapshot()
-    } else if (this.state.status === 'streaming' || this.state.status === 'connecting') {
-      this.state = {
-        ...this.state,
-        status: 'paused',
-        isRevealing: this.displayedWordCount < this.targetWords.length,
-      }
-      this.emit()
-    }
+    this.recomputeAndEmit()
     if (this.displayedWordCount < this.targetWords.length) {
       this.scheduleNextWordReveal()
     }
@@ -734,35 +837,45 @@ export class BackendLiveTranscriptionTransport implements LiveTranscriptionTrans
 
   resume() {
     this.locallyPaused = false
-    if (this.latestPartial) {
-      this.emitDisplayedSnapshot()
-    } else if (this.state.status === 'paused') {
-      this.state = { ...this.state, status: 'streaming' }
-      this.emit()
-    }
+    this.recordingStopped = false
+    this.currentEpochId += 1
+    this.createEpoch(this.currentEpochId)
+    this.recomputeAndEmit()
     this.scheduleNextWordReveal()
   }
 
   async finalize(): Promise<LiveTranscriptSegment[]> {
     this.locallyPaused = false
-    this.client?.finish()
+    this.recordingStopped = true
+
+    for (const epoch of this.epochs) {
+      if (!epoch.ended) {
+        this.endSegment(epoch.epochId)
+      }
+    }
+
     if (this.displayedWordCount < this.targetWords.length) {
       this.clearRevealTimer()
       this.scheduleNextWordReveal()
     }
+    this.recomputeAndEmit()
     return [...this.state.segments]
   }
 
   cancel() {
     this.clearRevealTimer()
+    const activeEpochs = [...this.epochs]
+    this.epochs = []
+    this.epochsById.clear()
+    this.currentEpochId = 0
     this.locallyPaused = false
+    this.recordingStopped = false
     this.targetWords = []
     this.displayedWordCount = 0
-    this.latestPartial = null
     this.segmentStartMsCache = []
-    const activeClient = this.client
-    this.client = null
-    activeClient?.cancel()
+    for (const epoch of activeEpochs) {
+      epoch.client.cancel()
+    }
     this.state = {
       ...INITIAL_LIVE_TRANSCRIPTION_STATE,
       mode: 'backend',
