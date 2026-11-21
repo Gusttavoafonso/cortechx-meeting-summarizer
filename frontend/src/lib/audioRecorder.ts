@@ -219,13 +219,17 @@ export class AudioRecorderEngine {
         this.recordedChunks.push(event.data)
         const elapsedMs =
           this.startTime > 0 ? Math.max(0, Date.now() - this.startTime) : 0
-        this.onChunk?.({
-          blob: event.data,
-          seqIndex: this.chunkSeq++,
-          elapsedMs,
-          sizeBytes: event.data.size,
-          mimeType: this.mediaRecorder?.mimeType || selectedMime || 'audio/webm',
-        })
+        try {
+          this.onChunk?.({
+            blob: event.data,
+            seqIndex: this.chunkSeq++,
+            elapsedMs,
+            sizeBytes: event.data.size,
+            mimeType: this.mediaRecorder?.mimeType || selectedMime || 'audio/webm',
+          })
+        } catch {
+          // A partial callback must never break capture or the complete audio file.
+        }
       }
     }
 
@@ -361,6 +365,22 @@ export class AudioRecorderEngine {
   }
 
   cleanup() {
+    this.stopTimer()
+    const recorder = this.mediaRecorder
+    if (recorder) {
+      recorder.ondataavailable = null
+      recorder.onstop = null
+      recorder.onerror = null
+      if (recorder.state !== 'inactive') {
+        try {
+          recorder.stop()
+        } catch {
+          // Ignora erro se o recorder já estiver encerrado
+        }
+      }
+    }
+    this.onChunk = undefined
+    this.recordedChunks = []
     this.isRecording = false
     this.isPaused = false
     this.chunkSeq = 0

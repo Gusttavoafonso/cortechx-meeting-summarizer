@@ -79,7 +79,12 @@ services:
   worker:
     <<: *backend_base
     container_name: cortechx_worker
-    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
+    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=2 -Q celery
+
+  partial_worker:
+    <<: *backend_base
+    container_name: cortechx_partial_worker
+    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=2 --prefetch-multiplier=1 -Q partial_transcription
 
 volumes:
   postgres_data:

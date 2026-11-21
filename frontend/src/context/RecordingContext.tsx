@@ -19,6 +19,7 @@ import {
   LiveTranscriptionState,
   LiveTranscriptionTransport,
 } from '../lib/liveTranscription'
+import { EMPTY_PARTIAL, PartialState } from '../lib/partialTranscription'
 
 export interface MeetingOptions {
   language: 'pt' | 'en' | 'es' | 'auto'
@@ -37,6 +38,7 @@ export const DEFAULT_MEETING_OPTIONS: MeetingOptions = {
 }
 
 interface RecordingContextValue {
+  partial: PartialState
   recordedFile: File | null
   durationMs: number | null
   title: string
@@ -70,6 +72,7 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const engineRef = useRef<AudioRecorderEngine | null>(null)
   const transportRef = useRef<LiveTranscriptionTransport | null>(null)
+  const startingRef = useRef(false)
   const [recordedFile, setRecordedFile] = useState<File | null>(null)
   const [durationMs, setDurationMs] = useState<number | null>(null)
   const [title, setTitle] = useState('')
@@ -142,6 +145,7 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const startRecording = useCallback(
     async (mode?: CaptureMode) => {
+      if (startingRef.current || engineRef.current?.isRecording) return
       const targetMode = mode ?? captureMode
       setRecordingError(null)
 
@@ -159,6 +163,7 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
         transportRef.current = createLiveTranscriptionTransport()
       }
 
+      startingRef.current = true
       setIsStartingRecording(true)
       transportRef.current.cancel()
 
@@ -201,6 +206,7 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
         setIsPaused(false)
         throw err
       } finally {
+        startingRef.current = false
         setIsStartingRecording(false)
       }
     },
@@ -253,6 +259,7 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
   return (
     <RecordingContext.Provider
       value={{
+        partial: EMPTY_PARTIAL,
         recordedFile,
         durationMs,
         title,
