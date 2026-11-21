@@ -121,10 +121,15 @@ def test_resending_meeting_overwrites_same_note_even_if_title_changes(
 )
 def test_invalid_configuration_returns_safe_failure(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     vault_path: str | None,
     notes_folder: str,
     expected_error: str,
 ) -> None:
+    if vault_path is None:
+        monkeypatch.setattr(
+            "app.integrations.providers.obsidian.settings.obsidian_vault_path", None
+        )
     vault = tmp_path / "vault"
     vault.mkdir()
     if vault_path == "<vault>":

@@ -13,7 +13,6 @@ from app.repositories.meeting_repository import MeetingRepository
 from app.repositories.transcript_repository import TranscriptRepository
 from app.services.audio_storage import AudioStorageService
 from app.services.chunking import ChunkingService
-from app.services.diarization import DiarizationService
 from app.services.meeting_service import MeetingService
 from app.services.transcription import BaseSpeechToTextService
 from app.workers.integration_job import enqueue_integration_delivery
@@ -26,7 +25,7 @@ class MeetingProcessor:
     """Orquestrador do processamento de reuniões integrado à política de retry.
 
     Executa o pipeline completo:
-    Audio -> STT -> Diarização -> Chunking -> Sumarização / Tasks -> Persistência.
+    Audio -> STT -> Chunking -> Sumarização / Tasks -> Persistência -> Integrações.
 
     Cada operação do pipeline é orquestrada através do JobRunner / RetryPolicy,
     garantindo que:
@@ -41,7 +40,6 @@ class MeetingProcessor:
         transcript_repository: TranscriptRepository,
         audio_storage_service: AudioStorageService,
         speech_to_text_service: BaseSpeechToTextService,
-        diarization_service: DiarizationService,
         chunking_service: ChunkingService,
         summarization_service: Any | None = None,
         task_extraction_service: Any | None = None,
@@ -53,7 +51,6 @@ class MeetingProcessor:
         self._transcript_repository = transcript_repository
         self._audio_storage_service = audio_storage_service
         self._speech_to_text_service = speech_to_text_service
-        self._diarization_service = diarization_service
         self._chunking_service = chunking_service
         self._summarization_service = summarization_service
         self._task_extraction_service = task_extraction_service
@@ -145,27 +142,7 @@ class MeetingProcessor:
                     segments=stt.segments,
                 )
 
-            # 2. Operação Diarização via JobRunner
-            diarization_segments = self._job_runner.execute_operation(
-                self._diarization_service.diarize,
-                audio_path,
-                meeting=meeting,
-                stage="diarization",
-            )
-
-            if use_atomic_unit_of_work:
-                self._transcript_repository.apply_diarization(
-                    transcript,
-                    diarization_segments,
-                    commit=False,
-                )
-            else:
-                self._transcript_repository.apply_diarization(
-                    transcript,
-                    diarization_segments,
-                )
-
-            # 3. Chunking via JobRunner
+            # 2. Chunking via JobRunner
             chunks = self._job_runner.execute_operation(
                 self._chunking_service.split,
                 transcript,
@@ -175,7 +152,7 @@ class MeetingProcessor:
 
             transcript_text = getattr(transcript, "content", None) or str(transcript)
 
-            # 4. Operações de LLM (Sumarização e Extração de Tarefas)
+            # 3. Operações de LLM (Sumarização e Extração de Tarefas)
             summary_result = None
             if self._summarization_service is not None:
 

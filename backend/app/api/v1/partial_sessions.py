@@ -188,12 +188,8 @@ def poll_partial(
                 waiting = not redis.exists(lock) and (
                     datetime.now(timezone.utc) - _as_utc(row.created_at)
                 ).total_seconds() > 90
-                if not stale and not waiting:
-                    redis.eval('''
-if redis.call('EXISTS', KEYS[1]) == 1 then
-  redis.call('HSET', KEYS[1], 'client', ARGV[1])
-end
-''', 1, meta, time.time())
+                if not stale and not waiting and row.state == "recording":
+                    transport.touch_client(row.id)
             if stale or waiting:
                 with SessionLocal() as db:
                     db.execute(update(PartialSession).where(

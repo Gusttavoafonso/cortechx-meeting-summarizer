@@ -17,7 +17,6 @@ x-backend-base: &backend_base
     OBSIDIAN_ENABLED: ${OBSIDIAN_ENABLED:-false}
     OBSIDIAN_VAULT_PATH: ${OBSIDIAN_VAULT_PATH:-/vault}
     OBSIDIAN_NOTES_FOLDER: ${OBSIDIAN_NOTES_FOLDER:-Reuniões}
-    HUGGINGFACE_TOKEN: ${HUGGINGFACE_TOKEN:-}
     WHISPER_MODEL_SIZE: ${WHISPER_MODEL_SIZE:-small}
     WHISPER_DEVICE: ${WHISPER_DEVICE:-auto}
     WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-auto}
@@ -84,7 +83,7 @@ services:
   partial_worker:
     <<: *backend_base
     container_name: cortechx_partial_worker
-    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=2 --prefetch-multiplier=1 -Q partial_transcription
+    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=1 --prefetch-multiplier=1 -Q partial_transcription
 
 volumes:
   postgres_data:

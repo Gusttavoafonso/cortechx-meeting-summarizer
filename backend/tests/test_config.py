@@ -105,6 +105,9 @@ def test_settings_rejects_obsidian_folder_outside_vault(monkeypatch, folder) -> 
     monkeypatch.setenv("OBSIDIAN_NOTES_FOLDER", folder)
 
     with pytest.raises(ValueError):
+        Settings(_env_file=None)
+
+
 def test_jwt_settings_defaults(monkeypatch) -> None:
     monkeypatch.setenv("JWT_SECRET_KEY", "segredo-de-teste")
     monkeypatch.delenv("JWT_ALGORITHM", raising=False)

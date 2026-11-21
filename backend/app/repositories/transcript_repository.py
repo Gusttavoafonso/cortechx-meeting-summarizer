@@ -10,10 +10,8 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.exceptions import InvalidPersistenceDataError
 from app.models.transcript import Transcript
 from app.models.transcript_segment import TranscriptSegment
-from app.services.diarization import DiarizationAssociationError
 
 if TYPE_CHECKING:
-    from app.services.diarization import DiarizationSegment
     from app.services.transcription.base import SegmentData
 
 
@@ -23,8 +21,6 @@ class InvalidTranscriptSegmentError(InvalidPersistenceDataError, ValueError):
 
 class TranscriptRepository:
     """Repositório para persistência e recuperação de transcrições e seus segmentos."""
-
-    TIMESTAMP_TOLERANCE_SECONDS = 0.3
 
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -122,107 +118,3 @@ class TranscriptRepository:
             self.db.commit()
             return True
         return False
-
-    @staticmethod
-    def _calculate_overlap(
-        first_start: float,
-        first_end: float,
-        second_start: float,
-        second_end: float,
-    ) -> float:
-        """Calcula a duração da interseção entre dois intervalos."""
-        return max(0.0, min(first_end, second_end) - max(first_start, second_start))
-
-    @staticmethod
-    def _calculate_interval_distance(
-        first_start: float,
-        first_end: float,
-        second_start: float,
-        second_end: float,
-    ) -> float:
-        """Calcula o gap entre intervalos; retorna zero se eles se sobrepõem."""
-        return max(0.0, second_start - first_end, first_start - second_end)
-
-    def apply_diarization(
-        self,
-        transcript: Transcript,
-        diarization_segments: list[DiarizationSegment],
-        *,
-        commit: bool = True,
-    ) -> Transcript:
-        """Associa cada segmento transcrito ao locutor com maior sobreposição."""
-        assignments: list[tuple[TranscriptSegment, str]] = []
-        for transcript_segment in transcript.segments:
-            if (
-                transcript_segment.start_time is None
-                or transcript_segment.end_time is None
-                or transcript_segment.end_time <= transcript_segment.start_time
-            ):
-                raise DiarizationAssociationError(
-                    "A transcrição contém timestamps inválidos."
-                )
-
-            best_match = max(
-                diarization_segments,
-                key=lambda diarization_segment: self._calculate_overlap(
-                    transcript_segment.start_time,
-                    transcript_segment.end_time,
-                    diarization_segment.start_time,
-                    diarization_segment.end_time,
-                ),
-                default=None,
-            )
-
-            if (
-                best_match is not None
-                and self._calculate_overlap(
-                    transcript_segment.start_time,
-                    transcript_segment.end_time,
-                    best_match.start_time,
-                    best_match.end_time,
-                )
-                > 0
-            ):
-                assignments.append((transcript_segment, best_match.speaker))
-                continue
-
-            nearest_match = min(
-                diarization_segments,
-                key=lambda diarization_segment: self._calculate_interval_distance(
-                    transcript_segment.start_time,
-                    transcript_segment.end_time,
-                    diarization_segment.start_time,
-                    diarization_segment.end_time,
-                ),
-                default=None,
-            )
-            if (
-                nearest_match is not None
-                and self._calculate_interval_distance(
-                    transcript_segment.start_time,
-                    transcript_segment.end_time,
-                    nearest_match.start_time,
-                    nearest_match.end_time,
-                )
-                <= self.TIMESTAMP_TOLERANCE_SECONDS
-            ):
-                assignments.append((transcript_segment, nearest_match.speaker))
-                continue
-
-            raise DiarizationAssociationError(
-                "Não foi possível associar um locutor a todos os segmentos."
-            )
-
-        for transcript_segment, speaker in assignments:
-            transcript_segment.speaker = speaker
-
-        try:
-            if commit:
-                self.db.commit()
-                self.db.refresh(transcript)
-            else:
-                self.db.flush()
-        except SQLAlchemyError:
-            self.db.rollback()
-            raise
-        return transcript

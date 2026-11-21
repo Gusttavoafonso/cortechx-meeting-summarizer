@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from pathlib import Path
 
 from fastapi import BackgroundTasks
 from sqlalchemy.orm import Session
@@ -17,45 +16,11 @@ from app.repositories.summary_repository import SummaryRepository
 from app.repositories.transcript_repository import TranscriptRepository
 from app.services.audio_storage import AudioStorageService
 from app.services.chunking import ChunkingService
-from app.services.diarization import (
-    DiarizationProvider,
-    DiarizationSegment,
-    DiarizationService,
-    PyannoteDiarizationProvider,
-)
 from app.services.processing.meeting_processor import MeetingProcessor
 from app.services.transcription import get_speech_to_text_service
 from app.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
-
-
-class _DefaultSpeakerDiarizationProvider(DiarizationProvider):
-    """Provedor local de fallback caso HUGGINGFACE_TOKEN não esteja configurado."""
-
-    def diarize(self, audio_path: Path) -> list[DiarizationSegment]:
-        return [
-            DiarizationSegment(
-                speaker="SPEAKER_00",
-                start_time=0.0,
-                end_time=86400.0,
-            )
-        ]
-
-
-def _get_worker_diarization_service(
-    diarization_enabled: bool = True,
-) -> DiarizationService:
-    has_hf_token = bool(
-        settings.huggingface_token
-        and settings.huggingface_token.get_secret_value().strip()
-    )
-    provider: DiarizationProvider = (
-        PyannoteDiarizationProvider()
-        if (diarization_enabled and has_hf_token)
-        else _DefaultSpeakerDiarizationProvider()
-    )
-    return DiarizationService(provider)
 
 
 def _get_worker_stt_service(provider_pref: str | None = None):
@@ -109,9 +74,6 @@ def build_meeting_processor(
         summarization_service=summarization_service,
         audio_storage_service=AudioStorageService(),
         speech_to_text_service=_get_worker_stt_service(opts.get("provider")),
-        diarization_service=_get_worker_diarization_service(
-            diarization_enabled=opts.get("diarization", True) is not False
-        ),
         chunking_service=ChunkingService(),
         retry_policy=retry_policy or RetryPolicy.from_settings(),
     )

@@ -83,6 +83,24 @@ def purge(session_id: str) -> None:
         redis.delete(*keys(session_id)[:3])
 
 
+def touch_client(session_id: str) -> None:
+    """Atualiza o timestamp de atividade do cliente e renova o TTL da sessão."""
+    meta = keys(session_id)[0]
+    with client() as redis:
+        redis.eval(
+            """
+if redis.call('EXISTS', KEYS[1]) == 1 and redis.call('HGET', KEYS[1], 'state') == 'open' then
+  redis.call('HSET', KEYS[1], 'client', ARGV[1])
+  redis.call('EXPIRE', KEYS[1], ARGV[2])
+end
+""",
+            1,
+            meta,
+            time.time(),
+            TTL,
+        )
+
+
 class StreamClosed(Exception):
     pass
 

@@ -20,7 +20,6 @@ export interface AudioMetadata {
 
 export interface MeetingProcessOptions {
   language?: 'pt' | 'en' | 'es' | 'auto'
-  diarization?: boolean
   provider?: 'auto' | 'groq' | 'local'
   auto_tasks?: boolean
   export_notion?: boolean

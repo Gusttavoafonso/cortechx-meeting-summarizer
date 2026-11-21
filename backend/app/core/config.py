@@ -97,7 +97,6 @@ class Settings(BaseSettings):
     )
 
     discord_webhook_url: HttpUrl | None = None
-    huggingface_token: SecretStr | None = None
 
     WHISPER_MODEL_SIZE: str = Field(
         default="small", validation_alias="WHISPER_MODEL_SIZE"

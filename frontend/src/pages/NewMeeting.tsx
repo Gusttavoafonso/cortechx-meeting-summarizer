@@ -97,7 +97,8 @@ export const NewMeeting: React.FC = () => {
     if (recordingCtx.title && !title) {
       setTitle(recordingCtx.title)
     }
-  }, [recordingCtx.title, title])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordingCtx.title])
 
   // Restore recorded audio from global context if user switched tabs/pages
   useEffect(() => {
@@ -231,6 +232,7 @@ export const NewMeeting: React.FC = () => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      recordingCtx.clearLiveTranscription()
       validateAndSetFile(file)
     }
   }
@@ -250,6 +252,7 @@ export const NewMeeting: React.FC = () => {
     setIsDragging(false)
     const file = e.dataTransfer.files?.[0]
     if (file) {
+      recordingCtx.clearLiveTranscription()
       validateAndSetFile(file)
     }
   }
@@ -269,7 +272,10 @@ export const NewMeeting: React.FC = () => {
   }
 
   const handleCopyLiveTranscript = async () => {
-    const text = buildFullTranscriptText(recordingCtx.liveTranscription.segments)
+    const text = buildFullTranscriptText(
+      recordingCtx.liveTranscription.segments,
+      recordingCtx.liveTranscription.interimText
+    )
     if (!text) return
     try {
       await navigator.clipboard.writeText(text)
@@ -342,7 +348,6 @@ export const NewMeeting: React.FC = () => {
       setFailedStep(null)
       await processMeeting(meetingId, {
         language: recordingCtx.options.language,
-        diarization: false,
         provider: recordingCtx.options.provider,
         auto_tasks: recordingCtx.options.autoTasks,
         export_notion: recordingCtx.options.exportNotion,
@@ -443,7 +448,10 @@ export const NewMeeting: React.FC = () => {
           ref={titleInputRef}
           type="text"
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => {
+            setTitle(e.target.value)
+            recordingCtx.setTitle(e.target.value)
+          }}
           placeholder="Alinhamento de Produto — Sprint 04"
           disabled={currentStep !== 'idle' && currentStep !== 'failed'}
           className="w-full text-2xl font-bold font-sans text-ink bg-transparent border-b-2 border-transparent hover:border-slate-200 focus:border-brand focus:outline-none transition-colors pb-1 placeholder:text-muted/40"
@@ -621,7 +629,10 @@ export const NewMeeting: React.FC = () => {
       )}
 
       {/* Live transcript preview after recording finishes */}
-      {selectedFile && recordingCtx.liveTranscription.segments.length > 0 && (
+      {selectedFile &&
+        (recordingCtx.liveTranscription.segments.length > 0 ||
+          recordingCtx.liveTranscription.interimText.trim().length > 0 ||
+          recordingCtx.liveTranscription.status === 'finalizing') && (
         <Card className="mb-6 border-subtle-border shadow-xs overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 bg-surface/40 border-b border-subtle-border">
             <button
@@ -677,6 +688,20 @@ export const NewMeeting: React.FC = () => {
                   <p className="text-sm leading-relaxed text-ink">{segment.text}</p>
                 </div>
               ))}
+              {recordingCtx.liveTranscription.interimText && (
+                <div className="flex items-start gap-3">
+                  <span className="font-mono text-[11px] text-brand/80 pt-0.5 shrink-0 select-none">
+                    {formatSecondsToTime(
+                      Math.floor(
+                        (recordingCtx.liveTranscription.interimStartMs ?? 0) / 1000
+                      )
+                    )}
+                  </span>
+                  <p className="text-sm leading-relaxed text-ink-light">
+                    {recordingCtx.liveTranscription.interimText}
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </Card>

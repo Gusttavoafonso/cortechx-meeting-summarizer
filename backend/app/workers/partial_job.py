@@ -3,14 +3,10 @@
 import logging
 import re
 import time
-import wave
 from contextlib import closing
 from datetime import datetime, timezone
-from pathlib import Path
-from tempfile import TemporaryDirectory
 from uuid import uuid4
 
-import numpy as np
 from sqlalchemy import update
 
 from app.core.config import settings
@@ -110,32 +106,30 @@ def consume_partial_session(session_id: str) -> None:
             provider = _provider()
             tokens = []
             decoder = IncrementalWebMDecoder(max_chunk_bytes=transport.MAX_CHUNK)
-            with TemporaryDirectory(prefix="partial-audio-") as temporary:
-                path = Path(temporary) / "window.wav"
-                decoded = decoder.iter_windows(transport.chunks(session_id, redis))
-                with closing(decoded) as windows:
-                    for window in windows:
-                        if window.end_seconds > transport.MAX_SECONDS:
-                            raise TimeoutError("Limite de duas horas excedido")
-                        # Check cancellation before invoking any provider.
-                        with SessionLocal() as db:
-                            row = db.get(PartialSession, session_id)
-                            if row is None or row.state not in ACTIVE:
-                                raise transport.StreamClosed()
-                        with wave.open(str(path), "wb") as output:
-                            output.setnchannels(1)
-                            output.setsampwidth(2)
-                            output.setframerate(window.sample_rate)
-                            pcm = (np.clip(window.samples, -1, 1) * 32767).astype("<i2")
-                            output.writeframes(pcm.tobytes())
-                        _pulse(redis, meta)
-                        result = provider.transcribe(
-                            path, language=None if language == "auto" else language
-                        )
-                        tokens = _reconcile(tokens, result, window)
-                        _save(session_id, text=" ".join(word for _, word in tokens),
-                              processed_seconds=window.end_seconds)
-                        _pulse(redis, meta)
+            decoded = decoder.iter_windows(transport.chunks(session_id, redis))
+            with closing(decoded) as windows:
+                for window in windows:
+                    if window.end_seconds > transport.MAX_SECONDS:
+                        raise TimeoutError("Limite de duas horas excedido")
+                    # Check cancellation before invoking any provider.
+                    with SessionLocal() as db:
+                        row = db.get(PartialSession, session_id)
+                        if row is None or row.state not in ACTIVE:
+                            raise transport.StreamClosed()
+                    _pulse(redis, meta)
+                    result = provider.transcribe_array(
+                        window.samples,
+                        language=None if language == "auto" else language,
+                        beam_size=1,
+                        condition_on_previous_text=False,
+                    )
+                    tokens = _reconcile(tokens, result, window)
+                    _save(
+                        session_id,
+                        text=" ".join(word for _, word in tokens),
+                        processed_seconds=window.end_seconds,
+                    )
+                    _pulse(redis, meta)
             _save(session_id, state="completed")
         except Exception:
             logger.exception(

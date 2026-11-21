@@ -32,7 +32,7 @@ export const MeetingOptionsModal: React.FC<MeetingOptionsModalProps> = ({
   if (!isOpen) return null
 
   const handleSave = () => {
-    updateOptions({ ...localOptions, diarization: false })
+    updateOptions(localOptions)
     onClose()
   }
 

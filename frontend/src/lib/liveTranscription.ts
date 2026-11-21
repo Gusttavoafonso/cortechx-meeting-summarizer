@@ -1,4 +1,5 @@
 import type { AudioChunkEvent } from './audioRecorder'
+import { PartialState, PartialTranscriptionClient } from './partialTranscription'
 
 export type LiveTranscriptionStatus =
   'idle' | 'connecting' | 'streaming' | 'paused' | 'finalizing' | 'completed' | 'error'
@@ -21,6 +22,9 @@ export interface LiveTranscriptionState {
   interimStartMs: number | null
   chunksReceived: number
   wordCount: number
+  pendingChunks?: number
+  lagSeconds?: number
+  revision?: number
   error: string | null
 }
 
@@ -390,6 +394,206 @@ export class SimulatedLiveTranscriptionTransport implements LiveTranscriptionTra
   }
 }
 
-export function createLiveTranscriptionTransport(): LiveTranscriptionTransport {
-  return new SimulatedLiveTranscriptionTransport()
+function splitBackendTranscript(
+  fullText: string,
+  processedSeconds: number,
+  isFinal: boolean
+): { segments: LiveTranscriptSegment[]; interimText: string; interimStartMs: number | null } {
+  const cleaned = fullText.trim()
+  if (!cleaned) {
+    return { segments: [], interimText: '', interimStartMs: null }
+  }
+
+  const rawSentences = cleaned.split(/(?<=[.!?])\s+/).filter(Boolean)
+  const blocks: string[] = []
+  let current = ''
+
+  for (const sentence of rawSentences) {
+    if (!current) {
+      current = sentence
+    } else if (countWords(current) + countWords(sentence) <= 24) {
+      current = `${current} ${sentence}`
+    } else {
+      blocks.push(current)
+      current = sentence
+    }
+  }
+  if (current) {
+    blocks.push(current)
+  }
+
+  let interimText = ''
+  let confirmedBlocks = blocks
+
+  if (!isFinal && blocks.length > 0) {
+    interimText = blocks[blocks.length - 1]
+    confirmedBlocks = blocks.slice(0, -1)
+  }
+
+  const totalBlocks = Math.max(1, confirmedBlocks.length + (interimText ? 1 : 0))
+  const totalMs = Math.max(0, Math.round(processedSeconds * 1000))
+  const stepMs = totalMs > 0 ? Math.round(totalMs / totalBlocks) : 0
+
+  const segments: LiveTranscriptSegment[] = confirmedBlocks.map((text, idx) => {
+    const startMs = idx * stepMs
+    const endMs = Math.max(startMs, (idx + 1) * stepMs)
+    return {
+      id: `backend-seg-${idx}`,
+      seqStart: idx,
+      seqEnd: idx,
+      startMs,
+      endMs,
+      text,
+      createdAt: Date.now(),
+    }
+  })
+
+  const interimStartMs = interimText ? confirmedBlocks.length * stepMs : null
+  return { segments, interimText, interimStartMs }
+}
+
+export class BackendLiveTranscriptionTransport implements LiveTranscriptionTransport {
+  private readonly language: 'pt' | 'en' | 'es' | 'auto'
+  private state: LiveTranscriptionState = {
+    ...INITIAL_LIVE_TRANSCRIPTION_STATE,
+    mode: 'backend',
+  }
+  private listeners = new Set<(state: LiveTranscriptionState) => void>()
+  private client: PartialTranscriptionClient | null = null
+  private locallyPaused = false
+
+  constructor(options: { language?: 'pt' | 'en' | 'es' | 'auto' } = {}) {
+    this.language = options.language ?? 'pt'
+  }
+
+  private emit() {
+    const snapshot = this.getSnapshot()
+    this.listeners.forEach((listener) => listener(snapshot))
+  }
+
+  private mapStatus(partialState: PartialState['state']): LiveTranscriptionStatus {
+    switch (partialState) {
+      case 'starting':
+        return 'connecting'
+      case 'recording':
+        return this.locallyPaused ? 'paused' : 'streaming'
+      case 'finishing':
+        return 'finalizing'
+      case 'completed':
+        return 'completed'
+      case 'failed':
+        return 'error'
+      case 'idle':
+      default:
+        return 'idle'
+    }
+  }
+
+  private syncFromPartial(partial: PartialState) {
+    const status = this.mapStatus(partial.state)
+    const isFinal = status === 'completed' || status === 'error'
+    const { segments, interimText, interimStartMs } = splitBackendTranscript(
+      partial.text,
+      partial.processedSeconds,
+      isFinal
+    )
+    const lagSeconds =
+      partial.capturedSeconds > 0
+        ? Math.max(0, Math.round(partial.capturedSeconds - partial.processedSeconds))
+        : undefined
+
+    this.state = {
+      status,
+      mode: 'backend',
+      segments,
+      interimText,
+      interimStartMs,
+      chunksReceived: partial.uploadedChunks,
+      wordCount: countWords(partial.text),
+      pendingChunks: partial.pendingChunks,
+      lagSeconds,
+      revision: partial.revision,
+      error: partial.error,
+    }
+    this.emit()
+  }
+
+  start() {
+    this.locallyPaused = false
+    this.client?.cancel()
+    this.state = {
+      ...INITIAL_LIVE_TRANSCRIPTION_STATE,
+      mode: 'backend',
+      status: 'connecting',
+    }
+    this.emit()
+
+    this.client = new PartialTranscriptionClient({ language: this.language }, (partial) => {
+      this.syncFromPartial(partial)
+    })
+    void this.client.start()
+  }
+
+  pushChunk(chunk: AudioChunkEvent) {
+    if (!this.client) return
+    this.client.enqueue(chunk.blob)
+    this.client.captureTime(chunk.elapsedMs)
+  }
+
+  pause() {
+    this.locallyPaused = true
+    if (this.state.status === 'streaming' || this.state.status === 'connecting') {
+      this.state = { ...this.state, status: 'paused' }
+      this.emit()
+    }
+  }
+
+  resume() {
+    this.locallyPaused = false
+    if (this.state.status === 'paused') {
+      this.state = { ...this.state, status: 'streaming' }
+      this.emit()
+    }
+  }
+
+  async finalize(): Promise<LiveTranscriptSegment[]> {
+    this.locallyPaused = false
+    this.client?.finish()
+    return [...this.state.segments]
+  }
+
+  cancel() {
+    this.locallyPaused = false
+    const activeClient = this.client
+    this.client = null
+    activeClient?.cancel()
+    this.state = {
+      ...INITIAL_LIVE_TRANSCRIPTION_STATE,
+      mode: 'backend',
+    }
+    this.emit()
+  }
+
+  subscribe(listener: (state: LiveTranscriptionState) => void): () => void {
+    this.listeners.add(listener)
+    return () => {
+      this.listeners.delete(listener)
+    }
+  }
+
+  getSnapshot(): LiveTranscriptionState {
+    return {
+      ...this.state,
+      segments: [...this.state.segments],
+    }
+  }
+}
+
+export function createLiveTranscriptionTransport(options?: {
+  language?: 'pt' | 'en' | 'es' | 'auto'
+}): LiveTranscriptionTransport {
+  if (import.meta.env.VITE_LIVE_TRANSCRIPTION_MODE === 'simulated') {
+    return new SimulatedLiveTranscriptionTransport()
+  }
+  return new BackendLiveTranscriptionTransport({ language: options?.language ?? 'pt' })
 }

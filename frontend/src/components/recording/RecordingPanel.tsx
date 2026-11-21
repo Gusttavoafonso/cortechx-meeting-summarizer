@@ -227,11 +227,7 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
           <div className="lg:col-span-5 flex flex-col items-center justify-between text-center bg-slate-50/70 border border-slate-200/80 rounded-2xl p-5">
             <div className="flex flex-col items-center w-full">
               {/* Badge Indicador de Gravação */}
-              <div
-                className={`flex items-center gap-2 px-3 py-1 rounded-full mb-4 ${
-                  isPaused ? 'bg-amber-50/80' : 'bg-rose-50/80'
-                }`}
-              >
+              <div className="flex items-center gap-2 px-1 py-1 mb-4">
                 <span className="relative flex h-2 w-2">
                   {!isPaused && (
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />

@@ -149,10 +149,6 @@ def test_meeting_state_never_completed_when_required_stage_fails():
         text="Texto transcrito", segments=[]
     )
 
-    # Diarização sucede
-    diarization_service = MagicMock()
-    diarization_service.diarize.return_value = []
-
     # Chunking falha (etapa obrigatória)
     chunking_service = MagicMock()
     chunking_service.split.side_effect = RuntimeError("Erro crítico no chunking")
@@ -162,7 +158,6 @@ def test_meeting_state_never_completed_when_required_stage_fails():
         transcript_repository=transcript_repo,
         audio_storage_service=audio_storage,
         speech_to_text_service=stt_service,
-        diarization_service=diarization_service,
         chunking_service=chunking_service,
         retry_policy=RetryPolicy(max_attempts=2, initial_delay=0.01),
     )
@@ -241,20 +236,20 @@ def test_job_runner_records_failure_identifying_stage_and_attempts():
 
     attempts = 0
 
-    def failing_diarization():
+    def failing_chunking():
         nonlocal attempts
         attempts += 1
         raise RuntimeError("Falha interna de memória no modelo")
 
     with pytest.raises(RuntimeError):
         runner.execute_operation(
-            failing_diarization,
+            failing_chunking,
             meeting=meeting,
-            stage="diarization",
+            stage="chunking",
         )
 
     assert runner.last_failure is not None
-    assert runner.last_failure.stage == "diarization"
+    assert runner.last_failure.stage == "chunking"
     assert runner.last_failure.error_type == "RuntimeError"
     assert (
         runner.last_failure.attempts == 1

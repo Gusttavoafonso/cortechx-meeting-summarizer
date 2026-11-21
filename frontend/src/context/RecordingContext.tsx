@@ -19,11 +19,9 @@ import {
   LiveTranscriptionState,
   LiveTranscriptionTransport,
 } from '../lib/liveTranscription'
-import { EMPTY_PARTIAL, PartialState } from '../lib/partialTranscription'
 
 export interface MeetingOptions {
   language: 'pt' | 'en' | 'es' | 'auto'
-  diarization: boolean
   provider: 'auto' | 'groq' | 'local'
   autoTasks: boolean
   exportNotion: boolean
@@ -31,14 +29,12 @@ export interface MeetingOptions {
 
 export const DEFAULT_MEETING_OPTIONS: MeetingOptions = {
   language: 'pt',
-  diarization: false,
   provider: 'auto',
   autoTasks: true,
   exportNotion: false,
 }
 
 interface RecordingContextValue {
-  partial: PartialState
   recordedFile: File | null
   durationMs: number | null
   title: string
@@ -72,6 +68,7 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const engineRef = useRef<AudioRecorderEngine | null>(null)
   const transportRef = useRef<LiveTranscriptionTransport | null>(null)
+  const unsubscribeTransportRef = useRef<(() => void) | null>(null)
   const startingRef = useRef(false)
   const [recordedFile, setRecordedFile] = useState<File | null>(null)
   const [durationMs, setDurationMs] = useState<number | null>(null)
@@ -88,20 +85,28 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
     INITIAL_LIVE_TRANSCRIPTION_STATE
   )
 
-  useEffect(() => {
-    engineRef.current = new AudioRecorderEngine()
-    const transport = createLiveTranscriptionTransport()
+  const setupTransport = useCallback((language: MeetingOptions['language']) => {
+    unsubscribeTransportRef.current?.()
+    transportRef.current?.cancel()
+    const transport = createLiveTranscriptionTransport({ language })
     transportRef.current = transport
-    const unsubscribe = transport.subscribe((nextState) => {
+    unsubscribeTransportRef.current = transport.subscribe((nextState) => {
       setLiveTranscription(nextState)
     })
+    return transport
+  }, [])
+
+  useEffect(() => {
+    engineRef.current = new AudioRecorderEngine()
+    const transport = setupTransport(DEFAULT_MEETING_OPTIONS.language)
 
     return () => {
-      unsubscribe()
+      unsubscribeTransportRef.current?.()
       transport.cancel()
+      transportRef.current?.cancel()
       engineRef.current?.cleanup()
     }
-  }, [])
+  }, [setupTransport])
 
   // Protege contra fechamento/recarregamento acidental da aba durante gravação ativa
   useEffect(() => {
@@ -159,13 +164,10 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
       if (!engineRef.current) {
         engineRef.current = new AudioRecorderEngine()
       }
-      if (!transportRef.current) {
-        transportRef.current = createLiveTranscriptionTransport()
-      }
 
       startingRef.current = true
       setIsStartingRecording(true)
-      transportRef.current.cancel()
+      const transport = setupTransport(options.language)
 
       try {
         await engineRef.current.start({
@@ -194,12 +196,12 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
             }
           },
         })
-        transportRef.current.start()
+        transport.start()
         setCaptureMode(targetMode)
         setIsRecording(true)
         setIsPaused(false)
       } catch (err) {
-        transportRef.current?.cancel()
+        transport.cancel()
         const msg = err instanceof Error ? err.message : String(err)
         setRecordingError(msg)
         setIsRecording(false)
@@ -210,7 +212,7 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
         setIsStartingRecording(false)
       }
     },
-    [captureMode]
+    [captureMode, options.language, setupTransport]
   )
 
   const pauseRecording = useCallback(() => {
@@ -259,7 +261,6 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
   return (
     <RecordingContext.Provider
       value={{
-        partial: EMPTY_PARTIAL,
         recordedFile,
         durationMs,
         title,

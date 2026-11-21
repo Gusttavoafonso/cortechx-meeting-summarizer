@@ -12,7 +12,6 @@ from app.repositories.meeting_repository import MeetingRepository
 from app.repositories.summary_repository import SummaryRepository
 from app.repositories.transcript_repository import TranscriptRepository
 from app.schemas.summary import SummaryResult, TaskItem
-from app.services.diarization import DiarizationSegment
 from app.services.processing.meeting_processor import MeetingProcessor
 from app.services.transcription.base import SegmentData, TranscriptionResult
 from sqlalchemy import select
@@ -67,40 +66,6 @@ def test_transcript_repository_save_is_idempotent(db_session):
     ).all()
     assert len(all_segments) == 1
     assert all_segments[0].text == "Texto consolidado atualizado"
-
-
-def test_transcript_repository_apply_diarization_supports_commit_flag(db_session):
-    """Verifica que apply_diarization é idempotente e respeita a flag commit."""
-    meeting_repo = MeetingRepository(db_session)
-    meeting = meeting_repo.create("Reunião Diarização Idempotente")
-    repo = TranscriptRepository(db_session)
-
-    segments = [
-        SegmentData(start=0.0, end=2.0, text="Olá mundo", speaker=None),
-    ]
-    transcript = repo.save_transcript(meeting.id, "Olá mundo", segments)
-
-    diar_segments = [
-        DiarizationSegment(speaker="Alice", start_time=0.0, end_time=2.0),
-    ]
-
-    # Chamada com commit=False para unidade atômica de trabalho
-    updated = repo.apply_diarization(transcript, diar_segments, commit=False)
-    assert updated.segments[0].speaker == "Alice"
-
-    # Segunda chamada (idempotente)
-    diar_segments_v2 = [
-        DiarizationSegment(speaker="Bob", start_time=0.0, end_time=2.0),
-    ]
-    updated_v2 = repo.apply_diarization(transcript, diar_segments_v2, commit=True)
-    assert updated_v2.segments[0].speaker == "Bob"
-
-    all_segments = db_session.scalars(
-        select(TranscriptSegment).where(
-            TranscriptSegment.transcript_id == transcript.id
-        )
-    ).all()
-    assert len(all_segments) == 1
 
 
 def test_summary_repository_save_summary_is_idempotent(db_session):
@@ -231,11 +196,6 @@ def test_meeting_processor_rolls_back_partial_data_on_error(db_session, tmp_path
         ],
     )
 
-    diar_mock = MagicMock()
-    diar_mock.diarize.return_value = [
-        DiarizationSegment(speaker="Speaker 1", start_time=0.0, end_time=2.0)
-    ]
-
     chunk_mock = MagicMock()
     chunk_mock.split.return_value = ["chunk 1"]
 
@@ -249,7 +209,6 @@ def test_meeting_processor_rolls_back_partial_data_on_error(db_session, tmp_path
         summary_repository=summary_repo,
         audio_storage_service=storage_mock,
         speech_to_text_service=stt_mock,
-        diarization_service=diar_mock,
         chunking_service=chunk_mock,
         summarization_service=llm_summarizer_mock,
         retry_policy=RetryPolicy(max_attempts=1),

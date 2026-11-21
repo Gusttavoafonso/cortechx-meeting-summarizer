@@ -36,8 +36,8 @@ import numpy as np
 from numpy.typing import NDArray
 
 SAMPLE_RATE = 16_000
-WINDOW_SAMPLES = 10 * SAMPLE_RATE
-STEP_SAMPLES = 8 * SAMPLE_RATE
+WINDOW_SAMPLES = 6 * SAMPLE_RATE
+STEP_SAMPLES = 4 * SAMPLE_RATE
 IO_BUFFER_BYTES = 32 * 1024
 
 
@@ -111,7 +111,7 @@ class _ChunkReader(io.RawIOBase):
 class IncrementalWebMDecoder:
     """Uma chamada de iter_windows cria um contexto PyAV para toda a sessao.
 
-    Produz [0s,10s), [8s,18s), [16s,26s), ... e uma cauda parcial no EOF.
+    Produz [0s,6s), [4s,10s), [8s,14s), ... e uma cauda parcial no EOF.
     O produtor continua dono do iterador de entrada e de seus recursos. Nao ha
     fila interna, thread, arquivo temporario ou integracao com providers.
     """

@@ -257,9 +257,7 @@ export const MeetingDetails: React.FC = () => {
       {/* Transcript Section (if available) */}
       {meeting.transcript && (
         <Card className="p-6">
-          <h3 className="text-sm font-semibold text-ink mb-4">
-            Transcrição com Identificação de Locutores
-          </h3>
+          <h3 className="text-sm font-semibold text-ink mb-4">Transcrição da Reunião</h3>
           <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
             {meeting.transcript.segments?.length ? (
               meeting.transcript.segments.map((seg, idx) => (
@@ -271,11 +269,6 @@ export const MeetingDetails: React.FC = () => {
                     {formatSecondsToTime(seg.start_time)}
                   </span>
                   <div className="flex-1">
-                    {seg.speaker && (
-                      <span className="font-semibold text-brand block mb-0.5">
-                        {seg.speaker}
-                      </span>
-                    )}
                     <p className="text-ink leading-relaxed">{seg.text}</p>
                   </div>
                 </div>
