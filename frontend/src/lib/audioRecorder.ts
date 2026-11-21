@@ -17,6 +17,14 @@ export interface AudioLevels {
   systemLevel: number
 }
 
+export interface AudioChunkEvent {
+  blob: Blob
+  seqIndex: number
+  elapsedMs: number
+  sizeBytes: number
+  mimeType: string
+}
+
 export class AudioRecorderEngine {
   private audioContext: AudioContext | null = null
   private micStream: MediaStream | null = null
@@ -34,11 +42,13 @@ export class AudioRecorderEngine {
   public isPaused = false
   private startTime = 0
   private elapsedTime = 0
+  private chunkSeq = 0
   private timerInterval: ReturnType<typeof setInterval> | null = null
 
   public onTick?: (elapsedMs: number) => void
   public onStateChange?: (state: 'recording' | 'paused' | 'stopped') => void
   public onSourceEnded?: (source: 'system' | 'mic') => void
+  public onChunk?: (chunk: AudioChunkEvent) => void
 
   static isSupported(): boolean {
     return !!(
@@ -58,11 +68,13 @@ export class AudioRecorderEngine {
     onTick,
     onStateChange,
     onSourceEnded,
+    onChunk,
   }: {
     mode?: CaptureMode
     onTick?: (elapsedMs: number) => void
     onStateChange?: (state: 'recording' | 'paused' | 'stopped') => void
     onSourceEnded?: (source: 'system' | 'mic') => void
+    onChunk?: (chunk: AudioChunkEvent) => void
   } = {}): Promise<void> {
     if (this.isRecording) {
       throw new Error('A gravação já está em andamento.')
@@ -71,7 +83,9 @@ export class AudioRecorderEngine {
     this.onTick = onTick
     this.onStateChange = onStateChange
     this.onSourceEnded = onSourceEnded
+    this.onChunk = onChunk
     this.recordedChunks = []
+    this.chunkSeq = 0
 
     // 1. Capturar Áudio da Aba / Sistema PRIMEIRO (se modo 'both') para preservar o user gesture do clique
     if (mode === 'both') {
@@ -203,6 +217,15 @@ export class AudioRecorderEngine {
     this.mediaRecorder.ondataavailable = (event) => {
       if (event.data && event.data.size > 0) {
         this.recordedChunks.push(event.data)
+        const elapsedMs =
+          this.startTime > 0 ? Math.max(0, Date.now() - this.startTime) : 0
+        this.onChunk?.({
+          blob: event.data,
+          seqIndex: this.chunkSeq++,
+          elapsedMs,
+          sizeBytes: event.data.size,
+          mimeType: this.mediaRecorder?.mimeType || selectedMime || 'audio/webm',
+        })
       }
     }
 
@@ -250,7 +273,9 @@ export class AudioRecorderEngine {
     }
   }
 
-  async stop({ userId = 1 }: { userId?: number | string } = {}): Promise<RecordingResult> {
+  async stop({
+    userId = 1,
+  }: { userId?: number | string } = {}): Promise<RecordingResult> {
     if (!this.isRecording) {
       throw new Error('Nenhuma gravação em andamento.')
     }
@@ -338,6 +363,7 @@ export class AudioRecorderEngine {
   cleanup() {
     this.isRecording = false
     this.isPaused = false
+    this.chunkSeq = 0
     this.cleanupStreams()
 
     if (this.audioContext && this.audioContext.state !== 'closed') {

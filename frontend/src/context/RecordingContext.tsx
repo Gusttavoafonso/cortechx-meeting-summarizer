@@ -13,6 +13,12 @@ import {
   CaptureMode,
   RecordingResult,
 } from '../lib/audioRecorder'
+import {
+  createLiveTranscriptionTransport,
+  INITIAL_LIVE_TRANSCRIPTION_STATE,
+  LiveTranscriptionState,
+  LiveTranscriptionTransport,
+} from '../lib/liveTranscription'
 
 export interface MeetingOptions {
   language: 'pt' | 'en' | 'es' | 'auto'
@@ -24,7 +30,7 @@ export interface MeetingOptions {
 
 export const DEFAULT_MEETING_OPTIONS: MeetingOptions = {
   language: 'pt',
-  diarization: true,
+  diarization: false,
   provider: 'auto',
   autoTasks: true,
   exportNotion: false,
@@ -36,14 +42,17 @@ interface RecordingContextValue {
   title: string
   options: MeetingOptions
   isRecording: boolean
+  isStartingRecording: boolean
   isPaused: boolean
   elapsedMs: number
   captureMode: CaptureMode
   recordingError: string | null
+  liveTranscription: LiveTranscriptionState
   setCaptureMode: (mode: CaptureMode) => void
   setRecordingData: (file: File, durationMs: number, customTitle?: string) => void
   setTitle: (title: string) => void
   clearRecording: () => void
+  clearLiveTranscription: () => void
   updateOptions: (newOptions: Partial<MeetingOptions>) => void
   startRecording: (mode?: CaptureMode) => Promise<void>
   pauseRecording: () => void
@@ -60,20 +69,33 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const engineRef = useRef<AudioRecorderEngine | null>(null)
+  const transportRef = useRef<LiveTranscriptionTransport | null>(null)
   const [recordedFile, setRecordedFile] = useState<File | null>(null)
   const [durationMs, setDurationMs] = useState<number | null>(null)
   const [title, setTitle] = useState('')
   const [options, setOptions] = useState<MeetingOptions>(DEFAULT_MEETING_OPTIONS)
 
   const [isRecording, setIsRecording] = useState(false)
+  const [isStartingRecording, setIsStartingRecording] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
   const [elapsedMs, setElapsedMs] = useState(0)
   const [captureMode, setCaptureMode] = useState<CaptureMode>('both')
   const [recordingError, setRecordingError] = useState<string | null>(null)
+  const [liveTranscription, setLiveTranscription] = useState<LiveTranscriptionState>(
+    INITIAL_LIVE_TRANSCRIPTION_STATE
+  )
 
   useEffect(() => {
     engineRef.current = new AudioRecorderEngine()
+    const transport = createLiveTranscriptionTransport()
+    transportRef.current = transport
+    const unsubscribe = transport.subscribe((nextState) => {
+      setLiveTranscription(nextState)
+    })
+
     return () => {
+      unsubscribe()
+      transport.cancel()
       engineRef.current?.cleanup()
     }
   }, [])
@@ -103,6 +125,11 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
   const clearRecording = useCallback(() => {
     setRecordedFile(null)
     setDurationMs(null)
+    transportRef.current?.cancel()
+  }, [])
+
+  const clearLiveTranscription = useCallback(() => {
+    transportRef.current?.cancel()
   }, [])
 
   const updateOptions = useCallback((newOptions: Partial<MeetingOptions>) => {
@@ -128,11 +155,18 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
       if (!engineRef.current) {
         engineRef.current = new AudioRecorderEngine()
       }
+      if (!transportRef.current) {
+        transportRef.current = createLiveTranscriptionTransport()
+      }
+
+      setIsStartingRecording(true)
+      transportRef.current.cancel()
 
       try {
         await engineRef.current.start({
           mode: targetMode,
           onTick: (ms) => setElapsedMs(ms),
+          onChunk: (chunk) => transportRef.current?.pushChunk(chunk),
           onStateChange: (state) => {
             if (state === 'paused') {
               setIsPaused(true)
@@ -147,6 +181,7 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
           onSourceEnded: (src) => {
             if (src === 'system') {
               engineRef.current?.pause()
+              transportRef.current?.pause()
               setIsPaused(true)
               setRecordingError(
                 'O compartilhamento de áudio da aba foi encerrado no navegador. A gravação foi pausada.'
@@ -154,15 +189,19 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
             }
           },
         })
+        transportRef.current.start()
         setCaptureMode(targetMode)
         setIsRecording(true)
         setIsPaused(false)
       } catch (err) {
+        transportRef.current?.cancel()
         const msg = err instanceof Error ? err.message : String(err)
         setRecordingError(msg)
         setIsRecording(false)
         setIsPaused(false)
         throw err
+      } finally {
+        setIsStartingRecording(false)
       }
     },
     [captureMode]
@@ -170,11 +209,13 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const pauseRecording = useCallback(() => {
     engineRef.current?.pause()
+    transportRef.current?.pause()
     setIsPaused(true)
   }, [])
 
   const resumeRecording = useCallback(() => {
     engineRef.current?.resume()
+    transportRef.current?.resume()
     setIsPaused(false)
   }, [])
 
@@ -184,6 +225,7 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
         throw new Error('Gravador não inicializado.')
       }
       const result = await engineRef.current.stop({ userId })
+      await transportRef.current?.finalize()
       setIsRecording(false)
       setIsPaused(false)
       setElapsedMs(0)
@@ -194,6 +236,7 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const cancelRecording = useCallback(() => {
     engineRef.current?.cleanup()
+    transportRef.current?.cancel()
     setIsRecording(false)
     setIsPaused(false)
     setElapsedMs(0)
@@ -215,14 +258,17 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
         title,
         options,
         isRecording,
+        isStartingRecording,
         isPaused,
         elapsedMs,
         captureMode,
         recordingError,
+        liveTranscription,
         setCaptureMode,
         setRecordingData,
         setTitle,
         clearRecording,
+        clearLiveTranscription,
         updateOptions,
         startRecording,
         pauseRecording,

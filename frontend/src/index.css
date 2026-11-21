@@ -56,3 +56,39 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(29, 26, 43, 0.25);
 }
+
+@keyframes liveCaretPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.15;
+  }
+}
+
+@keyframes liveTokenReveal {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-live-caret {
+  animation: liveCaretPulse 1s ease-in-out infinite;
+}
+
+.animate-live-fade {
+  animation: liveTokenReveal 180ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-live-caret,
+  .animate-live-fade {
+    animation: none;
+  }
+}
