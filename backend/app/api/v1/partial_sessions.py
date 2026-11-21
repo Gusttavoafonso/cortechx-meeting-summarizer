@@ -78,7 +78,7 @@ def start_partial(payload: StartPartial, user: User = Depends(get_current_user))
         count = db.scalar(select(func.count()).select_from(PartialSession).where(
             PartialSession.user_id == user.id, PartialSession.state.in_(ACTIVE)
         ))
-        if count >= 2:
+        if count >= 4:
             raise HTTPException(429, "Encerre as sessões parciais anteriores.")
         row = PartialSession(
             id=session_id, user_id=user.id, provider=payload.provider,
