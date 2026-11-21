@@ -13,6 +13,11 @@ import {
   CaptureMode,
   RecordingResult,
 } from '../lib/audioRecorder'
+import {
+  EMPTY_PARTIAL,
+  PartialState,
+  PartialTranscriptionClient,
+} from '../lib/partialTranscription'
 
 export interface MeetingOptions {
   language: 'pt' | 'en' | 'es' | 'auto'
@@ -31,6 +36,7 @@ export const DEFAULT_MEETING_OPTIONS: MeetingOptions = {
 }
 
 interface RecordingContextValue {
+  partial: PartialState
   recordedFile: File | null
   durationMs: number | null
   title: string
@@ -60,6 +66,9 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const engineRef = useRef<AudioRecorderEngine | null>(null)
+  const partialRef = useRef<PartialTranscriptionClient | null>(null)
+  const startingRef = useRef(false)
+  const [partial, setPartial] = useState<PartialState>(EMPTY_PARTIAL)
   const [recordedFile, setRecordedFile] = useState<File | null>(null)
   const [durationMs, setDurationMs] = useState<number | null>(null)
   const [title, setTitle] = useState('')
@@ -74,6 +83,7 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     engineRef.current = new AudioRecorderEngine()
     return () => {
+      partialRef.current?.cancel()
       engineRef.current?.cleanup()
     }
   }, [])
@@ -101,6 +111,9 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
   )
 
   const clearRecording = useCallback(() => {
+    partialRef.current?.cancel()
+    partialRef.current = null
+    setPartial(EMPTY_PARTIAL)
     setRecordedFile(null)
     setDurationMs(null)
   }, [])
@@ -115,6 +128,7 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const startRecording = useCallback(
     async (mode?: CaptureMode) => {
+      if (startingRef.current || engineRef.current?.isRecording) return
       const targetMode = mode ?? captureMode
       setRecordingError(null)
 
@@ -129,10 +143,27 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
         engineRef.current = new AudioRecorderEngine()
       }
 
+      startingRef.current = true
+      partialRef.current?.cancel()
+      let live: PartialTranscriptionClient | null = null
+      try {
+        live = new PartialTranscriptionClient(
+          { language: options.language }, setPartial
+        )
+        partialRef.current = live
+        void live.start()
+      } catch {
+        setPartial({ ...EMPTY_PARTIAL, state: 'failed',
+          error: 'Prévia indisponível neste navegador. A gravação final continua disponível.' })
+      }
       try {
         await engineRef.current.start({
           mode: targetMode,
-          onTick: (ms) => setElapsedMs(ms),
+          onChunk: (blob) => live?.enqueue(blob),
+          onTick: (ms) => {
+            setElapsedMs(ms)
+            live?.captureTime(ms)
+          },
           onStateChange: (state) => {
             if (state === 'paused') {
               setIsPaused(true)
@@ -158,14 +189,17 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
         setIsRecording(true)
         setIsPaused(false)
       } catch (err) {
+        live?.cancel()
         const msg = err instanceof Error ? err.message : String(err)
         setRecordingError(msg)
         setIsRecording(false)
         setIsPaused(false)
         throw err
+      } finally {
+        startingRef.current = false
       }
     },
-    [captureMode]
+    [captureMode, options.language]
   )
 
   const pauseRecording = useCallback(() => {
@@ -184,6 +218,9 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
         throw new Error('Gravador não inicializado.')
       }
       const result = await engineRef.current.stop({ userId })
+      // onstop runs after the final dataavailable event. Never await the network.
+      partialRef.current?.captureTime(result.durationMs)
+      partialRef.current?.finish()
       setIsRecording(false)
       setIsPaused(false)
       setElapsedMs(0)
@@ -193,6 +230,9 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
   )
 
   const cancelRecording = useCallback(() => {
+    partialRef.current?.cancel()
+    partialRef.current = null
+    setPartial(EMPTY_PARTIAL)
     engineRef.current?.cleanup()
     setIsRecording(false)
     setIsPaused(false)
@@ -210,6 +250,7 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
   return (
     <RecordingContext.Provider
       value={{
+        partial,
         recordedFile,
         durationMs,
         title,

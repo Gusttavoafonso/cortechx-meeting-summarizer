@@ -39,6 +39,7 @@ export class AudioRecorderEngine {
   public onTick?: (elapsedMs: number) => void
   public onStateChange?: (state: 'recording' | 'paused' | 'stopped') => void
   public onSourceEnded?: (source: 'system' | 'mic') => void
+  public onChunk?: (blob: Blob) => void
 
   static isSupported(): boolean {
     return !!(
@@ -58,11 +59,13 @@ export class AudioRecorderEngine {
     onTick,
     onStateChange,
     onSourceEnded,
+    onChunk,
   }: {
     mode?: CaptureMode
     onTick?: (elapsedMs: number) => void
     onStateChange?: (state: 'recording' | 'paused' | 'stopped') => void
     onSourceEnded?: (source: 'system' | 'mic') => void
+    onChunk?: (blob: Blob) => void
   } = {}): Promise<void> {
     if (this.isRecording) {
       throw new Error('A gravação já está em andamento.')
@@ -71,6 +74,7 @@ export class AudioRecorderEngine {
     this.onTick = onTick
     this.onStateChange = onStateChange
     this.onSourceEnded = onSourceEnded
+    this.onChunk = onChunk
     this.recordedChunks = []
 
     const AudioContextClass =
@@ -197,6 +201,12 @@ export class AudioRecorderEngine {
     this.mediaRecorder.ondataavailable = (event) => {
       if (event.data && event.data.size > 0) {
         this.recordedChunks.push(event.data)
+        // The original Blob is retained for the final file before partial delivery.
+        try {
+          this.onChunk?.(event.data)
+        } catch {
+          // A partial callback must never break capture or the complete audio file.
+        }
       }
     }
 
@@ -330,6 +340,16 @@ export class AudioRecorderEngine {
   }
 
   cleanup() {
+    this.stopTimer()
+    const recorder = this.mediaRecorder
+    if (recorder) {
+      recorder.ondataavailable = null
+      recorder.onstop = null
+      recorder.onerror = null
+      if (recorder.state !== 'inactive') recorder.stop()
+    }
+    this.onChunk = undefined
+    this.recordedChunks = []
     this.isRecording = false
     this.isPaused = false
     this.cleanupStreams()

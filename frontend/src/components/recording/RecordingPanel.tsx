@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { useRecordingContext } from '../../context/RecordingContext'
 import { Button } from '../ui/Button'
+import { PartialTranscriptPanel } from './PartialTranscriptPanel'
 import { Card } from '../ui/Card'
 import { formatSecondsToTime } from '../../lib/utils'
 
@@ -28,6 +29,7 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
 }) => {
   const animFrameRef = useRef<number | null>(null)
   const {
+    partial,
     isRecording,
     isPaused,
     elapsedMs,
@@ -286,6 +288,8 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
           </div>
         </div>
       )}
+
+      <PartialTranscriptPanel partial={partial} />
 
       {/* Erro */}
       {displayError && (

@@ -19,6 +19,7 @@ import {
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { RecordingPanel } from '../components/recording/RecordingPanel'
+import { PartialTranscriptPanel } from '../components/recording/PartialTranscriptPanel'
 import { MeetingOptionsModal } from '../components/recording/MeetingOptionsModal'
 import { useRecordingContext } from '../context/RecordingContext'
 import { createMeeting, processMeeting, uploadMeetingAudio } from '../api/meetings'
@@ -596,6 +597,10 @@ export const NewMeeting: React.FC = () => {
             </span>
           </div>
         </Card>
+      )}
+
+      {selectedFile && inputMethod === 'record' && (
+        <PartialTranscriptPanel partial={recordingCtx.partial} />
       )}
 
       {/* Validation / Error alerts */}
