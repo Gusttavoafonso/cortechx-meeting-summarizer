@@ -20,7 +20,7 @@ from app.models.user import User
 from app.services import partial_stream as transport
 from app.workers.partial_job import consume_partial_session
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 ACTIVE = ("recording", "finishing")
 
 

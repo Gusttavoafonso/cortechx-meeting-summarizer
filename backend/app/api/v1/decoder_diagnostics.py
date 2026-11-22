@@ -26,7 +26,7 @@ def _require_debug() -> None:
         raise HTTPException(404, "Diagnostico disponivel somente com APP_DEBUG=true.")
 
 
-router = APIRouter(dependencies=[Depends(_require_debug)])
+router = APIRouter(dependencies=[Depends(_require_debug), Depends(get_current_user)])
 
 
 def _validate_webm_header(chunks: list[UploadFile]) -> None:
