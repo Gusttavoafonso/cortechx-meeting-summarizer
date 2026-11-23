@@ -21,6 +21,15 @@ import { StatusBadge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { formatBytes, formatMeetingDate, formatSecondsToTime } from '../lib/utils'
 
+// Status HTTP do erro, quando o cliente HTTP o expõe (ex.: ApiError.status).
+function getErrorStatus(error: unknown): number | undefined {
+  if (typeof error === 'object' && error !== null && 'status' in error) {
+    const { status } = error as { status: unknown }
+    return typeof status === 'number' ? status : undefined
+  }
+  return undefined
+}
+
 export const MeetingDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const meetingId = Number(id)
@@ -45,7 +54,13 @@ export const MeetingDetails: React.FC = () => {
     },
   })
 
-  const { data: summaryData } = useQuery({
+  const {
+    data: summaryData,
+    isError: isSummaryError,
+    error: summaryError,
+    isFetching: isSummaryFetching,
+    refetch: refetchSummary,
+  } = useQuery({
     queryKey: ['meeting-summary', meetingId],
     queryFn: () => fetchMeetingSummary(meetingId),
     enabled: !isNaN(meetingId) && meetingId > 0 && meeting?.status === 'completed',
@@ -104,6 +119,9 @@ export const MeetingDetails: React.FC = () => {
   const isProcessing =
     meeting.status === 'processing' || meeting.status === 'transcribing'
   const summary = summaryData ?? meeting.summary
+  // 404 = a reunião ainda não tem resumo (estado esperado, sem alarme).
+  // Qualquer outra falha precisa ser comunicada ao usuário.
+  const summaryFailed = isSummaryError && getErrorStatus(summaryError) !== 404
 
   return (
     <div className="flex-1 px-8 py-10 max-w-5xl mx-auto w-full">
@@ -175,6 +193,40 @@ export const MeetingDetails: React.FC = () => {
             </p>
           </div>
         </Card>
+      )}
+
+      {/* Summary loading (também na nova tentativa, quando o aviso some) */}
+      {isSummaryFetching && !summary && (
+        <p role="status" className="mb-6 flex items-center gap-2 text-xs text-muted">
+          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+          Carregando resumo...
+        </p>
+      )}
+
+      {/* Summary load failure */}
+      {summaryFailed && (
+        <div
+          role="alert"
+          className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 flex items-start gap-3"
+        >
+          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+          <div className="flex-1 text-xs text-rose-700">
+            <p className="font-semibold">Não foi possível carregar o resumo.</p>
+            <p className="mt-0.5">
+              {summaryError instanceof Error
+                ? summaryError.message
+                : 'Tente novamente em instantes.'}
+              {summary ? ' O conteúdo exibido abaixo pode estar desatualizado.' : ''}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => refetchSummary()}
+            leftIcon={<RefreshCw className="w-4 h-4" />}
+          >
+            Tentar novamente
+          </Button>
+        </div>
       )}
 
       {/* Summary Section (if available) */}

@@ -1,6 +1,6 @@
 export const API_BASE_URL =
   (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, '') ||
-  'http://localhost:8001'
+  'http://localhost:8000'
 
 export class ApiError extends Error {
   status: number

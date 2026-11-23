@@ -37,13 +37,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [checkSession])
 
   const login = useCallback(async (data: UserLoginRequest) => {
-    const loggedUser = await authApi.login(data)
+    await authApi.login(data)            // grava o cookie de sessão
+    const loggedUser = await authApi.getMe()
     setUser(loggedUser)
     return loggedUser
   }, [])
 
   const register = useCallback(async (data: UserRegisterRequest) => {
-    const registeredUser = await authApi.register(data)
+    await authApi.register(data)         // cria a conta (não inicia sessão)
+    await authApi.login(data)            // entra com a conta recém-criada
+    const registeredUser = await authApi.getMe()
     setUser(registeredUser)
     return registeredUser
   }, [])

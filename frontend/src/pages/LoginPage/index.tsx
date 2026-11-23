@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Mail,
   Lock,
@@ -15,6 +15,52 @@ import { Input } from '../../components/ui/Input'
 import { GoogleLoginButton } from '../../components/auth/GoogleLoginButton'
 import { useAuth } from '../../contexts/AuthContext'
 import { ApiError } from '../../api/client'
+
+// Destino que o ProtectedRoute guardou antes de mandar o usuário para o login.
+type LoginLocationState = {
+  from?: { pathname: string; search?: string; hash?: string }
+} | null
+
+type FieldError = { loc?: unknown[]; msg?: unknown }
+
+const FIELD_LABELS: Record<string, string> = {
+  name: 'nome',
+  email: 'e-mail',
+  password: 'senha',
+}
+
+/** Converte o `detail` do FastAPI (texto ou lista de erros de campo) em texto. */
+function formatApiDetail(detail: unknown): string | null {
+  if (typeof detail === 'string') return detail.trim() || null
+
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((item) => {
+        if (typeof item === 'string') return item
+        if (item && typeof item === 'object') {
+          const { loc, msg } = item as FieldError
+          if (typeof msg !== 'string') return null
+          const field = Array.isArray(loc) ? String(loc[loc.length - 1] ?? '') : ''
+          const label = FIELD_LABELS[field] ?? field
+          return label && Number.isNaN(Number(label)) ? `${label}: ${msg}` : msg
+        }
+        return null
+      })
+      .filter((p): p is string => Boolean(p))
+    return parts.length ? parts.join('; ') : null
+  }
+
+  return null
+}
+
+function getAuthErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) {
+    const detail = formatApiDetail((err.data as { detail?: unknown } | null)?.detail)
+    return detail || err.message || fallback
+  }
+  if (err instanceof Error) return err.message
+  return fallback
+}
 
 export const LoginPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -32,12 +78,19 @@ export const LoginPage: React.FC = () => {
   const { login, register, loginWithGoogle, isAuthenticated } = useAuth()
   const navigate = useNavigate()
 
+
+  const location = useLocation()
+  const from = (location.state as LoginLocationState)?.from
+  const redirectTo = from
+    ? `${from.pathname}${from.search ?? ''}${from.hash ?? ''}`
+    : '/meetings'
+
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/meetings', { replace: true })
+      navigate(redirectTo, { replace: true })
     }
-  }, [isAuthenticated, navigate])
+  }, [isAuthenticated, redirectTo, navigate])
 
   // Sync mode with query parameter
   const handleSwitchMode = (newMode: 'login' | 'register') => {
@@ -72,16 +125,9 @@ export const LoginPage: React.FC = () => {
       } else {
         await login({ email, password })
       }
-      navigate('/meetings')
+      navigate(redirectTo)
     } catch (err: unknown) {
-      if (err instanceof ApiError) {
-        const detail = (err.data as { detail?: string })?.detail
-        setError(detail || err.message || 'Erro ao realizar autenticação.')
-      } else if (err instanceof Error) {
-        setError(err.message)
-      } else {
-        setError('Ocorreu um erro inesperado ao conectar ao servidor.')
-      }
+       setError(getAuthErrorMessage(err, 'Ocorreu um erro inesperado ao conectar ao servidor.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -92,16 +138,9 @@ export const LoginPage: React.FC = () => {
     try {
       setIsSubmitting(true)
       await loginWithGoogle(credential)
-      navigate('/meetings')
+      navigate(redirectTo)
     } catch (err: unknown) {
-      if (err instanceof ApiError) {
-        const detail = (err.data as { detail?: string })?.detail
-        setError(detail || err.message)
-      } else if (err instanceof Error) {
-        setError(err.message)
-      } else {
-        setError('Falha ao autenticar com a conta do Google.')
-      }
+      setError(getAuthErrorMessage(err, 'Erro ao autenticar com o Google.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -182,7 +221,7 @@ export const LoginPage: React.FC = () => {
           <div className="mb-6">
             <GoogleLoginButton
               onSuccess={handleGoogleSuccess}
-              onError={(err) => setError(err.message)}
+              onError={(err) => setError(getAuthErrorMessage(err, 'Erro ao autenticar com o Google.'))}
               disabled={isSubmitting}
               text={mode === 'login' ? 'continue_with' : 'signup_with'}
             />

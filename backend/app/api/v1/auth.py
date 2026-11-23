@@ -74,11 +74,21 @@ def register(
     response_model=Token,
     summary="Entrar com e-mail e senha (OAuth2 password flow)",
 )
+@router.post(
+    "/login",
+    response_model=Token,
+    summary="Entrar com e-mail e senha (OAuth2 password flow)",
+)
 def login(
+    response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_session),
 ) -> Token:
-    """O campo `username` do formulário OAuth2 recebe o e-mail."""
+    """O campo `username` do formulário OAuth2 recebe o e-mail.
+
+    Devolve o token (Bearer) e também grava o cookie HttpOnly de sessão,
+    usado pelo frontend.
+    """
     try:
         user = authenticate_with_credentials(
             db=db,
@@ -92,6 +102,7 @@ def login(
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
 
+    _set_session_cookie(response, user.id)
     return Token(access_token=create_access_token(user.id), token_type="bearer")
 
 

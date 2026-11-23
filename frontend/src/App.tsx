@@ -14,6 +14,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { TasksPage } from './pages/TasksPage'
 import { TranscriptsPage } from './pages/TranscriptsPage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { ProtectedRoute } from './components/auth/ProtectedRoute'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -38,6 +39,7 @@ export const App: React.FC = () => {
               <Route path="/login" element={<LoginPage />} />
 
               {/* Authenticated / App Workspace */}
+            <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
                 <Route path="meetings" element={<MeetingsList />} />
                 <Route path="meetings/new" element={<NewMeeting />} />
@@ -48,6 +50,7 @@ export const App: React.FC = () => {
                 <Route path="settings" element={<SettingsPage />} />
                 <Route path="*" element={<NotFoundPage />} />
               </Route>
+            </Route>
             </Routes>
           </BrowserRouter>
         </RecordingProvider>

@@ -9,14 +9,15 @@ import {
 export type { UserPublic, UserLoginRequest, UserRegisterRequest, GoogleAuthRequest }
 
 export const authApi = {
-  login: (data: UserLoginRequest): Promise<UserPublic> =>
-    request<UserPublic>('/auth/login', {
+  login: (data: UserLoginRequest): Promise<{ access_token: string; token_type: string }> =>
+    request('/auth/login', {
       method: 'POST',
-      body: JSON.stringify(data),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ username: data.email, password: data.password }),
     }),
 
-  register: (data: UserRegisterRequest): Promise<UserPublic> =>
-    request<UserPublic>('/auth/register', {
+  register: (data: UserRegisterRequest): Promise<unknown> =>
+    request('/auth/register', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
@@ -28,9 +29,9 @@ export const authApi = {
     }),
 
   getMe: (): Promise<UserPublic> =>
-    request<UserPublic>('/auth/me', {
-      method: 'GET',
-    }),
+  request<UserPublic>('/users/me', {
+    method: 'GET',
+  }),
 
   logout: (): Promise<{ message: string }> =>
     request<{ message: string }>('/auth/logout', {
@@ -42,11 +43,9 @@ export async function getMe(): Promise<UserPublic> {
   return authApi.getMe()
 }
 
-export async function loginUser(
-  email: string,
-  password: string
-): Promise<UserPublic> {
-  return authApi.login({ email, password })
+export async function loginUser(email: string, password: string): Promise<UserPublic> {
+  await authApi.login({ email, password })
+  return authApi.getMe()
 }
 
 export async function registerUser(
@@ -54,7 +53,9 @@ export async function registerUser(
   password: string,
   name: string
 ): Promise<UserPublic> {
-  return authApi.register({ email, password, name })
+  await authApi.register({ email, password, name })
+  await authApi.login({ email, password })
+  return authApi.getMe()
 }
 
 export async function logoutUser(): Promise<{ message: string }> {
