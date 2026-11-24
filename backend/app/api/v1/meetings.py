@@ -7,9 +7,11 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Response,
     UploadFile,
     status,
 )
+from fastapi.responses import FileResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -20,7 +22,7 @@ from app.core.exceptions import (
     LLMError,
     TranscriptionAudioCorruptedError,
 )
-from app.models.meeting_status import MeetingStatus
+from app.models.meeting_status import IN_PROGRESS_STATUSES, MeetingStatus
 from app.models.user import User
 from app.repositories.audio_repository import AudioRepository
 from app.repositories.meeting_repository import MeetingRepository
@@ -31,11 +33,14 @@ from app.repositories.transcript_repository import (
 )
 from app.schemas.audio import AudioUploadResponse
 from app.schemas.meeting import (
+    GlobalTaskItemResponse,
     MeetingCreate,
     MeetingProcessOptions,
     MeetingProcessResponse,
     MeetingResponse,
+    MeetingStatsResponse,
     MeetingStatusResponse,
+    MeetingSummaryPreview,
 )
 from app.schemas.summary import SummaryResponse
 from app.schemas.transcription import TranscriptResponse
@@ -138,6 +143,38 @@ def _mark_failed(
     )
 
 
+def _to_meeting_response(
+    meeting, *, include_transcript: bool = True
+) -> MeetingResponse:
+    summary_preview = None
+    if getattr(meeting, "summary", None) is not None:
+        summary_preview = MeetingSummaryPreview(
+            objective=meeting.summary.objective,
+            summary=meeting.summary.summary,
+            tasks_count=len(getattr(meeting, "tasks", None) or []),
+        )
+    transcript = (
+        TranscriptResponse.model_validate(meeting.transcript)
+        if include_transcript and getattr(meeting, "transcript", None) is not None
+        else None
+    )
+    return MeetingResponse(
+        id=meeting.id,
+        title=meeting.title,
+        status=meeting.status,
+        created_at=meeting.created_at,
+        updated_at=meeting.updated_at,
+        processing_started_at=meeting.processing_started_at,
+        processing_completed_at=meeting.processing_completed_at,
+        last_error=meeting.last_error,
+        audio=AudioUploadResponse.model_validate(meeting.audio)
+        if getattr(meeting, "audio", None) is not None
+        else None,
+        transcript=transcript,
+        summary=summary_preview,
+    )
+
+
 @router.post(
     "",
     response_model=MeetingResponse,
@@ -163,7 +200,56 @@ def list_meetings(
     meeting_service: MeetingService = Depends(get_meeting_service),
 ) -> list[MeetingResponse]:
     meetings = meeting_service.list_all(user_id=current_user.id)
-    return [MeetingResponse.model_validate(m) for m in meetings]
+    return [_to_meeting_response(m, include_transcript=False) for m in meetings]
+
+
+@router.get(
+    "/stats",
+    response_model=MeetingStatsResponse,
+    summary="Indicadores agregados das reuniões do usuário",
+)
+def get_meeting_stats(
+    current_user: User = Depends(get_current_user),
+    meeting_repo: MeetingRepository = Depends(get_meeting_repository),
+) -> MeetingStatsResponse:
+    stats = meeting_repo.get_stats_by_user(current_user.id)
+    return MeetingStatsResponse(
+        total_meetings=stats["total_meetings"],
+        completed_meetings=stats["completed_meetings"],
+        processing_meetings=stats["processing_meetings"],
+        failed_meetings=stats["failed_meetings"],
+        total_audio_seconds=stats["total_audio_seconds"],
+        total_tasks=stats["total_tasks"],
+        recent_meetings=[
+            _to_meeting_response(m, include_transcript=False)
+            for m in stats["recent_meetings"]
+        ],
+    )
+
+
+@router.get(
+    "/tasks",
+    response_model=list[GlobalTaskItemResponse],
+    summary="Listar todas as tarefas extraídas das reuniões do usuário",
+)
+def list_user_tasks(
+    current_user: User = Depends(get_current_user),
+    meeting_repo: MeetingRepository = Depends(get_meeting_repository),
+) -> list[GlobalTaskItemResponse]:
+    rows = meeting_repo.list_tasks_by_user(current_user.id)
+    return [
+        GlobalTaskItemResponse(
+            id=task.id,
+            meeting_id=task.meeting_id,
+            meeting_title=meeting_title,
+            meeting_status=meeting_status,
+            description=task.description,
+            responsible=task.responsible,
+            deadline=task.deadline,
+            created_at=task.created_at,
+        )
+        for task, meeting_title, meeting_status in rows
+    ]
 
 
 @router.get(
@@ -184,7 +270,41 @@ def get_meeting(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Reunião com ID {meeting_id} não encontrada.",
         )
-    return MeetingResponse.model_validate(meeting)
+    return _to_meeting_response(meeting, include_transcript=True)
+
+
+@router.delete(
+    "/{meeting_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    summary="Excluir reunião e seu áudio",
+)
+def delete_meeting(
+    meeting_id: int,
+    current_user: User = Depends(get_current_user),
+    meeting_repo: MeetingRepository = Depends(get_meeting_repository),
+    storage_service: AudioStorageService = Depends(get_audio_storage_service),
+) -> Response:
+    validate_meeting_id(meeting_id)
+    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
+    if meeting is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reunião com ID {meeting_id} não encontrada.",
+        )
+    if meeting.status in IN_PROGRESS_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Não é possível excluir uma reunião enquanto ela está em processamento."
+            ),
+        )
+
+    audio_path = meeting.audio.file_path if meeting.audio is not None else None
+    meeting_repo.delete(meeting)
+    if audio_path:
+        storage_service.delete_file(audio_path)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(
@@ -329,6 +449,42 @@ def get_audio_metadata(
         duration_seconds=audio_record.duration_seconds,
         file_path=audio_record.file_path,
         uploaded_at=audio_record.created_at,
+    )
+
+
+@router.get(
+    "/{meeting_id}/audio/file",
+    summary="Baixar ou reproduzir o arquivo de áudio da reunião",
+)
+def download_audio_file(
+    meeting_id: int,
+    current_user: User = Depends(get_current_user),
+    meeting_repo: MeetingRepository = Depends(get_meeting_repository),
+    audio_repo: AudioRepository = Depends(get_audio_repository),
+    storage_service: AudioStorageService = Depends(get_audio_storage_service),
+) -> FileResponse:
+    validate_meeting_id(meeting_id)
+    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
+    if not meeting:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reunião com ID {meeting_id} não encontrada.",
+        )
+
+    audio_record = audio_repo.get_by_meeting_id(meeting_id)
+    if not audio_record or not storage_service.file_exists(audio_record.file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Arquivo de áudio não encontrado para a reunião com ID {meeting_id}."
+            ),
+        )
+
+    file_path = storage_service.get_file_path(audio_record.file_path)
+    return FileResponse(
+        path=file_path,
+        media_type=audio_record.content_type,
+        filename=audio_record.original_filename,
     )
 
 

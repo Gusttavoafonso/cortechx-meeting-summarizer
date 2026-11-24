@@ -160,6 +160,32 @@ class AudioStorageService(BaseAudioStorage):
                         if dur > 0:
                             return round(dur, 3)
 
+                    last_pkt_end = 0.0
+                    total_pkt_dur = 0.0
+                    tb = audio_stream.time_base
+                    for packet in container.demux(audio_stream):
+                        if packet.dts is None and packet.pts is None:
+                            continue
+                        pkt_tb = packet.time_base or tb
+                        if pkt_tb is None:
+                            continue
+                        pkt_dur = (
+                            float(packet.duration * pkt_tb)
+                            if packet.duration
+                            else 0.0
+                        )
+                        if packet.pts is not None:
+                            last_pkt_end = max(
+                                last_pkt_end, float(packet.pts * pkt_tb) + pkt_dur
+                            )
+                        if pkt_dur > 0:
+                            total_pkt_dur += pkt_dur
+                    if last_pkt_end > 0:
+                        return round(last_pkt_end, 3)
+                    if total_pkt_dur > 0:
+                        return round(total_pkt_dur, 3)
+
+                    container.seek(0)
                     total_samples = 0
                     sample_rate = audio_stream.sample_rate or 0
                     last_end = 0.0

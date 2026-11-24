@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -22,6 +22,14 @@ class MeetingCreate(MeetingBase):
         return clean
 
 
+class MeetingSummaryPreview(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    objective: str | None = None
+    summary: str | None = None
+    tasks_count: int = 0
+
+
 class MeetingResponse(MeetingBase):
     model_config = ConfigDict(from_attributes=True)
 
@@ -34,6 +42,28 @@ class MeetingResponse(MeetingBase):
     last_error: str | None = None
     audio: AudioUploadResponse | None = None
     transcript: TranscriptResponse | None = None
+    summary: MeetingSummaryPreview | None = None
+
+
+class MeetingStatsResponse(BaseModel):
+    total_meetings: int
+    completed_meetings: int
+    processing_meetings: int
+    failed_meetings: int
+    total_audio_seconds: float
+    total_tasks: int
+    recent_meetings: list[MeetingResponse] = Field(default_factory=list)
+
+
+class GlobalTaskItemResponse(BaseModel):
+    id: int
+    meeting_id: int
+    meeting_title: str
+    meeting_status: MeetingStatus
+    description: str
+    responsible: str | None = None
+    deadline: date | None = None
+    created_at: datetime
 
 
 class MeetingProcessOptions(BaseModel):
