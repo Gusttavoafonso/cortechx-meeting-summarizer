@@ -56,33 +56,30 @@ class FasterWhisperService(BaseSpeechToTextService):
             logger.info("Modelo faster-whisper carregado e armazenado em cache.")
         return _MODEL_CACHE[cache_key]
 
-    def transcribe(
+    def _run_transcribe(
         self,
-        audio_path: str | Path,
-        language: str = "pt",
+        source: str | Any,
+        *,
+        language: str | None = "pt",
+        beam_size: int | None = None,
+        condition_on_previous_text: bool | None = None,
     ) -> TranscriptionResult:
-        """Transcreve o arquivo local utilizando faster-whisper com Silero VAD."""
-        path_str = str(audio_path)
-        if not Path(path_str).is_file():
-            raise TranscriptionAudioNotFoundError(
-                f"Arquivo de áudio não encontrado para transcrição: {path_str}"
-            )
-
         model = self._get_model()
         vad_parameters = {
             "min_silence_duration_ms": self.min_silence_duration_ms,
         }
+        kwargs: dict[str, Any] = {
+            "language": language,
+            "vad_filter": self.vad_filter,
+            "vad_parameters": vad_parameters if self.vad_filter else None,
+        }
+        if beam_size is not None:
+            kwargs["beam_size"] = beam_size
+        if condition_on_previous_text is not None:
+            kwargs["condition_on_previous_text"] = condition_on_previous_text
 
-        logger.info(
-            f"Iniciando transcrição de '{path_str}' com VAD={self.vad_filter}..."
-        )
         try:
-            segments_gen, info = model.transcribe(
-                path_str,
-                language=language,
-                vad_filter=self.vad_filter,
-                vad_parameters=vad_parameters if self.vad_filter else None,
-            )
+            segments_gen, info = model.transcribe(source, **kwargs)
         except Exception as exc:
             err_msg = str(exc).lower()
             if any(
@@ -120,7 +117,7 @@ class FasterWhisperService(BaseSpeechToTextService):
         duration = (
             round(info.duration, 2) if info and info.duration is not None else None
         )
-        detected_language = info.language if info else language
+        detected_language = info.language if info else (language or "auto")
 
         logger.info(
             f"Transcrição concluída: {len(segments)} segmentos extraídos, "
@@ -132,4 +129,37 @@ class FasterWhisperService(BaseSpeechToTextService):
             segments=segments,
             language=detected_language,
             duration=duration,
+        )
+
+    def transcribe(
+        self,
+        audio_path: str | Path,
+        language: str = "pt",
+    ) -> TranscriptionResult:
+        """Transcreve o arquivo local utilizando faster-whisper com Silero VAD."""
+        path_str = str(audio_path)
+        if not Path(path_str).is_file():
+            raise TranscriptionAudioNotFoundError(
+                f"Arquivo de áudio não encontrado para transcrição: {path_str}"
+            )
+
+        logger.info(
+            f"Iniciando transcrição de '{path_str}' com VAD={self.vad_filter}..."
+        )
+        return self._run_transcribe(path_str, language=language)
+
+    def transcribe_array(
+        self,
+        audio: Any,
+        *,
+        language: str | None = "pt",
+        beam_size: int = 1,
+        condition_on_previous_text: bool = False,
+    ) -> TranscriptionResult:
+        """Transcreve um array float32 16 kHz diretamente em memória."""
+        return self._run_transcribe(
+            audio,
+            language=language,
+            beam_size=beam_size,
+            condition_on_previous_text=condition_on_previous_text,
         )

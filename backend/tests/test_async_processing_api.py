@@ -15,7 +15,6 @@ from app.repositories.meeting_repository import MeetingRepository
 from app.repositories.transcript_repository import TranscriptRepository
 from app.services.audio_storage import AudioStorageService
 from app.services.chunking import ChunkingService
-from app.services.diarization import DiarizationSegment
 from app.services.processing.meeting_processor import MeetingProcessor
 from app.services.transcription.base import SegmentData, TranscriptionResult
 from app.workers.meeting_job import run_meeting_processing_job
@@ -160,22 +159,12 @@ def test_end_to_end_async_processing_pipeline_execution(
         ],
     )
 
-    diarization_service = MagicMock()
-    diarization_service.diarize.return_value = [
-        DiarizationSegment(
-            speaker="SPEAKER_00",
-            start_time=0.0,
-            end_time=6.0,
-        )
-    ]
-
     def build_test_processor(session: Session) -> MeetingProcessor:
         return MeetingProcessor(
             meeting_repository=MeetingRepository(session),
             transcript_repository=TranscriptRepository(session),
             audio_storage_service=temp_storage_service,
             speech_to_text_service=stt_service,
-            diarization_service=diarization_service,
             chunking_service=ChunkingService(),
         )
 
@@ -198,7 +187,7 @@ def test_end_to_end_async_processing_pipeline_execution(
     assert transcript_resp.status_code == 200
     t_body = transcript_resp.json()
     assert len(t_body["segments"]) == 1
-    assert t_body["segments"][0]["speaker"] == "SPEAKER_00"
+    assert t_body["segments"][0]["speaker"] is None
 
 
 @pytest.fixture(autouse=True)
@@ -255,10 +244,6 @@ def test_atomic_rollback_on_llm_failure_prevents_partial_transcript_and_marks_fa
             )
         ],
     )
-    diarization_service = MagicMock()
-    diarization_service.diarize.return_value = [
-        DiarizationSegment(speaker="SPEAKER_01", start_time=0.0, end_time=5.0)
-    ]
     failing_summarizer = MagicMock()
     failing_summarizer.summarize.side_effect = RuntimeError("LLM quota exceeded")
 
@@ -267,7 +252,6 @@ def test_atomic_rollback_on_llm_failure_prevents_partial_transcript_and_marks_fa
         transcript_repository=TranscriptRepository(db_session),
         audio_storage_service=temp_storage_service,
         speech_to_text_service=stt_service,
-        diarization_service=diarization_service,
         chunking_service=ChunkingService(),
         summarization_service=failing_summarizer,
     )
@@ -337,7 +321,6 @@ def test_build_meeting_processor_wires_services(db_session: Session) -> None:
     assert processor._transcript_repository is not None
     assert processor._audio_storage_service is not None
     assert processor._speech_to_text_service is not None
-    assert processor._diarization_service is not None
     assert processor._chunking_service is not None
 
 

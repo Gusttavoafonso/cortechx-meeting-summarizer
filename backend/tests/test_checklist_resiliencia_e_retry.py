@@ -296,9 +296,6 @@ def test_8_atualizacao_correta_do_status(db_session, tmp_path):
         text="Transcrição ok", segments=[]
     )
 
-    diar_mock = MagicMock()
-    diar_mock.diarize.return_value = []
-
     chunk_mock = MagicMock()
     chunk_mock.split.return_value = ["chunk"]
 
@@ -311,7 +308,6 @@ def test_8_atualizacao_correta_do_status(db_session, tmp_path):
         transcript_repository=transcript_repo,
         audio_storage_service=storage_mock,
         speech_to_text_service=stt_mock,
-        diarization_service=diar_mock,
         chunking_service=chunk_mock,
         summarization_service=llm_mock,
         retry_policy=RetryPolicy(max_attempts=1),

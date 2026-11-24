@@ -13,10 +13,15 @@ import {
   CaptureMode,
   RecordingResult,
 } from '../lib/audioRecorder'
+import {
+  createLiveTranscriptionTransport,
+  INITIAL_LIVE_TRANSCRIPTION_STATE,
+  LiveTranscriptionState,
+  LiveTranscriptionTransport,
+} from '../lib/liveTranscription'
 
 export interface MeetingOptions {
   language: 'pt' | 'en' | 'es' | 'auto'
-  diarization: boolean
   provider: 'auto' | 'groq' | 'local'
   autoTasks: boolean
   exportNotion: boolean
@@ -24,7 +29,6 @@ export interface MeetingOptions {
 
 export const DEFAULT_MEETING_OPTIONS: MeetingOptions = {
   language: 'pt',
-  diarization: true,
   provider: 'auto',
   autoTasks: true,
   exportNotion: false,
@@ -36,14 +40,17 @@ interface RecordingContextValue {
   title: string
   options: MeetingOptions
   isRecording: boolean
+  isStartingRecording: boolean
   isPaused: boolean
   elapsedMs: number
   captureMode: CaptureMode
   recordingError: string | null
+  liveTranscription: LiveTranscriptionState
   setCaptureMode: (mode: CaptureMode) => void
   setRecordingData: (file: File, durationMs: number, customTitle?: string) => void
   setTitle: (title: string) => void
   clearRecording: () => void
+  clearLiveTranscription: () => void
   updateOptions: (newOptions: Partial<MeetingOptions>) => void
   startRecording: (mode?: CaptureMode) => Promise<void>
   pauseRecording: () => void
@@ -60,23 +67,46 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const engineRef = useRef<AudioRecorderEngine | null>(null)
+  const transportRef = useRef<LiveTranscriptionTransport | null>(null)
+  const unsubscribeTransportRef = useRef<(() => void) | null>(null)
+  const startingRef = useRef(false)
   const [recordedFile, setRecordedFile] = useState<File | null>(null)
   const [durationMs, setDurationMs] = useState<number | null>(null)
   const [title, setTitle] = useState('')
   const [options, setOptions] = useState<MeetingOptions>(DEFAULT_MEETING_OPTIONS)
 
   const [isRecording, setIsRecording] = useState(false)
+  const [isStartingRecording, setIsStartingRecording] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
   const [elapsedMs, setElapsedMs] = useState(0)
   const [captureMode, setCaptureMode] = useState<CaptureMode>('both')
   const [recordingError, setRecordingError] = useState<string | null>(null)
+  const [liveTranscription, setLiveTranscription] = useState<LiveTranscriptionState>(
+    INITIAL_LIVE_TRANSCRIPTION_STATE
+  )
+
+  const setupTransport = useCallback((language: MeetingOptions['language']) => {
+    unsubscribeTransportRef.current?.()
+    transportRef.current?.cancel()
+    const transport = createLiveTranscriptionTransport({ language })
+    transportRef.current = transport
+    unsubscribeTransportRef.current = transport.subscribe((nextState) => {
+      setLiveTranscription(nextState)
+    })
+    return transport
+  }, [])
 
   useEffect(() => {
     engineRef.current = new AudioRecorderEngine()
+    const transport = setupTransport(DEFAULT_MEETING_OPTIONS.language)
+
     return () => {
+      unsubscribeTransportRef.current?.()
+      transport.cancel()
+      transportRef.current?.cancel()
       engineRef.current?.cleanup()
     }
-  }, [])
+  }, [setupTransport])
 
   // Protege contra fechamento/recarregamento acidental da aba durante gravação ativa
   useEffect(() => {
@@ -103,6 +133,11 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
   const clearRecording = useCallback(() => {
     setRecordedFile(null)
     setDurationMs(null)
+    transportRef.current?.cancel()
+  }, [])
+
+  const clearLiveTranscription = useCallback(() => {
+    transportRef.current?.cancel()
   }, [])
 
   const updateOptions = useCallback((newOptions: Partial<MeetingOptions>) => {
@@ -115,6 +150,7 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const startRecording = useCallback(
     async (mode?: CaptureMode) => {
+      if (startingRef.current || engineRef.current?.isRecording) return
       const targetMode = mode ?? captureMode
       setRecordingError(null)
 
@@ -129,10 +165,16 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
         engineRef.current = new AudioRecorderEngine()
       }
 
+      startingRef.current = true
+      setIsStartingRecording(true)
+      const transport = setupTransport(options.language)
+
       try {
         await engineRef.current.start({
           mode: targetMode,
           onTick: (ms) => setElapsedMs(ms),
+          onChunk: (chunk) => transportRef.current?.pushChunk(chunk),
+          onPartialSegmentEnd: (epochId) => transportRef.current?.endSegment?.(epochId),
           onStateChange: (state) => {
             if (state === 'paused') {
               setIsPaused(true)
@@ -146,6 +188,7 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
           },
           onSourceEnded: (src) => {
             if (src === 'system') {
+              transportRef.current?.pause()
               engineRef.current?.pause()
               setIsPaused(true)
               setRecordingError(
@@ -154,26 +197,33 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
             }
           },
         })
+        transport.start()
         setCaptureMode(targetMode)
         setIsRecording(true)
         setIsPaused(false)
       } catch (err) {
+        transport.cancel()
         const msg = err instanceof Error ? err.message : String(err)
         setRecordingError(msg)
         setIsRecording(false)
         setIsPaused(false)
         throw err
+      } finally {
+        startingRef.current = false
+        setIsStartingRecording(false)
       }
     },
-    [captureMode]
+    [captureMode, options.language, setupTransport]
   )
 
   const pauseRecording = useCallback(() => {
+    transportRef.current?.pause()
     engineRef.current?.pause()
     setIsPaused(true)
   }, [])
 
   const resumeRecording = useCallback(() => {
+    transportRef.current?.resume()
     engineRef.current?.resume()
     setIsPaused(false)
   }, [])
@@ -184,6 +234,7 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
         throw new Error('Gravador não inicializado.')
       }
       const result = await engineRef.current.stop({ userId })
+      await transportRef.current?.finalize()
       setIsRecording(false)
       setIsPaused(false)
       setElapsedMs(0)
@@ -194,6 +245,7 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const cancelRecording = useCallback(() => {
     engineRef.current?.cleanup()
+    transportRef.current?.cancel()
     setIsRecording(false)
     setIsPaused(false)
     setElapsedMs(0)
@@ -215,14 +267,17 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
         title,
         options,
         isRecording,
+        isStartingRecording,
         isPaused,
         elapsedMs,
         captureMode,
         recordingError,
+        liveTranscription,
         setCaptureMode,
         setRecordingData,
         setTitle,
         clearRecording,
+        clearLiveTranscription,
         updateOptions,
         startRecording,
         pauseRecording,

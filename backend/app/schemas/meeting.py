@@ -38,7 +38,6 @@ class MeetingResponse(MeetingBase):
 
 class MeetingProcessOptions(BaseModel):
     language: str | None = None
-    diarization: bool | None = None
     provider: Literal["auto", "groq", "local"] | None = None
     auto_tasks: bool | None = None
     export_notion: bool | None = None

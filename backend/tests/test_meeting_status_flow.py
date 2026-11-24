@@ -8,7 +8,6 @@ from unittest.mock import MagicMock
 import pytest
 from app.api.v1.meetings import (
     get_audio_storage_service,
-    get_diarization_service,
     get_meeting_job_dispatcher,
     get_transcription_service,
 )
@@ -19,7 +18,6 @@ from app.repositories.meeting_repository import MeetingRepository
 from app.repositories.transcript_repository import TranscriptRepository
 from app.services.audio_storage import AudioStorageService
 from app.services.chunking import ChunkingService
-from app.services.diarization import DiarizationSegment
 from app.services.meeting_service import (
     InvalidMeetingTransitionError,
     MeetingService,
@@ -74,14 +72,13 @@ def _noop_dispatcher(_meeting_id: int, _background_tasks=None) -> None:
 
 @pytest.fixture(autouse=True)
 def storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Isola storage, STT, diarização, dispatcher e LLM para todos os testes."""
+    """Isola storage, STT, dispatcher e LLM para todos os testes."""
     audio_storage = AudioStorageService(base_storage_path=tmp_path)
 
     app.dependency_overrides[get_audio_storage_service] = lambda: audio_storage
     app.dependency_overrides[get_transcription_service] = lambda: (
         MockSpeechToTextService()
     )
-    app.dependency_overrides[get_diarization_service] = lambda: MagicMock()
     app.dependency_overrides[get_meeting_job_dispatcher] = lambda: _noop_dispatcher
     monkeypatch.setattr(
         "app.api.v1.meetings.get_llm_service",
@@ -93,7 +90,6 @@ def storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     for dependency in (
         get_audio_storage_service,
         get_transcription_service,
-        get_diarization_service,
         get_meeting_job_dispatcher,
     ):
         app.dependency_overrides.pop(dependency, None)
@@ -160,7 +156,6 @@ def _run_worker(
     audio_storage: AudioStorageService,
     meeting_id: int,
     stt_service: MagicMock,
-    diarization_service: MagicMock,
 ) -> None:
     def build_processor(session: Session) -> MeetingProcessor:
         return MeetingProcessor(
@@ -168,7 +163,6 @@ def _run_worker(
             transcript_repository=TranscriptRepository(session),
             audio_storage_service=audio_storage,
             speech_to_text_service=stt_service,
-            diarization_service=diarization_service,
             chunking_service=ChunkingService(),
         )
 
@@ -251,19 +245,13 @@ def test_status_is_processing_while_worker_runs_and_completed_after(
         observed.append(MeetingStatus(_persisted(db_session, meeting_id).status).value)
         return _transcription()
 
-    def fake_diarize(*_args, **_kwargs) -> list[DiarizationSegment]:
-        observed.append(MeetingStatus(_persisted(db_session, meeting_id).status).value)
-        return [DiarizationSegment(speaker="SPEAKER_00", start_time=0.0, end_time=6.0)]
-
     stt_service = MagicMock()
     stt_service.transcribe.side_effect = fake_transcribe
-    diarization_service = MagicMock()
-    diarization_service.diarize.side_effect = fake_diarize
 
-    _run_worker(db_session, storage, meeting_id, stt_service, diarization_service)
+    _run_worker(db_session, storage, meeting_id, stt_service)
 
     # Durante toda a execução do pipeline o estado permanece PROCESSING
-    assert observed == ["processing", "processing"]
+    assert observed == ["processing"]
 
     row = _persisted(db_session, meeting_id)
     assert MeetingStatus(row.status) == MeetingStatus.COMPLETED
@@ -283,7 +271,7 @@ def test_worker_failure_persists_failed_status_and_last_error(
     stt_service.transcribe.side_effect = RuntimeError("STT indisponível")
 
     with pytest.raises(RuntimeError, match="STT indisponível"):
-        _run_worker(db_session, storage, meeting_id, stt_service, MagicMock())
+        _run_worker(db_session, storage, meeting_id, stt_service)
 
     row = _persisted(db_session, meeting_id)
     assert MeetingStatus(row.status) == MeetingStatus.FAILED
@@ -305,7 +293,7 @@ def test_new_attempt_after_failure_clears_previous_error(
     stt_service = MagicMock()
     stt_service.transcribe.side_effect = RuntimeError("falha temporária")
     with pytest.raises(RuntimeError):
-        _run_worker(db_session, storage, meeting_id, stt_service, MagicMock())
+        _run_worker(db_session, storage, meeting_id, stt_service)
     assert _get_status(client, meeting_id)["status"] == "failed"
 
     # Nova tentativa a partir de FAILED
@@ -409,7 +397,7 @@ def test_invalid_transition_through_api_returns_409(
 # Processamento duplicado / simultâneo
 
 
-@pytest.mark.parametrize("action", ["transcribe", "diarize", "summary", "process"])
+@pytest.mark.parametrize("action", ["transcribe", "summary", "process"])
 def test_actions_are_rejected_while_meeting_is_processing(
     client: TestClient, action: str
 ) -> None:

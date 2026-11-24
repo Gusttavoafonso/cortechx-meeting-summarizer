@@ -1,9 +1,9 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   SlidersHorizontal,
   X,
   Globe,
-  Users,
+  AudioLines,
   Cpu,
   CheckCircle2,
   FileText,
@@ -22,6 +22,12 @@ export const MeetingOptionsModal: React.FC<MeetingOptionsModalProps> = ({
 }) => {
   const { options, updateOptions } = useRecordingContext()
   const [localOptions, setLocalOptions] = useState<MeetingOptions>(options)
+
+  useEffect(() => {
+    if (isOpen) {
+      setLocalOptions(options)
+    }
+  }, [isOpen, options])
 
   if (!isOpen) return null
 
@@ -82,30 +88,18 @@ export const MeetingOptionsModal: React.FC<MeetingOptionsModalProps> = ({
             </select>
           </div>
 
-          {/* Diarização */}
-          <div className="flex items-start justify-between gap-3 p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl">
-            <div className="flex items-start gap-2.5">
-              <Users className="w-4 h-4 text-brand shrink-0 mt-0.5 stroke-[2]" />
-              <div>
-                <p className="text-xs font-semibold text-ink">
-                  Identificação de oradores (Diarização)
-                </p>
-                <p className="text-[11px] text-muted">
-                  Separa automaticamente a transcrição por falantes (Interlocutor 1, 2...)
-                </p>
-              </div>
+          {/* Modo de transcrição contínua por chunks */}
+          <div className="flex items-start gap-2.5 p-3.5 bg-surface/60 border border-[#DCE2FB] rounded-xl">
+            <AudioLines className="w-4 h-4 text-brand shrink-0 mt-0.5 stroke-[2]" />
+            <div>
+              <p className="text-xs font-semibold text-ink">
+                Transcrição contínua por chunks
+              </p>
+              <p className="text-[11px] text-ink-light leading-snug mt-0.5">
+                A transcrição opera em fluxo cronológico contínuo por blocos de áudio, sem
+                separação ou identificação por oradores.
+              </p>
             </div>
-            <input
-              type="checkbox"
-              checked={localOptions.diarization}
-              onChange={(e) =>
-                setLocalOptions((prev) => ({
-                  ...prev,
-                  diarization: e.target.checked,
-                }))
-              }
-              className="w-4 h-4 mt-0.5 accent-primary-btn rounded cursor-pointer"
-            />
           </div>
 
           {/* Provedor de Transcrição */}
@@ -117,9 +111,7 @@ export const MeetingOptionsModal: React.FC<MeetingOptionsModalProps> = ({
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() =>
-                  setLocalOptions((prev) => ({ ...prev, provider: 'auto' }))
-                }
+                onClick={() => setLocalOptions((prev) => ({ ...prev, provider: 'auto' }))}
                 className={`p-3 text-left border rounded-xl text-xs transition-all ${
                   localOptions.provider === 'auto'
                     ? 'border-brand bg-brand/5 text-ink font-semibold'
@@ -142,7 +134,9 @@ export const MeetingOptionsModal: React.FC<MeetingOptionsModalProps> = ({
                 }`}
               >
                 <p className="font-semibold text-ink mb-0.5">Whisper Local</p>
-                <p className="text-[10px] text-muted">Processamento offline no servidor</p>
+                <p className="text-[10px] text-muted">
+                  Processamento offline no servidor
+                </p>
               </button>
             </div>
           </div>
@@ -178,9 +172,7 @@ export const MeetingOptionsModal: React.FC<MeetingOptionsModalProps> = ({
               <div className="flex items-start gap-2.5">
                 <FileText className="w-4 h-4 text-brand shrink-0 mt-0.5 stroke-[2]" />
                 <div>
-                  <p className="text-xs font-semibold text-ink">
-                    Sincronizar com Notion
-                  </p>
+                  <p className="text-xs font-semibold text-ink">Sincronizar com Notion</p>
                   <p className="text-[11px] text-muted">
                     Envia o resumo diretamente para o banco de dados configurado
                   </p>

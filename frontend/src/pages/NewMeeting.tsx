@@ -15,6 +15,11 @@ import {
   RefreshCw,
   AlertCircle,
   CheckCircle2,
+  AudioLines,
+  Copy,
+  Check,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -23,6 +28,7 @@ import { MeetingOptionsModal } from '../components/recording/MeetingOptionsModal
 import { useRecordingContext } from '../context/RecordingContext'
 import { createMeeting, processMeeting, uploadMeetingAudio } from '../api/meetings'
 import { useAuth } from '../contexts/AuthContext'
+import { buildFullTranscriptText } from '../lib/liveTranscription'
 import { formatBytes, formatSecondsToTime } from '../lib/utils'
 
 const MAX_FILE_SIZE_BYTES = 250 * 1024 * 1024 // 250MB
@@ -54,6 +60,8 @@ export const NewMeeting: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false)
   const [inputMethod, setInputMethod] = useState<'record' | 'upload'>('record')
   const [isOptionsOpen, setIsOptionsOpen] = useState(false)
+  const [isTranscriptPreviewOpen, setIsTranscriptPreviewOpen] = useState(true)
+  const [copiedTranscript, setCopiedTranscript] = useState(false)
 
   // Audio preview playback state
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
@@ -89,7 +97,8 @@ export const NewMeeting: React.FC = () => {
     if (recordingCtx.title && !title) {
       setTitle(recordingCtx.title)
     }
-  }, [recordingCtx.title, title])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordingCtx.title])
 
   // Restore recorded audio from global context if user switched tabs/pages
   useEffect(() => {
@@ -223,6 +232,7 @@ export const NewMeeting: React.FC = () => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      recordingCtx.clearLiveTranscription()
       validateAndSetFile(file)
     }
   }
@@ -242,6 +252,7 @@ export const NewMeeting: React.FC = () => {
     setIsDragging(false)
     const file = e.dataTransfer.files?.[0]
     if (file) {
+      recordingCtx.clearLiveTranscription()
       validateAndSetFile(file)
     }
   }
@@ -254,8 +265,24 @@ export const NewMeeting: React.FC = () => {
     setFailedStep(null)
     setErrorMessage(null)
     recordingCtx.clearRecording()
+    recordingCtx.clearLiveTranscription()
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
+    }
+  }
+
+  const handleCopyLiveTranscript = async () => {
+    const text = buildFullTranscriptText(
+      recordingCtx.liveTranscription.segments,
+      recordingCtx.liveTranscription.interimText
+    )
+    if (!text) return
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedTranscript(true)
+      setTimeout(() => setCopiedTranscript(false), 2000)
+    } catch {
+      // Ignora erro caso clipboard esteja bloqueado
     }
   }
 
@@ -321,13 +348,13 @@ export const NewMeeting: React.FC = () => {
       setFailedStep(null)
       await processMeeting(meetingId, {
         language: recordingCtx.options.language,
-        diarization: recordingCtx.options.diarization,
         provider: recordingCtx.options.provider,
         auto_tasks: recordingCtx.options.autoTasks,
         export_notion: recordingCtx.options.exportNotion,
       })
       setCurrentStep('done')
       recordingCtx.clearRecording()
+      recordingCtx.clearLiveTranscription()
 
       // Redireciona para a lista ou tela de detalhes da reunião
       setTimeout(() => {
@@ -421,7 +448,10 @@ export const NewMeeting: React.FC = () => {
           ref={titleInputRef}
           type="text"
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => {
+            setTitle(e.target.value)
+            recordingCtx.setTitle(e.target.value)
+          }}
           placeholder="Alinhamento de Produto — Sprint 04"
           disabled={currentStep !== 'idle' && currentStep !== 'failed'}
           className="w-full text-2xl font-bold font-sans text-ink bg-transparent border-b-2 border-transparent hover:border-slate-200 focus:border-brand focus:outline-none transition-colors pb-1 placeholder:text-muted/40"
@@ -595,6 +625,85 @@ export const NewMeeting: React.FC = () => {
                 : '--:--'}
             </span>
           </div>
+        </Card>
+      )}
+
+      {/* Live transcript preview after recording finishes */}
+      {selectedFile &&
+        (recordingCtx.liveTranscription.segments.length > 0 ||
+          recordingCtx.liveTranscription.interimText.trim().length > 0 ||
+          recordingCtx.liveTranscription.status === 'finalizing') && (
+        <Card className="mb-6 border-subtle-border shadow-xs overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 bg-surface/40 border-b border-subtle-border">
+            <button
+              type="button"
+              onClick={() => setIsTranscriptPreviewOpen((prev) => !prev)}
+              className="flex items-center gap-2 text-left group"
+            >
+              <div className="w-7 h-7 rounded-lg bg-surface text-brand flex items-center justify-center shrink-0">
+                <AudioLines className="w-4 h-4 stroke-[2.2]" />
+              </div>
+              <div>
+                <h4 className="font-sans text-sm font-semibold text-ink group-hover:text-brand transition-colors">
+                  Transcrição capturada ao vivo
+                </h4>
+                <p className="text-[11px] font-mono text-muted">
+                  {recordingCtx.liveTranscription.chunksReceived} chunks •{' '}
+                  {recordingCtx.liveTranscription.wordCount} palavras
+                </p>
+              </div>
+              {isTranscriptPreviewOpen ? (
+                <ChevronUp className="w-4 h-4 text-muted ml-1" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-muted ml-1" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCopyLiveTranscript}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-white text-ink-light hover:bg-slate-50 transition-colors"
+            >
+              {copiedTranscript ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="text-emerald-700">Copiado</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5 text-muted" />
+                  <span>Copiar</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {isTranscriptPreviewOpen && (
+            <div className="max-h-60 overflow-y-auto px-4 py-4 space-y-2.5 bg-white/70">
+              {recordingCtx.liveTranscription.segments.map((segment) => (
+                <div key={segment.id} className="flex items-start gap-3">
+                  <span className="font-mono text-[11px] text-muted/80 pt-0.5 shrink-0 select-none">
+                    {formatSecondsToTime(Math.floor(segment.startMs / 1000))}
+                  </span>
+                  <p className="text-sm leading-relaxed text-ink">{segment.text}</p>
+                </div>
+              ))}
+              {recordingCtx.liveTranscription.interimText && (
+                <div className="flex items-start gap-3">
+                  <span className="font-mono text-[11px] text-brand/80 pt-0.5 shrink-0 select-none">
+                    {formatSecondsToTime(
+                      Math.floor(
+                        (recordingCtx.liveTranscription.interimStartMs ?? 0) / 1000
+                      )
+                    )}
+                  </span>
+                  <p className="text-sm leading-relaxed text-ink-light">
+                    {recordingCtx.liveTranscription.interimText}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </Card>
       )}
 

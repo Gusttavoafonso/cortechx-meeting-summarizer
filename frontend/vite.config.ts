@@ -15,7 +15,7 @@ export default defineConfig({
     host: true,
     proxy: {
       '/meetings': {
-        target: 'http://localhost:8001',
+        target: 'http://localhost:8002',
         changeOrigin: true,
         bypass(req) {
           if (req.headers.accept?.includes('text/html')) {
@@ -24,7 +24,25 @@ export default defineConfig({
         },
       },
       '/auth': {
-        target: 'http://localhost:8001',
+        target: 'http://localhost:8002',
+        changeOrigin: true,
+        bypass(req) {
+          if (req.headers.accept?.includes('text/html')) {
+            return '/index.html'
+          }
+        },
+      },
+      '/partial-sessions': {
+        target: 'http://localhost:8002',
+        changeOrigin: true,
+        bypass(req) {
+          if (req.headers.accept?.includes('text/html')) {
+            return '/index.html'
+          }
+        },
+      },
+      '/users': {
+        target: 'http://localhost:8002',
         changeOrigin: true,
         bypass(req) {
           if (req.headers.accept?.includes('text/html')) {

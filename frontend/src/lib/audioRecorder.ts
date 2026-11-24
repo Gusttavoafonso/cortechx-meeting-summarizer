@@ -17,12 +17,22 @@ export interface AudioLevels {
   systemLevel: number
 }
 
+export interface AudioChunkEvent {
+  blob: Blob
+  seqIndex: number
+  epochId: number
+  elapsedMs: number
+  sizeBytes: number
+  mimeType: string
+}
+
 export class AudioRecorderEngine {
   private audioContext: AudioContext | null = null
   private micStream: MediaStream | null = null
   private systemStream: MediaStream | null = null
   private destinationNode: MediaStreamAudioDestinationNode | null = null
   private mediaRecorder: MediaRecorder | null = null
+  private partialRecorder: MediaRecorder | null = null
   private recordedChunks: Blob[] = []
 
   private micAnalyser: AnalyserNode | null = null
@@ -34,11 +44,16 @@ export class AudioRecorderEngine {
   public isPaused = false
   private startTime = 0
   private elapsedTime = 0
+  private selectedMimeType = ''
+  private partialEpochId = 0
+  private partialChunkSeq = 0
   private timerInterval: ReturnType<typeof setInterval> | null = null
 
   public onTick?: (elapsedMs: number) => void
   public onStateChange?: (state: 'recording' | 'paused' | 'stopped') => void
   public onSourceEnded?: (source: 'system' | 'mic') => void
+  public onChunk?: (chunk: AudioChunkEvent) => void
+  public onPartialSegmentEnd?: (epochId: number) => void
 
   static isSupported(): boolean {
     return !!(
@@ -58,11 +73,15 @@ export class AudioRecorderEngine {
     onTick,
     onStateChange,
     onSourceEnded,
+    onChunk,
+    onPartialSegmentEnd,
   }: {
     mode?: CaptureMode
     onTick?: (elapsedMs: number) => void
     onStateChange?: (state: 'recording' | 'paused' | 'stopped') => void
     onSourceEnded?: (source: 'system' | 'mic') => void
+    onChunk?: (chunk: AudioChunkEvent) => void
+    onPartialSegmentEnd?: (epochId: number) => void
   } = {}): Promise<void> {
     if (this.isRecording) {
       throw new Error('A gravação já está em andamento.')
@@ -71,7 +90,12 @@ export class AudioRecorderEngine {
     this.onTick = onTick
     this.onStateChange = onStateChange
     this.onSourceEnded = onSourceEnded
+    this.onChunk = onChunk
+    this.onPartialSegmentEnd = onPartialSegmentEnd
     this.recordedChunks = []
+    this.partialEpochId = 0
+    this.partialChunkSeq = 0
+    this.selectedMimeType = ''
 
     // 1. Capturar Áudio da Aba / Sistema PRIMEIRO (se modo 'both') para preservar o user gesture do clique
     if (mode === 'both') {
@@ -195,6 +219,7 @@ export class AudioRecorderEngine {
       }
     }
 
+    this.selectedMimeType = selectedMime
     const options: MediaRecorderOptions = selectedMime
       ? { mimeType: selectedMime, audioBitsPerSecond: 128000 }
       : {}
@@ -211,9 +236,93 @@ export class AudioRecorderEngine {
     this.isPaused = false
     this.startTime = Date.now()
     this.elapsedTime = 0
+    this.startPartialRecorder(0)
 
     this.startTimer()
     if (this.onStateChange) this.onStateChange('recording')
+  }
+
+  private startPartialRecorder(epochId: number) {
+    if (!this.destinationNode) return
+
+    const partialOptions: MediaRecorderOptions = this.selectedMimeType
+      ? { mimeType: this.selectedMimeType, audioBitsPerSecond: 128000 }
+      : {}
+
+    try {
+      const recorder = new MediaRecorder(this.destinationNode.stream, partialOptions)
+      this.partialRecorder = recorder
+      this.partialEpochId = epochId
+      this.partialChunkSeq = 0
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          const elapsedMs =
+            this.startTime > 0 ? Math.max(0, Date.now() - this.startTime) : 0
+          try {
+            this.onChunk?.({
+              blob: event.data,
+              seqIndex: this.partialChunkSeq++,
+              epochId,
+              elapsedMs,
+              sizeBytes: event.data.size,
+              mimeType: recorder.mimeType || this.selectedMimeType || 'audio/webm',
+            })
+          } catch {
+            // Callback parcial nunca deve quebrar a captura nem o arquivo final.
+          }
+        }
+      }
+
+      recorder.onstop = () => {
+        if (this.partialRecorder === recorder) {
+          this.partialRecorder = null
+        }
+        try {
+          this.onPartialSegmentEnd?.(epochId)
+        } catch {
+          // Ignora erro do callback de encerramento de segmento parcial.
+        }
+      }
+
+      recorder.start(1000)
+    } catch {
+      this.partialRecorder = null
+    }
+  }
+
+  private stopPartialRecorder(): Promise<void> {
+    const recorder = this.partialRecorder
+    if (!recorder || recorder.state === 'inactive') {
+      return Promise.resolve()
+    }
+
+    return new Promise((resolve) => {
+      let settled = false
+      const finish = () => {
+        if (settled) return
+        settled = true
+        resolve()
+      }
+
+      const prevOnStop = recorder.onstop
+      const timeout = setTimeout(finish, 1000)
+
+      recorder.onstop = (ev) => {
+        clearTimeout(timeout)
+        if (prevOnStop) {
+          prevOnStop.call(recorder, ev)
+        }
+        finish()
+      }
+
+      try {
+        recorder.stop()
+      } catch {
+        clearTimeout(timeout)
+        finish()
+      }
+    })
   }
 
   private startTimer() {
@@ -238,6 +347,7 @@ export class AudioRecorderEngine {
       this.mediaRecorder.pause()
       this.isPaused = true
       if (this.onStateChange) this.onStateChange('paused')
+      void this.stopPartialRecorder()
     }
   }
 
@@ -247,10 +357,13 @@ export class AudioRecorderEngine {
       this.isPaused = false
       this.startTime = Date.now() - this.elapsedTime
       if (this.onStateChange) this.onStateChange('recording')
+      this.startPartialRecorder(this.partialEpochId + 1)
     }
   }
 
-  async stop({ userId = 1 }: { userId?: number | string } = {}): Promise<RecordingResult> {
+  async stop({
+    userId = 1,
+  }: { userId?: number | string } = {}): Promise<RecordingResult> {
     if (!this.isRecording) {
       throw new Error('Nenhuma gravação em andamento.')
     }
@@ -263,13 +376,16 @@ export class AudioRecorderEngine {
         return reject(new Error('Gravador não inicializado.'))
       }
 
+      const partialStopPromise = this.stopPartialRecorder()
+
       this.mediaRecorder.onerror = (e) => {
         this.cleanup()
         reject(e)
       }
 
       this.mediaRecorder.onstop = () => {
-        const mimeType = this.mediaRecorder?.mimeType || 'audio/webm'
+        const mimeType =
+          this.mediaRecorder?.mimeType || this.selectedMimeType || 'audio/webm'
         const blob = new Blob(this.recordedChunks, { type: mimeType })
         const durationMs = this.elapsedTime
         const ext = mimeType.includes('ogg')
@@ -284,10 +400,12 @@ export class AudioRecorderEngine {
         const fileName = `gravacao-u${userId}-${formattedDate}.${ext}`
         const file = new File([blob], fileName, { type: mimeType })
 
-        this.cleanup()
-        if (this.onStateChange) this.onStateChange('stopped')
+        void partialStopPromise.finally(() => {
+          this.cleanup()
+          if (this.onStateChange) this.onStateChange('stopped')
 
-        resolve({ blob, file, durationMs, mimeType })
+          resolve({ blob, file, durationMs, mimeType })
+        })
       }
 
       try {
@@ -336,8 +454,41 @@ export class AudioRecorderEngine {
   }
 
   cleanup() {
+    this.stopTimer()
+    const partial = this.partialRecorder
+    if (partial) {
+      partial.ondataavailable = null
+      partial.onstop = null
+      partial.onerror = null
+      if (partial.state !== 'inactive') {
+        try {
+          partial.stop()
+        } catch {
+          // Ignora erro se o recorder parcial já estiver encerrado
+        }
+      }
+    }
+    this.partialRecorder = null
+    const recorder = this.mediaRecorder
+    if (recorder) {
+      recorder.ondataavailable = null
+      recorder.onstop = null
+      recorder.onerror = null
+      if (recorder.state !== 'inactive') {
+        try {
+          recorder.stop()
+        } catch {
+          // Ignora erro se o recorder já estiver encerrado
+        }
+      }
+    }
+    this.onChunk = undefined
+    this.onPartialSegmentEnd = undefined
+    this.recordedChunks = []
     this.isRecording = false
     this.isPaused = false
+    this.partialEpochId = 0
+    this.partialChunkSeq = 0
     this.cleanupStreams()
 
     if (this.audioContext && this.audioContext.state !== 'closed') {
