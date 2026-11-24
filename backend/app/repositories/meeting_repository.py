@@ -29,7 +29,7 @@ class MeetingRepository:
             select(Meeting)
             .where(
                 Meeting.id == meeting_id,
-                (Meeting.user_id == user_id) | (Meeting.user_id.is_(None)),
+                Meeting.user_id == user_id,
             )
             .options(
                 selectinload(Meeting.audio),
@@ -52,7 +52,7 @@ class MeetingRepository:
     def list_by_user(self, user_id: int) -> list[Meeting]:
         statement = (
             select(Meeting)
-            .where((Meeting.user_id == user_id) | (Meeting.user_id.is_(None)))
+            .where(Meeting.user_id == user_id)
             .options(
                 selectinload(Meeting.audio),
                 selectinload(Meeting.transcript).selectinload(Transcript.segments),

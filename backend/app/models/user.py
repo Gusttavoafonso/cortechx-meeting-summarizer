@@ -79,6 +79,10 @@ class User(Base):
     def _normalize_email(self, _key: str, value: str) -> str:
         return normalize_email(value)
 
+    @property
+    def has_password(self) -> bool:
+        return bool(self.hashed_password)
+
     meetings: Mapped[list[Meeting]] = relationship(
         "Meeting",
         back_populates="user",

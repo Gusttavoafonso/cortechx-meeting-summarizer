@@ -18,7 +18,7 @@ def test_valid_payload_is_accepted() -> None:
     payload = UserCreate(**VALID)
 
     assert payload.email == "ana@example.com"
-    assert payload.password == "senha-segura-1"
+    assert payload.password.get_secret_value() == "senha-segura-1"
 
 
 def test_name_and_email_are_trimmed_but_the_password_is_not() -> None:
@@ -28,7 +28,7 @@ def test_name_and_email_are_trimmed_but_the_password_is_not() -> None:
 
     assert payload.name == "Ana"
     assert payload.email == "ana@example.com"
-    assert payload.password == "  espacos-ok  "
+    assert payload.password.get_secret_value() == "  espacos-ok  "
 
 
 def test_blank_name_is_rejected() -> None:

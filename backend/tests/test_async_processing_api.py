@@ -312,8 +312,13 @@ def test_enqueue_meeting_processing_calls_celery_and_falls_back_to_background_ta
     assert len(bg_tasks.tasks) == 1
 
 
-def test_build_meeting_processor_wires_services(db_session: Session) -> None:
+def test_build_meeting_processor_wires_services(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from app.workers.meeting_job import build_meeting_processor
+
+    fake_llm = MagicMock()
+    monkeypatch.setattr("app.services.llm.service.get_llm_service", lambda: fake_llm)
 
     processor = build_meeting_processor(db_session)
     assert isinstance(processor, MeetingProcessor)
@@ -322,6 +327,8 @@ def test_build_meeting_processor_wires_services(db_session: Session) -> None:
     assert processor._audio_storage_service is not None
     assert processor._speech_to_text_service is not None
     assert processor._chunking_service is not None
+    assert processor._summarization_service is not None
+    assert processor._task_extraction_service is not None
 
 
 def test_run_meeting_processing_job_marks_failed_when_factory_fails(

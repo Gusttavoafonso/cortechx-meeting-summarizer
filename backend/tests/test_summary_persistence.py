@@ -166,14 +166,15 @@ def test_summary_response_includes_tasks(db_session):
 
 
 def test_get_summary_endpoint_returns_tasks(client, db_session):
-    meeting = _create_meeting(db_session)
+    created = client.post("/meetings", json={"title": "Reuniao de planejamento"})
+    meeting_id = created.json()["id"]
     repository = SummaryRepository(db_session)
-    repository.save_result(meeting.id, _result())
+    repository.save_result(meeting_id, _result())
 
-    resp = client.get(f"/meetings/{meeting.id}/summary")
+    resp = client.get(f"/meetings/{meeting_id}/summary")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["meeting_id"] == meeting.id
+    assert data["meeting_id"] == meeting_id
     assert data["objective"] == "Alinhar a entrega do backend."
     assert len(data["tasks"]) == 2
     assert data["tasks"][0]["description"] == "Finalizar endpoints de resumo"
@@ -187,8 +188,9 @@ def test_get_summary_endpoint_not_found(client):
     assert "não encontrada" in resp.json()["detail"]
 
 
-def test_get_summary_endpoint_unprocessed(client, db_session):
-    meeting = _create_meeting(db_session)
-    resp = client.get(f"/meetings/{meeting.id}/summary")
+def test_get_summary_endpoint_unprocessed(client):
+    created = client.post("/meetings", json={"title": "Reuniao sem resumo"})
+    meeting_id = created.json()["id"]
+    resp = client.get(f"/meetings/{meeting_id}/summary")
     assert resp.status_code == 404
     assert "Resumo ainda não gerado" in resp.json()["detail"]

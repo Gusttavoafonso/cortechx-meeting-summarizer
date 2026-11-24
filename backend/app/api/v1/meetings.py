@@ -20,7 +20,7 @@ from app.core.exceptions import (
     LLMError,
     TranscriptionAudioCorruptedError,
 )
-from app.models.meeting_status import IN_PROGRESS_STATUSES, MeetingStatus
+from app.models.meeting_status import MeetingStatus
 from app.models.user import User
 from app.repositories.audio_repository import AudioRepository
 from app.repositories.meeting_repository import MeetingRepository
@@ -578,6 +578,9 @@ def process_meeting_async(
         )
 
     options_dict = options.model_dump(exclude_none=True) if options else None
+    meeting.processing_options = options_dict
+    meeting_repo.db.add(meeting)
+    meeting_repo.db.commit()
 
     try:
         if options_dict:
@@ -749,7 +752,12 @@ def retry_meeting(
         )
 
     MeetingService(meeting_repo).update_status(meeting_id, MeetingStatus.PROCESSING)
-    enqueue_meeting_processing(meeting_id, background_tasks)
+    if meeting.processing_options:
+        enqueue_meeting_processing(
+            meeting_id, background_tasks, options=meeting.processing_options
+        )
+    else:
+        enqueue_meeting_processing(meeting_id, background_tasks)
     return MeetingResponse.model_validate(meeting)
 
 

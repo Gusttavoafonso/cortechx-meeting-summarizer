@@ -233,11 +233,20 @@ def test_meeting_processor_rolls_back_partial_data_on_error(db_session, tmp_path
 # ==============================================================================
 
 
+def _create_owned_meeting(
+    client, db_session, title: str, status: MeetingStatus
+):
+    meeting_id = client.post("/meetings", json={"title": title}).json()["id"]
+    meeting_repo = MeetingRepository(db_session)
+    meeting = meeting_repo.get_by_id(meeting_id)
+    assert meeting is not None
+    return meeting_repo.update_status(meeting, status)
+
+
 def test_manual_retry_success_on_failed_meeting(client, db_session, monkeypatch):
     """Verifica que POST /meetings/{id}/retry aceita retry de reunião FAILED."""
-    meeting_repo = MeetingRepository(db_session)
-    meeting = meeting_repo.create(
-        "Reunião Pronta para Retry", status=MeetingStatus.FAILED
+    meeting = _create_owned_meeting(
+        client, db_session, "Reunião Pronta para Retry", MeetingStatus.FAILED
     )
 
     audio = AudioFile(
@@ -279,8 +288,9 @@ def test_manual_retry_blocks_not_found(client):
 
 def test_manual_retry_blocks_missing_audio(client, db_session):
     """Retorna 422 se a reunião não possui arquivo de áudio."""
-    meeting_repo = MeetingRepository(db_session)
-    meeting = meeting_repo.create("Reunião Sem Áudio", status=MeetingStatus.FAILED)
+    meeting = _create_owned_meeting(
+        client, db_session, "Reunião Sem Áudio", MeetingStatus.FAILED
+    )
 
     response = client.post(f"/meetings/{meeting.id}/retry")
     assert response.status_code == 422
@@ -289,9 +299,8 @@ def test_manual_retry_blocks_missing_audio(client, db_session):
 
 def test_manual_retry_blocks_concurrent_processing(client, db_session, monkeypatch):
     """Retorna 409 se a reunião já está em processamento."""
-    meeting_repo = MeetingRepository(db_session)
-    meeting = meeting_repo.create(
-        "Reunião em Execução", status=MeetingStatus.PROCESSING
+    meeting = _create_owned_meeting(
+        client, db_session, "Reunião em Execução", MeetingStatus.PROCESSING
     )
 
     audio = AudioFile(
@@ -317,9 +326,8 @@ def test_manual_retry_blocks_concurrent_processing(client, db_session, monkeypat
 
 def test_manual_retry_blocks_completed_meeting(client, db_session, monkeypatch):
     """Retorna 409 se a reunião já foi concluída com sucesso."""
-    meeting_repo = MeetingRepository(db_session)
-    meeting = meeting_repo.create(
-        "Reunião Já Concluída", status=MeetingStatus.COMPLETED
+    meeting = _create_owned_meeting(
+        client, db_session, "Reunião Já Concluída", MeetingStatus.COMPLETED
     )
 
     audio = AudioFile(
@@ -345,8 +353,9 @@ def test_manual_retry_blocks_completed_meeting(client, db_session, monkeypatch):
 
 def test_manual_retry_blocks_non_failed_status(client, db_session, monkeypatch):
     """Retorna 409 se o status for RECEIVED (ainda não falhou)."""
-    meeting_repo = MeetingRepository(db_session)
-    meeting = meeting_repo.create("Reunião Received", status=MeetingStatus.RECEIVED)
+    meeting = _create_owned_meeting(
+        client, db_session, "Reunião Received", MeetingStatus.RECEIVED
+    )
 
     audio = AudioFile(
         meeting_id=meeting.id,
@@ -376,8 +385,9 @@ def test_manual_retry_blocks_non_failed_status(client, db_session, monkeypatch):
 
 def test_process_endpoint_starts_pipeline(client, db_session, monkeypatch):
     """Verifica que POST /meetings/{id}/process aceita reunião com áudio pronto."""
-    meeting_repo = MeetingRepository(db_session)
-    meeting = meeting_repo.create("Reunião Nova", status=MeetingStatus.AUDIO_UPLOADED)
+    meeting = _create_owned_meeting(
+        client, db_session, "Reunião Nova", MeetingStatus.AUDIO_UPLOADED
+    )
 
     audio = AudioFile(
         meeting_id=meeting.id,

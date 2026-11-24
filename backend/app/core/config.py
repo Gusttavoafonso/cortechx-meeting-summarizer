@@ -208,7 +208,9 @@ class Settings(BaseSettings):
                 "OBSIDIAN_NOTES_FOLDER deve ser um caminho relativo dentro do vault."
             )
         return folder
-    @field_validator("discord_enabled", "notion_enabled", mode="before")
+    @field_validator(
+        "discord_enabled", "notion_enabled", "obsidian_enabled", mode="before"
+    )
     @classmethod
     def empty_str_bool_to_false(cls, v: Any) -> Any:
         if isinstance(v, str) and not v.strip():

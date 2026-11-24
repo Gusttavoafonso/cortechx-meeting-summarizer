@@ -58,7 +58,7 @@ def register(
         user = register_user(
             db=db,
             email=payload.email,
-            password=payload.password,
+            password=payload.password.get_secret_value(),
             name=payload.name,
         )
     except UserAlreadyExistsError as exc:

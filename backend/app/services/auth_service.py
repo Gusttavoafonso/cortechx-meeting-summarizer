@@ -8,10 +8,10 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.exceptions import (
+    GoogleAccountPasswordMissingError,
     InvalidCredentialsError,
     InvalidGoogleTokenError,
     UserAlreadyExistsError,
-    GoogleAccountPasswordMissingError,
 )
 from app.core.security import (
     hash_password,
@@ -57,6 +57,9 @@ def authenticate_with_credentials(
     inativa) lançam a mesma `InvalidCredentialsError`, para não revelar se o
     e-mail existe.
     """
+    if len(password) > 128:
+        raise InvalidCredentialsError(INVALID_CREDENTIALS_MESSAGE)
+
     user = UserRepository(db).get_by_email(email)
 
     if user is None or not user.hashed_password:
@@ -73,13 +76,20 @@ def verify_google_token(credential: str) -> dict[str, Any]:
     """Valida o ID token emitido pelo Google Identity Services.
 
     Retorna o payload validado com claims (sub, email, name, picture).
-    Lança `InvalidGoogleTokenError` se o token for inválido, adulterado, expirado
-    ou se o e-mail não tiver sido verificado pelo Google.
+    Lança `InvalidGoogleTokenError` se o token for inválido, adulterado, expirado,
+    se `GOOGLE_CLIENT_ID` não estiver configurado ou se o e-mail não tiver sido
+    verificado pelo Google.
     """
+    if not settings.google_client_id:
+        raise InvalidGoogleTokenError(
+            "Autenticação com Google não configurada no servidor."
+        )
+
     try:
         request = requests.Request()
-        audience = settings.google_client_id if settings.google_client_id else None
-        id_info = id_token.verify_oauth2_token(credential, request, audience=audience)
+        id_info = id_token.verify_oauth2_token(
+            credential, request, audience=settings.google_client_id
+        )
         if not id_info.get("email_verified", False):
             raise InvalidGoogleTokenError(
                 "O e-mail da conta Google não foi verificado pelo Google."
@@ -87,8 +97,10 @@ def verify_google_token(credential: str) -> dict[str, Any]:
         return id_info
     except InvalidGoogleTokenError:
         raise
+    except ValueError as exc:
+        raise InvalidGoogleTokenError("Token do Google inválido ou expirado.") from exc
     except Exception as exc:
-        raise InvalidGoogleTokenError(f"Token do Google inválido: {str(exc)}") from exc
+        raise InvalidGoogleTokenError("Token do Google inválido.") from exc
 
 
 def get_or_create_google_user(
@@ -157,6 +169,10 @@ def change_password(
         raise GoogleAccountPasswordMissingError(
             "Esta conta foi cadastrada via Google e não possui senha de acesso."
         )
+    if len(current_password) > 128:
+        raise InvalidCredentialsError("Senha atual incorreta.")
+    if len(new_password) > 128:
+        raise InvalidCredentialsError("A nova senha deve ter no máximo 128 caracteres.")
     if not verify_password(current_password, user.hashed_password):
         raise InvalidCredentialsError("Senha atual incorreta.")
     user.hashed_password = hash_password(new_password)

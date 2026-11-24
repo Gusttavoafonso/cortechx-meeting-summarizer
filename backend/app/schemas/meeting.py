@@ -41,6 +41,8 @@ class MeetingProcessOptions(BaseModel):
     provider: Literal["auto", "groq", "local"] | None = None
     auto_tasks: bool | None = None
     export_notion: bool | None = None
+    integrations: list[str] | None = None
+    skip_integrations: bool | None = None
 
 
 class MeetingProcessResponse(BaseModel):

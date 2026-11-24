@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -75,6 +75,8 @@ class Meeting(Base):
     )
 
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    processing_options: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     audio: Mapped["AudioFile | None"] = relationship(
         "AudioFile",

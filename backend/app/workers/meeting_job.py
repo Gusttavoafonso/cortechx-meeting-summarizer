@@ -55,26 +55,29 @@ def build_meeting_processor(
     options: dict | None = None,
 ) -> MeetingProcessor:
     """Constrói o MeetingProcessor integrado à política centralizada de retry."""
+    from app.services.llm.service import get_llm_service
+    from app.services.summarization.service import create_summarization_service
+    from app.services.task_extraction.service import TaskExtractionService
+
     opts = options or {}
 
-    summarization_service = None
-    try:
-        from app.services.llm.service import get_llm_service
-        from app.services.summarization.service import create_summarization_service
-
-        llm = get_llm_service()
-        summarization_service = create_summarization_service(llm)
-    except Exception:
-        summarization_service = None
+    chunking = ChunkingService()
+    llm = get_llm_service()
+    summarization_service = create_summarization_service(llm)
+    task_extraction_service = TaskExtractionService(
+        llm_service=llm,
+        chunking_service=chunking,
+    )
 
     return MeetingProcessor(
         meeting_repository=MeetingRepository(session),
         transcript_repository=TranscriptRepository(session),
         summary_repository=SummaryRepository(session),
         summarization_service=summarization_service,
+        task_extraction_service=task_extraction_service,
         audio_storage_service=AudioStorageService(),
         speech_to_text_service=_get_worker_stt_service(opts.get("provider")),
-        chunking_service=ChunkingService(),
+        chunking_service=chunking,
         retry_policy=retry_policy or RetryPolicy.from_settings(),
     )
 
@@ -120,8 +123,19 @@ def run_meeting_processing_job(
             process_kwargs["language"] = language
         if opts.get("auto_tasks") is False:
             process_kwargs["skip_tasks"] = True
-        if opts.get("export_notion") is False:
+        if opts.get("skip_integrations") is True:
             process_kwargs["skip_integrations"] = True
+        else:
+            integrations = opts.get("integrations")
+            if integrations is not None:
+                selected = [
+                    str(p).strip().lower() for p in integrations if str(p).strip()
+                ]
+                if opts.get("export_notion") is False:
+                    selected = [p for p in selected if p != "notion"]
+                process_kwargs["integration_providers"] = selected
+            elif opts.get("export_notion") is False:
+                process_kwargs["excluded_providers"] = ["notion"]
         processor.process_meeting(meeting_id, **process_kwargs)
     finally:
         session.close()
