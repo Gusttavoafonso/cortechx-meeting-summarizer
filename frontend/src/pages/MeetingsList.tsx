@@ -32,6 +32,14 @@ export const MeetingsList: React.FC = () => {
     queryKey: ['meetings'],
     queryFn: fetchMeetings,
     staleTime: 1000 * 15,
+    refetchInterval: (query) => {
+      const list = query.state.data
+      if (!list) return false
+      const hasActive = list.some(
+        (m) => m.status === 'processing' || m.status === 'transcribing'
+      )
+      return hasActive ? 4000 : false
+    },
   })
 
   const filteredMeetings = useMemo(() => {
@@ -41,7 +49,8 @@ export const MeetingsList: React.FC = () => {
     return meetings.filter(
       (m) =>
         m.title.toLowerCase().includes(term) ||
-        (m.summary?.summary && m.summary.summary.toLowerCase().includes(term))
+        (m.summary?.summary && m.summary.summary.toLowerCase().includes(term)) ||
+        (m.summary?.objective && m.summary.objective.toLowerCase().includes(term))
     )
   }, [meetings, searchTerm])
 
@@ -59,7 +68,7 @@ export const MeetingsList: React.FC = () => {
       case 'processing':
         return 'Processando resumo inteligente e extração de tarefas...'
       case 'transcribing':
-        return 'Transcrevendo áudio com reconhecimento de locutores...'
+        return 'Transcrevendo áudio...'
       case 'audio_uploaded':
         return 'Áudio carregado. Pronto para iniciar processamento.'
       case 'received':

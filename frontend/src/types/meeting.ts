@@ -64,6 +64,12 @@ export interface SummaryResponse {
   updated_at: string
 }
 
+export interface MeetingSummaryPreview {
+  objective: string | null
+  summary: string | null
+  tasks_count?: number
+}
+
 export interface Meeting {
   id: number
   title: string
@@ -75,7 +81,7 @@ export interface Meeting {
   last_error: string | null
   audio: AudioMetadata | null
   transcript: TranscriptResponse | null
-  summary?: SummaryResponse | null
+  summary?: MeetingSummaryPreview | SummaryResponse | null
 }
 
 export interface MeetingCreate {
@@ -113,4 +119,26 @@ export interface GlobalTaskItem {
   responsible: string | null
   deadline: string | null
   created_at: string
+}
+
+export type IntegrationDeliveryStatus = 'pending' | 'running' | 'success' | 'failed'
+
+export interface IntegrationDeliveryItem {
+  provider: string
+  status: IntegrationDeliveryStatus
+  attempts: number
+  error_message: string | null
+  external_id: string | null
+  executed_at: string | null
+  updated_at: string
+}
+
+export interface MeetingIntegrationsResponse {
+  meeting_id: number
+  integrations: IntegrationDeliveryItem[]
+}
+
+export interface IntegrationRetryResponse {
+  meeting_id: number
+  providers: string[]
 }

@@ -1,9 +1,11 @@
-import { request } from './client'
+import { API_BASE_URL, request } from './client'
 import {
   AudioMetadata,
   GlobalTaskItem,
+  IntegrationRetryResponse,
   Meeting,
   MeetingCreate,
+  MeetingIntegrationsResponse,
   MeetingProcessOptions,
   MeetingProcessResponse,
   MeetingStats,
@@ -78,4 +80,30 @@ export async function fetchMeetingStats(): Promise<MeetingStats> {
 
 export async function fetchAllTasks(): Promise<GlobalTaskItem[]> {
   return request<GlobalTaskItem[]>('/meetings/tasks')
+}
+
+export async function deleteMeeting(meetingId: number): Promise<void> {
+  await request<void>(`/meetings/${meetingId}`, {
+    method: 'DELETE',
+  })
+}
+
+export function getMeetingAudioUrl(meetingId: number): string {
+  return `${API_BASE_URL}/meetings/${meetingId}/audio/file`
+}
+
+export async function fetchMeetingIntegrations(
+  meetingId: number
+): Promise<MeetingIntegrationsResponse> {
+  return request<MeetingIntegrationsResponse>(`/meetings/${meetingId}/integrations`)
+}
+
+export async function retryMeetingIntegrations(
+  meetingId: number,
+  providers?: string[]
+): Promise<IntegrationRetryResponse> {
+  return request<IntegrationRetryResponse>(`/meetings/${meetingId}/integrations/retry`, {
+    method: 'POST',
+    ...(providers ? { body: JSON.stringify({ providers }) } : {}),
+  })
 }
