@@ -62,6 +62,37 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [])
 
+  const refreshUser = useCallback(async () => {
+    try {
+      const userData = await authApi.getMe()
+      setUser(userData)
+      return userData
+    } catch {
+      return null
+    }
+  }, [])
+
+  const updateProfile = useCallback(async (name: string) => {
+    const updated = await authApi.updateProfile(name)
+    setUser(updated)
+    return updated
+  }, [])
+
+  const changePassword = useCallback(
+    async (currentPassword: string, newPassword: string) => {
+      await authApi.changePassword(currentPassword, newPassword)
+    },
+    []
+  )
+
+  const forgotPassword = useCallback(async (email: string) => {
+    return authApi.forgotPassword(email)
+  }, [])
+
+  const resetPassword = useCallback(async (token: string, newPassword: string) => {
+    return authApi.resetPassword(token, newPassword)
+  }, [])
+
   const value: AuthContextType = {
     user,
     isLoading,
@@ -71,6 +102,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     loginWithGoogle,
     logout,
     checkSession,
+    updateProfile,
+    changePassword,
+    forgotPassword,
+    resetPassword,
+    refreshUser,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

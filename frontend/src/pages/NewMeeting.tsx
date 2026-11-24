@@ -7,8 +7,6 @@ import {
   Play,
   Pause,
   SlidersHorizontal,
-  Share2,
-  MoreHorizontal,
   Upload,
   Mic,
   X,
@@ -32,16 +30,7 @@ import { buildFullTranscriptText } from '../lib/liveTranscription'
 import { formatBytes, formatSecondsToTime } from '../lib/utils'
 
 const MAX_FILE_SIZE_BYTES = 250 * 1024 * 1024 // 250MB
-const ALLOWED_EXTENSIONS = [
-  '.mp3',
-  '.m4a',
-  '.wav',
-  '.mp4',
-  '.webm',
-  '.ogg',
-  '.aac',
-  '.flac',
-]
+const ALLOWED_EXTENSIONS = ['.mp3', '.m4a', '.wav', '.mp4', '.webm', '.ogg']
 
 type ProcessStep = 'idle' | 'creating' | 'uploading' | 'processing' | 'done' | 'failed'
 
@@ -126,6 +115,11 @@ export const NewMeeting: React.FC = () => {
 
     if (recordingCtx.durationMs && recordingCtx.durationMs > 0) {
       setAudioDuration(recordingCtx.durationMs / 1000)
+      return () => {
+        cancelled = true
+        URL.revokeObjectURL(url)
+        setAudioUrl(null)
+      }
     }
 
     const audio = new Audio()
@@ -350,7 +344,9 @@ export const NewMeeting: React.FC = () => {
         language: recordingCtx.options.language,
         provider: recordingCtx.options.provider,
         auto_tasks: recordingCtx.options.autoTasks,
-        export_notion: recordingCtx.options.exportNotion,
+        ...(recordingCtx.options.exportIntegrations
+          ? {}
+          : { skip_integrations: true }),
       })
       setCurrentStep('done')
       recordingCtx.clearRecording()
@@ -406,7 +402,7 @@ export const NewMeeting: React.FC = () => {
         />
       )}
 
-      {/* Top Header Row: Breadcrumb & Secondary Actions */}
+      {/* Top Header Row: Breadcrumb */}
       <div className="flex items-center justify-between mb-4">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-sm text-muted">
@@ -419,27 +415,6 @@ export const NewMeeting: React.FC = () => {
           <ChevronRight className="w-3.5 h-3.5 text-muted/60" />
           <span className="text-ink font-semibold">Nova reunião</span>
         </nav>
-
-        {/* Secondary Actions (Subtly disabled in this phase) */}
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            disabled
-            title="Funcionalidade em desenvolvimento"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted/60 bg-transparent rounded-lg cursor-not-allowed opacity-60 hover:opacity-60"
-          >
-            <Share2 className="w-3.5 h-3.5" />
-            <span>Compartilhar</span>
-          </button>
-          <button
-            type="button"
-            disabled
-            title="Opções adicionais em desenvolvimento"
-            className="p-1.5 text-muted/60 rounded-lg cursor-not-allowed opacity-60 hover:opacity-60"
-          >
-            <MoreHorizontal className="w-4 h-4" />
-          </button>
-        </div>
       </div>
 
       {/* Title Input */}
@@ -515,7 +490,7 @@ export const NewMeeting: React.FC = () => {
             <input
               ref={fileInputRef}
               type="file"
-              accept="audio/*,video/*,.mp3,.m4a,.wav,.mp4,.webm,.ogg,.aac,.flac"
+              accept="audio/*,video/*,.mp3,.m4a,.wav,.mp4,.webm,.ogg"
               onChange={handleFileChange}
               className="hidden"
             />
@@ -530,7 +505,9 @@ export const NewMeeting: React.FC = () => {
                 procure
               </span>
             </p>
-            <p className="text-xs text-muted">MP3, M4A, WAV, MP4 ou WebM até 250 MB</p>
+            <p className="text-xs text-muted">
+              MP3, M4A, WAV, MP4, WebM ou OGG até 250 MB
+            </p>
           </div>
         )
       ) : (

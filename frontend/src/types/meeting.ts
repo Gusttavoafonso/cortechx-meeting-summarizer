@@ -23,6 +23,8 @@ export interface MeetingProcessOptions {
   provider?: 'auto' | 'groq' | 'local'
   auto_tasks?: boolean
   export_notion?: boolean
+  integrations?: string[]
+  skip_integrations?: boolean
 }
 
 export interface TranscriptSegment {

@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './contexts/AuthContext'
 import { RecordingProvider } from './context/RecordingContext'
 import { AppLayout } from './layout/AppLayout'
+import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { LandingPage } from './pages/LandingPage'
 import { LoginPage } from './pages/LoginPage'
 import { MeetingsList } from './pages/MeetingsList'
@@ -38,15 +39,17 @@ export const App: React.FC = () => {
               <Route path="/login" element={<LoginPage />} />
 
               {/* Authenticated / App Workspace */}
-              <Route element={<AppLayout />}>
-                <Route path="meetings" element={<MeetingsList />} />
-                <Route path="meetings/new" element={<NewMeeting />} />
-                <Route path="meetings/:id" element={<MeetingDetails />} />
-                <Route path="dashboard" element={<DashboardPage />} />
-                <Route path="tasks" element={<TasksPage />} />
-                <Route path="transcripts" element={<TranscriptsPage />} />
-                <Route path="settings" element={<SettingsPage />} />
-                <Route path="*" element={<NotFoundPage />} />
+              <Route element={<ProtectedRoute />}>
+                <Route element={<AppLayout />}>
+                  <Route path="meetings" element={<MeetingsList />} />
+                  <Route path="meetings/new" element={<NewMeeting />} />
+                  <Route path="meetings/:id" element={<MeetingDetails />} />
+                  <Route path="dashboard" element={<DashboardPage />} />
+                  <Route path="tasks" element={<TasksPage />} />
+                  <Route path="transcripts" element={<TranscriptsPage />} />
+                  <Route path="settings" element={<SettingsPage />} />
+                  <Route path="*" element={<NotFoundPage />} />
+                </Route>
               </Route>
             </Routes>
           </BrowserRouter>

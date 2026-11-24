@@ -24,14 +24,14 @@ export interface MeetingOptions {
   language: 'pt' | 'en' | 'es' | 'auto'
   provider: 'auto' | 'groq' | 'local'
   autoTasks: boolean
-  exportNotion: boolean
+  exportIntegrations: boolean
 }
 
 export const DEFAULT_MEETING_OPTIONS: MeetingOptions = {
   language: 'pt',
   provider: 'auto',
   autoTasks: true,
-  exportNotion: false,
+  exportIntegrations: true,
 }
 
 interface RecordingContextValue {
@@ -133,6 +133,7 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
   const clearRecording = useCallback(() => {
     setRecordedFile(null)
     setDurationMs(null)
+    setTitle('')
     transportRef.current?.cancel()
   }, [])
 
