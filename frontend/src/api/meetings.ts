@@ -1,10 +1,12 @@
 import { request } from './client'
 import {
   AudioMetadata,
+  GlobalTaskItem,
   Meeting,
   MeetingCreate,
   MeetingProcessOptions,
   MeetingProcessResponse,
+  MeetingStats,
   MeetingStatusResponse,
   SummaryResponse,
   TranscriptResponse,
@@ -68,4 +70,12 @@ export async function retryMeeting(meetingId: number): Promise<Meeting> {
   return request<Meeting>(`/meetings/${meetingId}/retry`, {
     method: 'POST',
   })
+}
+
+export async function fetchMeetingStats(): Promise<MeetingStats> {
+  return request<MeetingStats>('/meetings/stats')
+}
+
+export async function fetchAllTasks(): Promise<GlobalTaskItem[]> {
+  return request<GlobalTaskItem[]>('/meetings/tasks')
 }

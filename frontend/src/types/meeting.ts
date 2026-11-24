@@ -93,3 +93,24 @@ export interface MeetingStatusResponse {
   updated_at: string
   last_error: string | null
 }
+
+export interface MeetingStats {
+  total_meetings: number
+  completed_meetings: number
+  processing_meetings: number
+  failed_meetings: number
+  total_audio_seconds: number
+  total_tasks: number
+  recent_meetings: Meeting[]
+}
+
+export interface GlobalTaskItem {
+  id: number
+  meeting_id: number
+  meeting_title: string
+  meeting_status: MeetingStatus
+  description: string
+  responsible: string | null
+  deadline: string | null
+  created_at: string
+}
