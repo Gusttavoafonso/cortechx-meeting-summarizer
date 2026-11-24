@@ -482,7 +482,14 @@ def _test_notion(
 
     try:
         client = NotionClient(auth=api_key.strip())
-        client.databases.retrieve(database_id=normalized_db_id)
+        try:
+            client.data_sources.retrieve(data_source_id=normalized_db_id)
+        except AttributeError:
+            client.databases.retrieve(database_id=normalized_db_id)
+        except APIResponseError as ds_exc:
+            if ds_exc.status != 404:
+                raise
+            client.databases.retrieve(database_id=normalized_db_id)
         return IntegrationTestResponse(
             ok=True, detail="Conexão com a database do Notion validada com sucesso."
         )

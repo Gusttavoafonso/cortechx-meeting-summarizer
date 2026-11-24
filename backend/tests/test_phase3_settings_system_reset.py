@@ -154,7 +154,7 @@ def test_settings_integrations_test_endpoints(
     assert obs_test["ok"] is True
     assert (vault / "Meetings").is_dir()
 
-    # Notion test
+    # Notion test (data_sources primeiro, com fallback em 404/AttributeError)
     alice_client.put(
         "/settings/integrations/notion",
         json={
@@ -168,7 +168,32 @@ def test_settings_integrations_test_endpoints(
         "app.api.v1.settings.NotionClient", lambda auth: fake_notion
     )
     assert alice_client.post("/settings/integrations/notion/test").json()["ok"] is True
-    fake_notion.databases.retrieve.assert_called_once()
+    fake_notion.data_sources.retrieve.assert_called_once_with(
+        data_source_id="11111111-1111-1111-1111-111111111111"
+    )
+    fake_notion.databases.retrieve.assert_not_called()
+
+    # Fallback para databases.retrieve quando data_sources retorna 404 ou AttributeError
+    from notion_client.errors import APIResponseError
+
+    fake_notion.data_sources.retrieve.side_effect = APIResponseError(
+        "object_not_found",
+        404,
+        "Not found",
+        {},
+        "{}",
+    )
+    assert alice_client.post("/settings/integrations/notion/test").json()["ok"] is True
+    fake_notion.databases.retrieve.assert_called_once_with(
+        database_id="11111111-1111-1111-1111-111111111111"
+    )
+
+    fake_notion.databases.retrieve.reset_mock()
+    fake_notion.data_sources.retrieve.side_effect = AttributeError("no data_sources")
+    assert alice_client.post("/settings/integrations/notion/test").json()["ok"] is True
+    fake_notion.databases.retrieve.assert_called_once_with(
+        database_id="11111111-1111-1111-1111-111111111111"
+    )
 
     # Groq test
     alice_client.put(
