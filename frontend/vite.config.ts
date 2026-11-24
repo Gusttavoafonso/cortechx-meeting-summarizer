@@ -11,11 +11,11 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5172,
+    port: 3000,
     host: true,
     proxy: {
       '/meetings': {
-        target: 'http://localhost:8002',
+        target: 'http://localhost:8000',
         changeOrigin: true,
         bypass(req) {
           if (req.headers.accept?.includes('text/html')) {
@@ -24,7 +24,7 @@ export default defineConfig({
         },
       },
       '/auth': {
-        target: 'http://localhost:8002',
+        target: 'http://localhost:8000',
         changeOrigin: true,
         bypass(req) {
           if (req.headers.accept?.includes('text/html')) {
@@ -33,7 +33,7 @@ export default defineConfig({
         },
       },
       '/partial-sessions': {
-        target: 'http://localhost:8002',
+        target: 'http://localhost:8000',
         changeOrigin: true,
         bypass(req) {
           if (req.headers.accept?.includes('text/html')) {
@@ -42,7 +42,25 @@ export default defineConfig({
         },
       },
       '/users': {
-        target: 'http://localhost:8002',
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        bypass(req) {
+          if (req.headers.accept?.includes('text/html')) {
+            return '/index.html'
+          }
+        },
+      },
+      '/settings': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        bypass(req) {
+          if (req.headers.accept?.includes('text/html')) {
+            return '/index.html'
+          }
+        },
+      },
+      '/system': {
+        target: 'http://localhost:8000',
         changeOrigin: true,
         bypass(req) {
           if (req.headers.accept?.includes('text/html')) {

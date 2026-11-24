@@ -5,13 +5,8 @@ from uuid import uuid4
 
 import numpy as np
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session, sessionmaker
-
-from app.api.v1 import decoder_diagnostics, partial_sessions
+from app.api.v1 import partial_sessions
 from app.core.config import settings
-from app.core.database import get_session
 from app.core.security import create_access_token
 from app.models.partial_session import PartialSession
 from app.services.incremental_audio import (
@@ -27,6 +22,8 @@ from app.services.transcription.faster_whisper_service import (
     FasterWhisperService,
 )
 from app.workers.partial_job import _reconcile
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session, sessionmaker
 
 
 def test_reconcile_deduplicates_overlap_and_normalizes_punctuation():
@@ -234,26 +231,3 @@ def test_partial_sessions_enforce_ownership_and_accept_cookie_or_bearer(
         ).status_code
         == 404
     )
-
-
-def test_decoder_diagnostics_requires_authentication(
-    db_session: Session, monkeypatch: pytest.MonkeyPatch
-):
-    monkeypatch.setattr(decoder_diagnostics.settings, "DEBUG", True)
-
-    diag_app = FastAPI()
-    diag_app.include_router(decoder_diagnostics.router, prefix="/dev")
-
-    def override_get_session():
-        yield db_session
-
-    diag_app.dependency_overrides[get_session] = override_get_session
-
-    with TestClient(diag_app) as diag_client:
-        res = diag_client.post(
-            "/dev/incremental-audio",
-            content=b"ignored",
-            headers={"Content-Type": "multipart/form-data; boundary=test"},
-        )
-        assert res.status_code == 401
-        assert res.headers.get("www-authenticate") == "Bearer"

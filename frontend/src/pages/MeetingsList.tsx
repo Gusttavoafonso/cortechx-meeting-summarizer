@@ -161,7 +161,7 @@ export const MeetingsList: React.FC = () => {
           <p className="text-sm text-muted max-w-md mx-auto mb-6">
             {error instanceof Error
               ? error.message
-              : 'Verifique se o backend está em execução na porta 8001.'}
+              : 'Verifique se o backend está em execução na porta 8000.'}
           </p>
           <Button
             variant="outline"

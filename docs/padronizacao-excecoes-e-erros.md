@@ -9,7 +9,7 @@ Este documento descreve a arquitetura de tratamento de erros, hierarquia de exce
 O pipeline de processamento de reuniões integra múltiplos serviços internos e provedores externos de IA e infraestrutura:
 
 ```text
-Storage ➔ Speech-to-Text ➔ Diarização ➔ Chunking ➔ LLM ➔ Persistência (DB)
+Storage ➔ Speech-to-Text ➔ Chunking ➔ LLM ➔ Persistência (DB)
 ```
 
 Cada etapa está sujeita a falhas de diferentes naturezas. Para garantir a resiliência do sistema e evitar tanto o desperdício de recursos quanto o travamento de execuções, o sistema adota critérios estritos de classificação de falhas:
@@ -46,7 +46,6 @@ classDiagram
     ApplicationError <|-- DefinitiveError
 
     ApplicationError <|-- TranscriptionError
-    ApplicationError <|-- DiarizationError
     ApplicationError <|-- LLMError
     DefinitiveError <|-- PersistenceError
     ApplicationError <|-- ProcessingError
@@ -63,17 +62,6 @@ classDiagram
     RecoverableError <|-- TranscriptionRateLimitError
     TranscriptionError <|-- TranscriptionProviderError
     RecoverableError <|-- TranscriptionProviderError
-
-    DiarizationError <|-- DiarizationConfigurationError
-    DefinitiveError <|-- DiarizationConfigurationError
-    DiarizationError <|-- DiarizationAudioNotFoundError
-    DefinitiveError <|-- DiarizationAudioNotFoundError
-    DiarizationError <|-- DiarizationEmptyResponseError
-    DefinitiveError <|-- DiarizationEmptyResponseError
-    DiarizationError <|-- DiarizationAssociationError
-    DefinitiveError <|-- DiarizationAssociationError
-    DiarizationError <|-- DiarizationProviderError
-    DefinitiveError <|-- DiarizationProviderError
 
     LLMError <|-- LLMConfigurationError
     DefinitiveError <|-- LLMConfigurationError
@@ -178,10 +166,6 @@ category = classify_failure(exc)  # FailureCategory.RECOVERABLE ou FailureCatego
 | **STT** | `TranscriptionAudioNotFoundError` | `DefinitiveError` | Não | Áudio ausente no storage | Abortar imediatamente (HTTP 404) |
 | **STT** | `TranscriptionAudioCorruptedError` | `DefinitiveError` | Não | Codec inválido ou bytes corrompidos | Abortar imediatamente (HTTP 422) |
 | **STT** | `TranscriptionEmptyResponseError` | `DefinitiveError` | Não | Áudio mudo ou inaudível | Abortar imediatamente (HTTP 422) |
-| **Diarização** | `DiarizationConfigurationError` | `DefinitiveError` | Não | `HUGGINGFACE_TOKEN` ausente ou inválido | Abortar imediatamente |
-| **Diarização** | `DiarizationAudioNotFoundError` | `DefinitiveError` | Não | Arquivo de áudio não encontrado | Abortar imediatamente (HTTP 404) |
-| **Diarização** | `DiarizationAssociationError` | `DefinitiveError` | Não | Falha ao correlacionar turnos | Abortar imediatamente (HTTP 422) |
-| **Diarização** | `DiarizationProviderError` | `DefinitiveError` | Não | Falha interna no modelo Pyannote | Abortar imediatamente (HTTP 502) |
 | **LLM** | `LLMTimeoutError` | `RecoverableError` | **Sim** | Timeout na chamada ao provedor de IA | Retry com backoff |
 | **LLM** | `LLMRateLimitError` | `RecoverableError` | **Sim** | Quota temporária atingida (HTTP 429) | Retry com backoff |
 | **LLM** | `LLMProviderError` | `RecoverableError` | **Sim** | Erro de rede ou 5xx retornado pela IA | Retry controlado |
@@ -199,7 +183,7 @@ category = classify_failure(exc)  # FailureCategory.RECOVERABLE ou FailureCatego
 
 ## 4. Encapsulamento de Erros dos Providers
 
-Nenhuma camada superior (como serviços de orquestração ou rotas FastAPI) lida diretamente com exceções nativas de bibliotecas externas (como `google.genai.errors`, SDK da `Groq`, ou `pyannote.audio`).
+Nenhuma camada superior (como serviços de orquestração ou rotas FastAPI) lida diretamente com exceções nativas de bibliotecas externas (como `google.genai.errors` ou SDK da `Groq`).
 
 ### 4.1 Provedor Google Gemini (`GeminiProvider`)
 - `errors.ClientError` com códigos 401 e 403 ➔ `LLMAuthenticationError` (Definitiva).
@@ -219,11 +203,6 @@ Nenhuma camada superior (como serviços de orquestração ou rotas FastAPI) lida
 - Erros de decodificação (`InvalidDataError`, formato não reconhecido) ➔ `TranscriptionAudioCorruptedError` (Definitiva).
 - Falhas de execução ➔ `TranscriptionProviderError` (Definitiva/Recuperável dependendo da causa).
 
-### 4.4 Provedor Pyannote (`PyannoteDiarizationProvider`)
-- Ausência de `HUGGINGFACE_TOKEN` ➔ `DiarizationConfigurationError` (Definitiva).
-- Falha ao carregar o modelo ou inferência ➔ `DiarizationProviderError` (Definitiva).
-- Segmentos vazios retornados ➔ `DiarizationEmptyResponseError` (Definitiva).
-
 ---
 
 ## 5. Mapeamento para a Camada HTTP (FastAPI)
@@ -234,9 +213,9 @@ Na camada de API (`app/api/v1/meetings.py`), as exceções de domínio são mape
 | :--- | :---: | :--- |
 | `MeetingNotFoundError`, `AudioNotFoundError` | `404 Not Found` | Recurso não localizado |
 | `TranscriptNotFoundError`, `SummaryAlreadyProcessingError` | `409 Conflict` | Conflito de estado da reunião |
-| `TranscriptionAudioCorruptedError`, `DiarizationAssociationError` | `422 Unprocessable` | Dados não processáveis |
+| `TranscriptionAudioCorruptedError` | `422 Unprocessable` | Dados não processáveis |
 | `TranscriptionEmptyResponseError` | `422 Unprocessable` | Áudio inaudível ou sem voz |
-| `TranscriptionProviderError`, `DiarizationProviderError` | `502 Bad Gateway` | Falha em serviço dependente |
+| `TranscriptionProviderError` | `502 Bad Gateway` | Falha em serviço dependente |
 | `LLMConfigurationError` | `503 Service Unavailable` | Serviço LLM não configurado |
 | `DatabaseError` | `500 Internal Error` | Erro de transação/persistência |
 
@@ -385,7 +364,7 @@ Durante todo o ciclo de vida do pipeline e suas retentativas, o estado da reuni�
 1. **Estado Consistente Durante Retry:** Falhas temporárias (recuperáveis) mantêm a reunião no estado de processamento (`MeetingStatus.PROCESSING` ou ativo). Uma falha transitória em tentativa $1$ ou $2$ **nunca** transiciona o estado para `FAILED`.
 2. **Marcação de `FAILED` por Esgotamento:** Somente quando todas as retentativas configuradas (`max_attempts`) falharem consecutivamente, o processamento é considerado falho e o estado é atualizado para `MeetingStatus.FAILED`.
 3. **Marcação Imediata de `FAILED` em Falhas Definitivas:** Erros definitivos (`DefinitiveError`, falhas de autenticação, áudio corrompido ou entradas inválidas) abortam sem retentativas e marcam imediatamente o status como `MeetingStatus.FAILED`.
-4. **Prevenção Estrita de `COMPLETED` em Falhas Parciais:** Caso qualquer etapa obrigatória do pipeline (áudio, transcrição, diarização, chunking ou sumarização) falhe, a transição para `MeetingStatus.COMPLETED` é terminantemente impedida, garantindo rollback e marcação como `FAILED`.
+4. **Prevenção Estrita de `COMPLETED` em Falhas Parciais:** Caso qualquer etapa obrigatória do pipeline (áudio, transcrição, chunking ou sumarização) falhe, a transição para `MeetingStatus.COMPLETED` é terminantemente impedida, garantindo rollback e marcação como `FAILED`.
 
 ---
 
@@ -397,7 +376,7 @@ O módulo `app.core.failure_recorder.FailureRecorder` garante a rastreabilidade 
 
 | Campo | Tipo | Descrição |
 | :--- | :---: | :--- |
-| `stage` | `str` | Etapa em que ocorreu a falha (`speech_to_text`, `diarization`, `chunking`, `summarization`, etc.). |
+| `stage` | `str` | Etapa em que ocorreu a falha (`speech_to_text`, `chunking`, `summarization`, etc.). |
 | `error_type` | `str` | Classe da exceção levantada (ex: `TranscriptionTimeoutError`, `LLMAuthenticationError`). |
 | `message` | `str` | Mensagem resumida e devidamente higienizada. |
 | `attempts` | `int` | Quantidade total de tentativas executadas antes da resolução ou falha. |
@@ -435,7 +414,6 @@ Não pode duplicar Transcript, Summary ou Tasks (tarefas)
 2. **Idempotência em Transcrições (`TranscriptRepository`):**
    - O método `save_transcript(meeting_id, content, segments, ...)` busca se já existe transcrição para o `meeting_id` (`unique=True`).
    - Se já existir, o conteúdo é atualizado no registro existente e a lista `existing.segments.clear()` é limpa, recriando os novos segmentos via cascade `delete-orphan`.
-   - `apply_diarization(transcript, diarization_segments, commit=...)` associa os locutores diretamente nos segmentos existentes sem duplicar linhas e aceita `commit=False` para orquestração transacional.
 3. **Idempotência em Resumos e Tarefas (`SummaryRepository`):**
    - O método `save_summary(meeting_id, ...)` (e `save_result`) busca o `Summary` existente vinculado à reunião (`unique=True`).
    - Se já existir, atualiza os campos (`objective`, `summary`, `key_points`, `decisions`, `structured_result`) no mesmo objeto.
