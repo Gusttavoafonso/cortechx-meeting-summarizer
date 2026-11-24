@@ -23,7 +23,11 @@ from app.workers.celery_app import celery_app
 logger = logging.getLogger(__name__)
 
 
-def _get_worker_stt_service(provider_pref: str | None = None):
+def _get_worker_stt_service(
+    provider_pref: str | None = None,
+    *,
+    user_groq_api_key: str | None = None,
+):
     if provider_pref == "local":
         from app.services.transcription.faster_whisper_service import (
             FasterWhisperService,
@@ -34,6 +38,16 @@ def _get_worker_stt_service(provider_pref: str | None = None):
             device=settings.WHISPER_DEVICE,
             compute_type=settings.WHISPER_COMPUTE_TYPE,
         )
+    if user_groq_api_key and user_groq_api_key.strip() and provider_pref in (
+        None,
+        "auto",
+        "groq",
+    ):
+        from app.services.transcription.groq_whisper_service import (
+            GroqWhisperService,
+        )
+
+        return GroqWhisperService(api_key=user_groq_api_key.strip())
     if provider_pref == "groq":
         has_groq = bool(
             settings.groq_api_key and settings.groq_api_key.get_secret_value().strip()
@@ -49,10 +63,37 @@ def _get_worker_stt_service(provider_pref: str | None = None):
     return get_speech_to_text_service()
 
 
+def _resolve_user_groq_key(session: Session, meeting_id: int | None) -> str | None:
+    if meeting_id is None:
+        return None
+    from sqlalchemy import select
+
+    from app.models.user_integration import UserIntegration
+
+    meeting = session.get(Meeting, meeting_id)
+    if meeting is None or meeting.user_id is None:
+        return None
+    integration = session.scalar(
+        select(UserIntegration).where(
+            UserIntegration.user_id == meeting.user_id,
+            UserIntegration.provider == "groq",
+            UserIntegration.enabled.is_(True),
+        )
+    )
+    if integration is None or not isinstance(integration.config, dict):
+        return None
+    raw_key = integration.config.get("api_key")
+    if isinstance(raw_key, str) and raw_key.strip():
+        return raw_key.strip()
+    return None
+
+
 def build_meeting_processor(
     session: Session,
     retry_policy: RetryPolicy | None = None,
     options: dict | None = None,
+    *,
+    meeting_id: int | None = None,
 ) -> MeetingProcessor:
     """Constrói o MeetingProcessor integrado à política centralizada de retry."""
     from app.services.llm.service import get_llm_service
@@ -68,6 +109,7 @@ def build_meeting_processor(
         llm_service=llm,
         chunking_service=chunking,
     )
+    user_groq_key = _resolve_user_groq_key(session, meeting_id)
 
     return MeetingProcessor(
         meeting_repository=MeetingRepository(session),
@@ -76,7 +118,10 @@ def build_meeting_processor(
         summarization_service=summarization_service,
         task_extraction_service=task_extraction_service,
         audio_storage_service=AudioStorageService(),
-        speech_to_text_service=_get_worker_stt_service(opts.get("provider")),
+        speech_to_text_service=_get_worker_stt_service(
+            opts.get("provider"),
+            user_groq_api_key=user_groq_key,
+        ),
         chunking_service=chunking,
         retry_policy=retry_policy or RetryPolicy.from_settings(),
     )
@@ -95,9 +140,14 @@ def run_meeting_processing_job(
     try:
         try:
             try:
-                processor = processor_factory(session, options=opts)
+                processor = processor_factory(
+                    session, options=opts, meeting_id=meeting_id
+                )
             except TypeError:
-                processor = processor_factory(session)
+                try:
+                    processor = processor_factory(session, options=opts)
+                except TypeError:
+                    processor = processor_factory(session)
         except Exception as proc_exc:
             meeting = session.get(Meeting, meeting_id)
             if meeting is not None:

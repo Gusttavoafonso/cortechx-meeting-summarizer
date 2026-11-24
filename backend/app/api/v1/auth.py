@@ -13,7 +13,10 @@ from app.core.exceptions import (
 )
 from app.core.security import create_access_token
 from app.schemas.user import (
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
     GoogleAuthRequest,
+    ResetPasswordRequest,
     Token,
     UserCreate,
     UserPublic,
@@ -23,6 +26,8 @@ from app.services.auth_service import (
     authenticate_with_credentials,
     get_or_create_google_user,
     register_user,
+    request_password_reset,
+    reset_password_with_token,
     verify_google_token,
 )
 
@@ -158,3 +163,38 @@ def logout(response: Response) -> dict[str, str]:
         path="/",
     )
     return {"message": "Logout realizado com sucesso"}
+
+
+@router.post(
+    "/forgot-password",
+    response_model=ForgotPasswordResponse,
+    summary="Solicitar token de redefinição de senha",
+)
+def forgot_password(
+    payload: ForgotPasswordRequest,
+    db: Session = Depends(get_session),
+) -> ForgotPasswordResponse:
+    message, reset_token = request_password_reset(db, payload.email)
+    return ForgotPasswordResponse(message=message, reset_token=reset_token)
+
+
+@router.post(
+    "/reset-password",
+    summary="Redefinir senha com token de recuperação",
+)
+def reset_password(
+    payload: ResetPasswordRequest,
+    db: Session = Depends(get_session),
+) -> dict[str, str]:
+    try:
+        reset_password_with_token(
+            db,
+            token=payload.token,
+            new_password=payload.new_password.get_secret_value(),
+        )
+    except InvalidCredentialsError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    return {"message": "Senha redefinida com sucesso."}

@@ -44,3 +44,24 @@ def get_current_user(
         raise _unauthorized("Usuário não encontrado ou inativo.")
 
     return user
+
+
+def get_optional_current_user(
+    request: Request,
+    bearer_token: str | None = Depends(oauth2_scheme),
+    db: Session = Depends(get_session),
+) -> User | None:
+    """Retorna o usuário autenticado se houver token válido, ou None caso contrário."""
+    token = bearer_token or request.cookies.get(settings.session_cookie_name)
+    if not token:
+        return None
+
+    try:
+        user_id = decode_access_token(token)
+    except InvalidSessionTokenError:
+        return None
+
+    user = UserRepository(db).get_by_id(user_id)
+    if user is None or not user.is_active:
+        return None
+    return user

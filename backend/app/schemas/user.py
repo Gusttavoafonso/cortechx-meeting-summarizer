@@ -80,3 +80,21 @@ class PasswordChange(BaseModel):
         ):
             raise ValueError("A nova senha deve ser diferente da atual.")
         return self
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr = Field(max_length=255)
+
+
+class ForgotPasswordResponse(BaseModel):
+    message: str
+    reset_token: str | None = None
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=16, max_length=255)
+    new_password: SecretStr = Field(
+        min_length=8,
+        max_length=128,
+        description="Mínimo de 8 caracteres",
+    )

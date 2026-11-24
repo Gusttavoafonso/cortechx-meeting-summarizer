@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.database import get_session
-from app.integrations.delivery import enabled_providers_from_settings
+from app.integrations.delivery import enabled_providers_for_user
 from app.models.integration_delivery import IntegrationDeliveryStatus
 from app.models.meeting import Meeting
 from app.models.meeting_status import MeetingStatus
@@ -42,8 +42,11 @@ _NOT_RETRYABLE = {
 }
 
 
-def get_enabled_providers() -> list[str]:
-    return enabled_providers_from_settings()
+def get_enabled_providers(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+) -> list[str]:
+    return enabled_providers_for_user(db, current_user.id)
 
 
 def get_integration_dispatcher() -> Callable[..., None]:

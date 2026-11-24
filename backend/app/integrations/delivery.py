@@ -127,6 +127,42 @@ def enabled_providers_from_settings(settings: Any | None = None) -> list[str]:
     return providers
 
 
+def enabled_providers_for_user(
+    db: Any | None,
+    user_id: int | None,
+    settings: Any | None = None,
+) -> list[str]:
+    """Combina flags globais com configurações pessoais em ``user_integrations``."""
+    base_enabled = enabled_providers_from_settings(settings)
+    if db is None or user_id is None:
+        return base_enabled
+
+    from sqlalchemy import select
+
+    from app.models.user_integration import UserIntegration
+
+    rows = list(
+        db.scalars(
+            select(UserIntegration).where(
+                UserIntegration.user_id == user_id,
+                UserIntegration.provider.in_(("discord", "notion", "obsidian")),
+            )
+        ).all()
+    )
+    if not rows:
+        return base_enabled
+
+    enabled_set = set(base_enabled)
+    for row in rows:
+        name = row.provider.strip().lower()
+        if row.enabled:
+            enabled_set.add(name)
+        else:
+            enabled_set.discard(name)
+
+    return [p for p in ("discord", "notion", "obsidian") if p in enabled_set]
+
+
 def compute_retry_delay(attempt: int, retry_after: float | None = None) -> float:
     """Backoff exponencial limitado, respeitando o Retry-After (também limitado).
 
@@ -155,6 +191,7 @@ class IntegrationDeliveryService:
         self._deliveries = delivery_repository
         self._integration_service = integration_service
         self._configuration_resolver = configuration_resolver
+        self._custom_enabled_providers = enabled_providers
         self._enabled_providers = enabled_providers or enabled_providers_from_settings
 
     def deliver(
@@ -180,7 +217,14 @@ class IntegrationDeliveryService:
                 f"(estado atual: {current.value})."
             )
 
-        enabled = [name.strip().lower() for name in self._enabled_providers()]
+        if self._custom_enabled_providers is not None:
+            raw_enabled = self._custom_enabled_providers()
+        else:
+            db = getattr(self._configuration_resolver, "_db", None)
+            raw_enabled = enabled_providers_for_user(
+                db, getattr(meeting, "user_id", None)
+            )
+        enabled = [name.strip().lower() for name in raw_enabled]
         requested = enabled if providers is None else list(providers)
         wanted = [name.strip().lower() for name in requested]
         targets = [name for name in dict.fromkeys(wanted) if name in enabled]

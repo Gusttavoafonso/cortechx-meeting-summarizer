@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import hashlib
+import logging
+import secrets
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from google.auth.transport import requests
 from google.oauth2 import id_token
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -18,10 +23,13 @@ from app.core.security import (
     verify_dummy_password,
     verify_password,
 )
+from app.models.password_reset_token import PasswordResetToken
 from app.models.user import User, normalize_email
 from app.repositories.user_repository import UserRepository
 
+logger = logging.getLogger(__name__)
 INVALID_CREDENTIALS_MESSAGE = "E-mail ou senha incorretos."
+PASSWORD_RESET_TTL_MINUTES = 15
 
 
 def register_user(
@@ -177,3 +185,84 @@ def change_password(
         raise InvalidCredentialsError("Senha atual incorreta.")
     user.hashed_password = hash_password(new_password)
     UserRepository(db).update(user)
+
+
+def _hash_reset_token(raw_token: str) -> str:
+    return hashlib.sha256(raw_token.strip().encode("utf-8")).hexdigest()
+
+
+def request_password_reset(db: Session, email: str) -> tuple[str, str | None]:
+    """Gera token temporário de redefinição de senha (15 min) sem enviar e-mail."""
+    generic_message = (
+        "Se houver uma conta com senha para este e-mail, um token de "
+        "recuperação foi gerado."
+    )
+    user = UserRepository(db).get_by_email(email)
+    if user is None or not user.is_active or not user.hashed_password:
+        return generic_message, None
+
+    now = datetime.now(timezone.utc)
+    # Invalida tokens pendentes anteriores do mesmo usuário
+    db.execute(
+        update(PasswordResetToken)
+        .where(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.used_at.is_(None),
+        )
+        .values(used_at=now)
+    )
+
+    raw_token = secrets.token_urlsafe(32)
+    reset_entry = PasswordResetToken(
+        user_id=user.id,
+        token_hash=_hash_reset_token(raw_token),
+        expires_at=now + timedelta(minutes=PASSWORD_RESET_TTL_MINUTES),
+    )
+    db.add(reset_entry)
+    db.commit()
+
+    if settings.DEBUG:
+        logger.info(
+            "Token de recuperação de senha gerado em modo DEBUG para user_id=%s.",
+            user.id,
+        )
+        return generic_message, raw_token
+
+    logger.info("Token de recuperação de senha gerado para user_id=%s.", user.id)
+    return generic_message, None
+
+
+def reset_password_with_token(db: Session, token: str, new_password: str) -> None:
+    """Valida token de recuperação e redefine a senha com Argon2."""
+    if len(new_password) < 8 or len(new_password) > 128:
+        raise InvalidCredentialsError(
+            "A nova senha deve ter entre 8 e 128 caracteres."
+        )
+
+    token_hash = _hash_reset_token(token)
+    entry = (
+        db.query(PasswordResetToken)
+        .filter(PasswordResetToken.token_hash == token_hash)
+        .first()
+    )
+    if entry is None or entry.used_at is not None:
+        raise InvalidCredentialsError("Token de recuperação inválido ou já utilizado.")
+
+    now = datetime.now(timezone.utc)
+    expires_at = (
+        entry.expires_at
+        if entry.expires_at.tzinfo is not None
+        else entry.expires_at.replace(tzinfo=timezone.utc)
+    )
+    if expires_at <= now:
+        raise InvalidCredentialsError("Token de recuperação expirado.")
+
+    user = UserRepository(db).get_by_id(entry.user_id)
+    if user is None or not user.is_active:
+        raise InvalidCredentialsError("Token de recuperação inválido.")
+
+    user.hashed_password = hash_password(new_password)
+    entry.used_at = now
+    db.add(user)
+    db.add(entry)
+    db.commit()

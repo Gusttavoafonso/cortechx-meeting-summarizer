@@ -6,6 +6,8 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.integrations import router as integrations_router
 from app.api.v1.meetings import router as meetings_router
 from app.api.v1.partial_sessions import router as partial_sessions_router
+from app.api.v1.settings import router as settings_router
+from app.api.v1.system import router as system_router
 from app.api.v1.users import router as users_router
 from app.core.errors import register_exception_handlers
 from app.services.meeting_service import InvalidMeetingTransitionError
@@ -60,3 +62,5 @@ app.include_router(
 )
 app.include_router(meetings_router, prefix="/meetings", tags=["Meetings"])
 app.include_router(integrations_router, prefix="/meetings", tags=["Integrations"])
+app.include_router(settings_router, prefix="/settings", tags=["Settings"])
+app.include_router(system_router, prefix="/system", tags=["System"])

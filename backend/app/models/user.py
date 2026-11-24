@@ -10,6 +10,8 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.meeting import Meeting
+    from app.models.password_reset_token import PasswordResetToken
+    from app.models.user_integration import UserIntegration
 
 
 def normalize_email(email: str) -> str:
@@ -85,6 +87,18 @@ class User(Base):
 
     meetings: Mapped[list[Meeting]] = relationship(
         "Meeting",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    integrations: Mapped[list[UserIntegration]] = relationship(
+        "UserIntegration",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    password_reset_tokens: Mapped[list[PasswordResetToken]] = relationship(
+        "PasswordResetToken",
         back_populates="user",
         cascade="all, delete-orphan",
     )
