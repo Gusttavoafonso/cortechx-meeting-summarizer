@@ -366,6 +366,15 @@ export const NewMeeting: React.FC = () => {
     }
   }
 
+  if (!currentUser) {
+    return (
+      <div className="p-8 text-sm text-muted">
+        Faça login para criar ou gravar uma reunião.
+        <Link to="/login" className="ml-2 text-brand underline">Entrar</Link>
+      </div>
+    )
+  }
+
   return (
     <div className="flex-1 flex flex-col px-8 py-5 max-w-5xl mx-auto w-full">
       {/* Hidden audio player for actual playback */}
@@ -463,7 +472,7 @@ export const NewMeeting: React.FC = () => {
       {!selectedFile ? (
         inputMethod === 'record' ? (
           <RecordingPanel
-            userId={currentUser?.id || 1}
+            userId={currentUser.id}
             onRecordingComplete={(file, durationMs) => {
               recordingCtx.setRecordingData(file, durationMs, title || file.name)
               validateAndSetFile(file)

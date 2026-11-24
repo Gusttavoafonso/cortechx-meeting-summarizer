@@ -17,13 +17,13 @@ import { formatSecondsToTime } from '../../lib/utils'
 
 interface RecordingPanelProps {
   onRecordingComplete: (file: File, durationMs: number) => void
-  userId?: number | string
+  userId: number | string
   disabled?: boolean
 }
 
 export const RecordingPanel: React.FC<RecordingPanelProps> = ({
   onRecordingComplete,
-  userId = 1,
+  userId,
   disabled = false,
 }) => {
   const animFrameRef = useRef<number | null>(null)
@@ -46,6 +46,11 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
   const [localError, setLocalError] = useState<string | null>(null)
   const [micLevel, setMicLevel] = useState(0)
   const [systemLevel, setSystemLevel] = useState(0)
+
+  const hasValidUserId =
+    userId !== undefined &&
+    userId !== null &&
+    String(userId).trim() !== ''
 
   useEffect(() => {
     if (!isRecording || isPaused) {
@@ -76,6 +81,14 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
   const handleStart = async () => {
     setLocalError(null)
     clearRecordingError()
+
+    if (!hasValidUserId) {
+      setLocalError('É necessário estar autenticado para iniciar uma gravação.')
+      return
+    }
+
+    if (disabled) return
+
     try {
       await startRecording(mode)
     } catch (err) {
@@ -99,6 +112,13 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
   }
 
   const handleStop = async () => {
+    if (!hasValidUserId) {
+      setLocalError('É necessário estar autenticado para finalizar a gravação.')
+      return
+    }
+
+    setLocalError(null)
+
     try {
       const result = await stopRecording(userId)
       setMicLevel(0)
@@ -111,7 +131,12 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
     }
   }
 
-  const displayError = localError || errorMessage
+  const displayError =
+    localError ||
+    errorMessage ||
+    (!hasValidUserId
+      ? 'Faça login para utilizar o recurso de gravação.'
+      : null)
 
   return (
     <Card className="p-5 border-slate-200 shadow-card bg-white/70 backdrop-blur-xs">
@@ -131,7 +156,7 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
           <div className="flex flex-wrap items-center justify-center gap-2 mb-4 bg-surface/50 p-1 rounded-2xl border border-[#DCE2FB]/70">
             <button
               type="button"
-              disabled={disabled}
+              disabled={disabled || !hasValidUserId}
               onClick={() => setMode('both')}
               className={`flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-xl transition-all ${
                 mode === 'both'
@@ -145,7 +170,7 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
 
             <button
               type="button"
-              disabled={disabled}
+              disabled={disabled || !hasValidUserId}
               onClick={() => setMode('mic_only')}
               className={`flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-xl transition-all ${
                 mode === 'mic_only'
@@ -162,10 +187,10 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
           <div className="flex flex-col items-center gap-2 mb-4">
             <button
               type="button"
-              disabled={disabled}
+              disabled={disabled || !hasValidUserId}
               onClick={handleStart}
               title="Iniciar gravação agora"
-              className="relative w-16 h-16 rounded-full border-2 border-rose-500 bg-rose-50/70 text-rose-600 hover:bg-rose-100/90 active:scale-95 transition-all flex items-center justify-center shadow-sm group focus:outline-none focus:ring-4 focus:ring-rose-200"
+              className="relative w-16 h-16 rounded-full border-2 border-rose-500 bg-rose-50/70 text-rose-600 hover:bg-rose-100/90 active:scale-95 transition-all flex items-center justify-center shadow-sm group focus:outline-none focus:ring-4 focus:ring-rose-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span className="absolute -inset-1 rounded-full bg-rose-400/20 opacity-0 group-hover:opacity-100 transition-opacity" />
               <Mic className="w-7 h-7 stroke-[2.2] group-hover:scale-105 transition-transform" />
@@ -278,6 +303,7 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
               type="button"
               variant="danger"
               size="md"
+              disabled={!hasValidUserId}
               onClick={handleStop}
               leftIcon={<Square className="w-3.5 h-3.5 fill-current" />}
             >

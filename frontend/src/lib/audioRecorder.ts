@@ -77,7 +77,9 @@ export class AudioRecorderEngine {
       window.AudioContext ||
       (window as unknown as { webkitAudioContext: typeof AudioContext })
         .webkitAudioContext
+
     this.audioContext = new AudioContextClass({ latencyHint: 'interactive' })
+
     if (this.audioContext.state === 'suspended') {
       await this.audioContext.resume()
     }
@@ -127,17 +129,21 @@ export class AudioRecorderEngine {
         })
       } catch (err) {
         this.cleanupStreams()
+
         if (err instanceof Error && err.name === 'NotAllowedError') {
           throw new Error('Compartilhamento de tela/aba cancelado pelo usuário.')
         }
+
         throw new Error(
           `Falha ao selecionar áudio da aba: ${err instanceof Error ? err.message : String(err)}`
         )
       }
 
       const systemAudioTracks = this.systemStream.getAudioTracks()
+
       if (!systemAudioTracks || systemAudioTracks.length === 0) {
         this.cleanupStreams()
+
         throw new Error(
           'Nenhum áudio detectado na seleção. Certifique-se de marcar a opção "Compartilhar áudio da aba" ao selecionar a janela no navegador.'
         )
@@ -154,6 +160,7 @@ export class AudioRecorderEngine {
       this.systemStream.getVideoTracks().forEach((track) => {
         track.onended = handleSystemEnded
       })
+
       systemAudioTracks.forEach((track) => {
         track.onended = handleSystemEnded
       })
@@ -182,6 +189,7 @@ export class AudioRecorderEngine {
     ]
 
     let selectedMime = ''
+
     for (const mime of mimeTypes) {
       if (MediaRecorder.isTypeSupported(mime)) {
         selectedMime = mime
@@ -192,6 +200,7 @@ export class AudioRecorderEngine {
     const options: MediaRecorderOptions = selectedMime
       ? { mimeType: selectedMime, audioBitsPerSecond: 128000 }
       : {}
+
     this.mediaRecorder = new MediaRecorder(this.destinationNode.stream, options)
 
     this.mediaRecorder.ondataavailable = (event) => {
@@ -207,14 +216,17 @@ export class AudioRecorderEngine {
     this.elapsedTime = 0
 
     this.startTimer()
+
     if (this.onStateChange) this.onStateChange('recording')
   }
 
   private startTimer() {
     this.stopTimer()
+
     this.timerInterval = setInterval(() => {
       if (this.isRecording && !this.isPaused) {
         this.elapsedTime = Date.now() - this.startTime
+
         if (this.onTick) this.onTick(this.elapsedTime)
       }
     }, 250)
@@ -231,6 +243,7 @@ export class AudioRecorderEngine {
     if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
       this.mediaRecorder.pause()
       this.isPaused = true
+
       if (this.onStateChange) this.onStateChange('paused')
     }
   }
@@ -240,11 +253,26 @@ export class AudioRecorderEngine {
       this.mediaRecorder.resume()
       this.isPaused = false
       this.startTime = Date.now() - this.elapsedTime
+
       if (this.onStateChange) this.onStateChange('recording')
     }
   }
 
-  async stop({ userId = 1 }: { userId?: number | string } = {}): Promise<RecordingResult> {
+  async stop({
+    userId,
+  }: {
+    userId: number | string
+  }): Promise<RecordingResult> {
+    if (
+      userId === undefined ||
+      userId === null ||
+      String(userId).trim() === ''
+    ) {
+      throw new Error(
+        'É necessário informar o ID do usuário para finalizar a gravação.'
+      )
+    }
+
     if (!this.isRecording) {
       throw new Error('Nenhuma gravação em andamento.')
     }
@@ -266,6 +294,7 @@ export class AudioRecorderEngine {
         const mimeType = this.mediaRecorder?.mimeType || 'audio/webm'
         const blob = new Blob(this.recordedChunks, { type: mimeType })
         const durationMs = this.elapsedTime
+
         const ext = mimeType.includes('ogg')
           ? 'ogg'
           : mimeType.includes('mp4')
@@ -274,11 +303,14 @@ export class AudioRecorderEngine {
 
         const now = new Date()
         const pad = (n: number) => String(n).padStart(2, '0')
+
         const formattedDate = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+
         const fileName = `gravacao-u${userId}-${formattedDate}.${ext}`
         const file = new File([blob], fileName, { type: mimeType })
 
         this.cleanup()
+
         if (this.onStateChange) this.onStateChange('stopped')
 
         resolve({ blob, file, durationMs, mimeType })
@@ -299,19 +331,25 @@ export class AudioRecorderEngine {
 
     if (this.micAnalyser && this.micDataArray) {
       this.micAnalyser.getByteFrequencyData(this.micDataArray)
+
       let sum = 0
+
       for (let i = 0; i < this.micDataArray.length; i++) {
         sum += this.micDataArray[i]
       }
+
       micLevel = Math.min(1.0, sum / this.micDataArray.length / 128)
     }
 
     if (this.systemAnalyser && this.systemDataArray) {
       this.systemAnalyser.getByteFrequencyData(this.systemDataArray)
+
       let sum = 0
+
       for (let i = 0; i < this.systemDataArray.length; i++) {
         sum += this.systemDataArray[i]
       }
+
       systemLevel = Math.min(1.0, sum / this.systemDataArray.length / 128)
     }
 
@@ -323,6 +361,7 @@ export class AudioRecorderEngine {
       this.micStream.getTracks().forEach((track) => track.stop())
       this.micStream = null
     }
+
     if (this.systemStream) {
       this.systemStream.getTracks().forEach((track) => track.stop())
       this.systemStream = null
@@ -340,6 +379,7 @@ export class AudioRecorderEngine {
       } catch {
         // Ignora erro ao fechar contexto
       }
+
       this.audioContext = null
     }
 

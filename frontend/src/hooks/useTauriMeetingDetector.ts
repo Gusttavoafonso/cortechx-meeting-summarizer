@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useRecordingContext } from '../context/RecordingContext'
+import { useAuth } from '../contexts/AuthContext'
 
 export interface DetectedMeeting {
   platform: 'GoogleMeet' | 'Discord' | 'Zoom' | 'MicrosoftTeams' | 'Generic' | string
@@ -49,11 +50,28 @@ export interface UseTauriMeetingDetectorResult {
 export const useTauriMeetingDetector = (): UseTauriMeetingDetectorResult => {
   const navigate = useNavigate()
   const { setTitle } = useRecordingContext()
-  const [detectedMeeting, setDetectedMeeting] = useState<DetectedMeeting | null>(null)
+  const { isAuthenticated, isLoading } = useAuth()
+
+  const [detectedMeeting, setDetectedMeeting] =
+    useState<DetectedMeeting | null>(null)
+
+  const canAccessRecording = useCallback((): boolean => {
+    if (isLoading) {
+      return false
+    }
+
+    if (!isAuthenticated) {
+      navigate('/login', { replace: true })
+      return false
+    }
+
+    return true
+  }, [isLoading, isAuthenticated, navigate])
 
   useEffect(() => {
     // Safely retrieve Tauri global object (no-op in regular browser)
     const tauri = (window as unknown as { __TAURI__?: TauriApi }).__TAURI__
+
     if (!tauri?.event?.listen) {
       return
     }
@@ -66,23 +84,44 @@ export const useTauriMeetingDetector = (): UseTauriMeetingDetectorResult => {
       try {
         if (!tauri.event) return
 
-        unlistenMeeting = await tauri.event.listen<DetectedMeeting>(
+        const meetingListener = await tauri.event.listen<DetectedMeeting>(
           'meeting-detected',
           (event: TauriEvent<DetectedMeeting>) => {
             if (!isMounted) return
+            if (isLoading || !isAuthenticated) return
+
             setDetectedMeeting(event.payload)
           }
         )
 
-        unlistenAction = await tauri.event.listen<void>(
+        if (!isMounted) {
+          meetingListener()
+          return
+        }
+
+        unlistenMeeting = meetingListener
+
+        const actionListener = await tauri.event.listen<void>(
           'start-recording-action',
           () => {
             if (!isMounted) return
+            if (!canAccessRecording()) return
+
             navigate('/meetings/new?tab=record')
           }
         )
+
+        if (!isMounted) {
+          actionListener()
+          return
+        }
+
+        unlistenAction = actionListener
       } catch (err) {
-        console.warn('[TauriMeetingDetector] Falha ao registrar listeners do Tauri:', err)
+        console.warn(
+          '[TauriMeetingDetector] Falha ao registrar listeners do Tauri:',
+          err
+        )
       }
     }
 
@@ -90,6 +129,7 @@ export const useTauriMeetingDetector = (): UseTauriMeetingDetectorResult => {
 
     return () => {
       isMounted = false
+
       if (unlistenMeeting) {
         try {
           unlistenMeeting()
@@ -97,6 +137,7 @@ export const useTauriMeetingDetector = (): UseTauriMeetingDetectorResult => {
           // ignore cleanup error
         }
       }
+
       if (unlistenAction) {
         try {
           unlistenAction()
@@ -105,24 +146,35 @@ export const useTauriMeetingDetector = (): UseTauriMeetingDetectorResult => {
         }
       }
     }
-  }, [navigate])
+  }, [navigate, canAccessRecording, isAuthenticated, isLoading])
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setDetectedMeeting(null)
+    }
+  }, [isAuthenticated])
 
   const dismiss = useCallback(() => {
     setDetectedMeeting(null)
   }, [])
 
   const recordNow = useCallback(() => {
+    if (!canAccessRecording()) return
+
     if (detectedMeeting) {
       if (detectedMeeting.title) {
         setTitle(detectedMeeting.title)
       }
+
       setDetectedMeeting(null)
     }
+
     navigate('/meetings/new?tab=record')
-  }, [detectedMeeting, navigate, setTitle])
+  }, [detectedMeeting, navigate, setTitle, canAccessRecording])
 
   return {
-    detectedMeeting,
+    detectedMeeting:
+      isAuthenticated && !isLoading ? detectedMeeting : null,
     dismiss,
     recordNow,
   }

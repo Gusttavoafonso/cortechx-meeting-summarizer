@@ -15,6 +15,8 @@ import { TasksPage } from './pages/TasksPage'
 import { TranscriptsPage } from './pages/TranscriptsPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
+import { useTauriMeetingDetector } from './hooks/useTauriMeetingDetector'
+import { TauriMeetingBanner } from './components/desktop/TauriMeetingBanner'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,33 +27,51 @@ const queryClient = new QueryClient({
   },
 })
 
+const AppRoutes: React.FC = () => {
+  const { detectedMeeting, dismiss, recordNow } = useTauriMeetingDetector()
+
+  return (
+    <>
+      {detectedMeeting && (
+        <TauriMeetingBanner
+          meeting={detectedMeeting}
+          onRecordNow={recordNow}
+          onDismiss={dismiss}
+        />
+      )}
+
+      <Routes>
+        {/* Public Landing Page */}
+        <Route path="/" element={<LandingPage />} />
+
+        {/* Authentication Page */}
+        <Route path="/login" element={<LoginPage />} />
+
+        {/* Authenticated / App Workspace */}
+        <Route element={<ProtectedRoute />}>
+          <Route element={<AppLayout />}>
+            <Route path="meetings" element={<MeetingsList />} />
+            <Route path="meetings/new" element={<NewMeeting />} />
+            <Route path="meetings/:id" element={<MeetingDetails />} />
+            <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="tasks" element={<TasksPage />} />
+            <Route path="transcripts" element={<TranscriptsPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+        </Route>
+      </Routes>
+    </>
+  )
+}
+
 export const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <RecordingProvider>
           <BrowserRouter>
-            <Routes>
-              {/* Public Landing Page */}
-              <Route path="/" element={<LandingPage />} />
-
-              {/* Authentication Page */}
-              <Route path="/login" element={<LoginPage />} />
-
-              {/* Authenticated / App Workspace */}
-            <Route element={<ProtectedRoute />}>
-              <Route element={<AppLayout />}>
-                <Route path="meetings" element={<MeetingsList />} />
-                <Route path="meetings/new" element={<NewMeeting />} />
-                <Route path="meetings/:id" element={<MeetingDetails />} />
-                <Route path="dashboard" element={<DashboardPage />} />
-                <Route path="tasks" element={<TasksPage />} />
-                <Route path="transcripts" element={<TranscriptsPage />} />
-                <Route path="settings" element={<SettingsPage />} />
-                <Route path="*" element={<NotFoundPage />} />
-              </Route>
-            </Route>
-            </Routes>
+            <AppRoutes />
           </BrowserRouter>
         </RecordingProvider>
       </AuthProvider>

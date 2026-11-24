@@ -48,7 +48,7 @@ interface RecordingContextValue {
   startRecording: (mode?: CaptureMode) => Promise<void>
   pauseRecording: () => void
   resumeRecording: () => void
-  stopRecording: (userId?: number | string) => Promise<RecordingResult>
+  stopRecording: (userId: number | string) => Promise<RecordingResult>
   cancelRecording: () => void
   getAudioLevels: () => AudioLevels
   clearRecordingError: () => void
@@ -179,14 +179,29 @@ export const RecordingProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [])
 
   const stopRecording = useCallback(
-    async (userId: number | string = 1): Promise<RecordingResult> => {
+    async (userId: number | string): Promise<RecordingResult> => {
+      if (
+        userId === undefined ||
+        userId === null ||
+        String(userId).trim() === ''
+      ) {
+        const msg =
+          'É necessário informar o ID do usuário para finalizar a gravação.'
+        setRecordingError(msg)
+        throw new Error(msg)
+      }
+
       if (!engineRef.current) {
         throw new Error('Gravador não inicializado.')
       }
+
       const result = await engineRef.current.stop({ userId })
+
       setIsRecording(false)
       setIsPaused(false)
       setElapsedMs(0)
+      setRecordingError(null)
+
       return result
     },
     []
