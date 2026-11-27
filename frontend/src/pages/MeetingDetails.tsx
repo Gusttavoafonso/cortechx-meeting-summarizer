@@ -34,6 +34,7 @@ import {
 import { StatusBadge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { MeetingAudioPlayer } from '../components/MeetingAudioPlayer'
 import {
   cn,
   formatBytes,
@@ -632,12 +633,9 @@ export const MeetingDetails: React.FC = () => {
               </span>
             </div>
           </div>
-          <audio
-            controls
-            preload="metadata"
-            crossOrigin="use-credentials"
+          <MeetingAudioPlayer
             src={getMeetingAudioUrl(meeting.id)}
-            className="w-full h-10"
+            durationSeconds={meeting.audio.duration_seconds}
           />
         </Card>
       )}

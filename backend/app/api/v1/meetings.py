@@ -1,3 +1,4 @@
+import re
 from collections.abc import Callable
 
 from fastapi import (
@@ -7,11 +8,12 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Request,
     Response,
     UploadFile,
     status,
 )
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -462,17 +464,33 @@ def get_audio_metadata(
     )
 
 
+_RANGE_HEADER_RE = re.compile(r"^bytes=(\d*)-(\d*)$")
+
+
+def _iter_file_range(path, start: int, end: int, chunk_size: int = 64 * 1024):
+    remaining = end - start + 1
+    with open(path, "rb") as fh:
+        fh.seek(start)
+        while remaining > 0:
+            data = fh.read(min(chunk_size, remaining))
+            if not data:
+                break
+            remaining -= len(data)
+            yield data
+
+
 @router.get(
     "/{meeting_id}/audio/file",
     summary="Baixar ou reproduzir o arquivo de áudio da reunião",
 )
 def download_audio_file(
     meeting_id: int,
+    request: Request,
     current_user: User = Depends(get_current_user),
     meeting_repo: MeetingRepository = Depends(get_meeting_repository),
     audio_repo: AudioRepository = Depends(get_audio_repository),
     storage_service: AudioStorageService = Depends(get_audio_storage_service),
-) -> FileResponse:
+) -> Response:
     validate_meeting_id(meeting_id)
     meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
     if not meeting:
@@ -491,10 +509,48 @@ def download_audio_file(
         )
 
     file_path = storage_service.get_file_path(audio_record.file_path)
+    file_size = file_path.stat().st_size
+    range_header = request.headers.get("range")
+
+    if range_header and file_size > 0:
+        match = _RANGE_HEADER_RE.match(range_header.strip())
+        if not match or (not match.group(1) and not match.group(2)):
+            return Response(
+                status_code=status.HTTP_416_RANGE_NOT_SATISFIABLE,
+                headers={"Content-Range": f"bytes */{file_size}"},
+            )
+        start_str, end_str = match.group(1), match.group(2)
+        if start_str:
+            start = int(start_str)
+            end = int(end_str) if end_str else file_size - 1
+        else:
+            suffix_len = int(end_str)
+            start = max(0, file_size - suffix_len)
+            end = file_size - 1
+
+        if start >= file_size or end < start:
+            return Response(
+                status_code=status.HTTP_416_RANGE_NOT_SATISFIABLE,
+                headers={"Content-Range": f"bytes */{file_size}"},
+            )
+        end = min(end, file_size - 1)
+        content_length = end - start + 1
+        return StreamingResponse(
+            _iter_file_range(file_path, start, end),
+            status_code=status.HTTP_206_PARTIAL_CONTENT,
+            media_type=audio_record.content_type,
+            headers={
+                "Content-Range": f"bytes {start}-{end}/{file_size}",
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(content_length),
+            },
+        )
+
     return FileResponse(
         path=file_path,
         media_type=audio_record.content_type,
         filename=audio_record.original_filename,
+        headers={"Accept-Ranges": "bytes"},
     )
 
 
