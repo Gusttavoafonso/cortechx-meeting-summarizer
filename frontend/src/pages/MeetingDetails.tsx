@@ -420,7 +420,10 @@ export const MeetingDetails: React.FC = () => {
         <div>
           <div className="flex items-center gap-3 flex-wrap mb-1.5">
             <h1 className="text-3xl font-bold font-sans text-ink">{meeting.title}</h1>
-            <StatusBadge status={meeting.status} className="bg-transparent" />
+            <StatusBadge
+              status={meeting.status}
+              className="bg-transparent border-transparent px-0"
+            />
           </div>
           <p className="text-xs text-muted flex flex-wrap items-center gap-3">
             <span className="flex items-center gap-1">
@@ -515,7 +518,7 @@ export const MeetingDetails: React.FC = () => {
 
       {/* Dedicated failure alert displaying last_error */}
       {meeting.status === 'failed' && (
-        <Card className="p-5 mb-6 border-rose-200">
+        <div className="rounded-2xl border border-rose-200 bg-transparent p-5 mb-6">
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
             <div className="flex-1">
@@ -528,7 +531,7 @@ export const MeetingDetails: React.FC = () => {
               </p>
             </div>
           </div>
-        </Card>
+        </div>
       )}
 
       {/* Orphan State Recovery: received */}
