@@ -12,12 +12,25 @@ logger = logging.getLogger(__name__)
 
 # Padrões para detecção e higienização de informações sensíveis
 _REDACT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    # 1. Chaves de API conhecidas
+    # 1. Blobs criptografados e URLs/tokens de integrações
+    (re.compile(r"enc:v1:[a-zA-Z0-9_\-=]{16,}"), "enc:v1:[REDACTED]"),
+    (
+        re.compile(
+            r"https?://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/\d+/[^\s'\"]+",
+            re.IGNORECASE,
+        ),
+        "[REDACTED_DISCORD_WEBHOOK]",
+    ),
+    (
+        re.compile(r"(?:secret|ntn)_[a-zA-Z0-9_\-]{16,}"),
+        "[REDACTED_NOTION_TOKEN]",
+    ),
+    # 2. Chaves de API conhecidas
     (re.compile(r"gsk_[a-zA-Z0-9]{16,}", re.IGNORECASE), "gsk_***[REDACTED]"),
-    (re.compile(r"AIza[a-zA-Z0-9_\-]{35}", re.IGNORECASE), "AIza***[REDACTED]"),
+    (re.compile(r"AIza[a-zA-Z0-9_\-]{20,}", re.IGNORECASE), "AIza***[REDACTED]"),
     (re.compile(r"hf_[a-zA-Z0-9]{20,}", re.IGNORECASE), "hf_***[REDACTED]"),
     (re.compile(r"sk-[a-zA-Z0-9]{20,}", re.IGNORECASE), "sk-***[REDACTED]"),
-    # 2. Tokens de autenticação / Bearer / Basic
+    # 3. Tokens de autenticação / Bearer / Basic
     (re.compile(r"(?i)\b(bearer\s+)[a-zA-Z0-9_\-\.]{15,}"), r"\1[REDACTED]"),
     (re.compile(r"(?i)\b(basic\s+)[a-zA-Z0-9+/=]{15,}"), r"\1[REDACTED]"),
     # 3. Pares chave/valor sensíveis (api_key=..., token: ..., password=...)

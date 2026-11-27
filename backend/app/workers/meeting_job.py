@@ -68,6 +68,7 @@ def _resolve_user_groq_key(session: Session, meeting_id: int | None) -> str | No
         return None
     from sqlalchemy import select
 
+    from app.core.secret_crypto import SecretDecryptionError, decrypt_secret
     from app.models.user_integration import UserIntegration
 
     meeting = session.get(Meeting, meeting_id)
@@ -84,7 +85,20 @@ def _resolve_user_groq_key(session: Session, meeting_id: int | None) -> str | No
         return None
     raw_key = integration.config.get("api_key")
     if isinstance(raw_key, str) and raw_key.strip():
-        return raw_key.strip()
+        try:
+            decrypted = decrypt_secret(
+                raw_key,
+                user_id=meeting.user_id,
+                provider="groq",
+                field="api_key",
+            ).strip()
+            return decrypted or None
+        except SecretDecryptionError:
+            logger.warning(
+                "Falha ao descriptografar chave Groq do usuário %s.",
+                meeting.user_id,
+            )
+            return None
     return None
 
 
@@ -96,14 +110,25 @@ def build_meeting_processor(
     meeting_id: int | None = None,
 ) -> MeetingProcessor:
     """Constrói o MeetingProcessor integrado à política centralizada de retry."""
-    from app.services.llm.service import get_llm_service
+    from app.services.llm.service import get_llm_service, resolve_user_llm_config
     from app.services.summarization.service import create_summarization_service
     from app.services.task_extraction.service import TaskExtractionService
 
     opts = options or {}
 
     chunking = ChunkingService()
-    llm = get_llm_service()
+    meeting = session.get(Meeting, meeting_id) if meeting_id is not None else None
+    user_llm_cfg = resolve_user_llm_config(
+        session, meeting.user_id if meeting is not None else None
+    )
+    if user_llm_cfg is not None:
+        llm = get_llm_service(
+            provider=user_llm_cfg["provider"],
+            model=user_llm_cfg["model"],
+            api_key=user_llm_cfg["api_key"],
+        )
+    else:
+        llm = get_llm_service()
     summarization_service = create_summarization_service(llm)
     task_extraction_service = TaskExtractionService(
         llm_service=llm,

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.core.config import DEFAULT_OBSIDIAN_NOTES_FOLDER
 
-ProviderName = Literal["discord", "notion", "obsidian", "groq"]
+ProviderName = Literal["discord", "notion", "obsidian", "groq", "llm"]
 
 
 def _clean_optional_str(value: str | None) -> str | None:
@@ -85,6 +85,18 @@ class GroqIntegrationUpdate(BaseModel):
         return _clean_optional_str(value)
 
 
+class LLMIntegrationUpdate(BaseModel):
+    enabled: bool
+    llm_provider: Literal["gemini"] = "gemini"
+    llm_model: str | None = Field(default=None, max_length=128)
+    api_key: str | None = Field(default=None, max_length=512)
+
+    @field_validator("llm_model", "api_key", mode="before")
+    @classmethod
+    def clean_fields(cls, value: str | None) -> str | None:
+        return _clean_optional_str(value)
+
+
 class IntegrationStatusItem(BaseModel):
     provider: ProviderName
     enabled: bool
@@ -95,6 +107,8 @@ class IntegrationStatusItem(BaseModel):
     database_id: str | None = None
     vault_path: str | None = None
     notes_folder: str | None = None
+    llm_provider: str | None = None
+    llm_model: str | None = None
 
 
 class IntegrationsSettingsResponse(BaseModel):
@@ -102,6 +116,7 @@ class IntegrationsSettingsResponse(BaseModel):
     notion: IntegrationStatusItem
     obsidian: IntegrationStatusItem
     groq: IntegrationStatusItem
+    llm: IntegrationStatusItem
 
 
 class IntegrationTestResponse(BaseModel):
@@ -115,5 +130,6 @@ class SystemStatusResponse(BaseModel):
     stt_source: Literal["user", "server", "local"]
     whisper_model: str
     llm_configured: bool
+    llm_source: Literal["user", "server", "none"] = "none"
     llm_provider: str | None = None
     llm_model: str | None = None

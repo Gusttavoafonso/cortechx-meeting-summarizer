@@ -39,7 +39,7 @@ def test_settings_integrations_crud_masks_secrets_and_validates_obsidian(
     res_init = alice_client.get("/settings/integrations")
     assert res_init.status_code == 200
     body_init = res_init.json()
-    assert set(body_init.keys()) == {"discord", "notion", "obsidian", "groq"}
+    assert set(body_init.keys()) == {"discord", "notion", "obsidian", "groq", "llm"}
 
     # Discord PUT + máscara
     res_disc = alice_client.put(

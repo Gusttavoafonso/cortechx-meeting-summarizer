@@ -45,7 +45,7 @@ from app.schemas.meeting import (
 from app.schemas.summary import SummaryResponse
 from app.schemas.transcription import TranscriptResponse
 from app.services.audio_storage import AudioStorageService
-from app.services.llm.service import get_llm_service
+from app.services.llm.service import get_llm_service, resolve_user_llm_config
 from app.services.meeting_service import MeetingNotFoundError, MeetingService
 from app.services.summarization.service import create_summarization_service
 from app.services.summary_service import (
@@ -114,12 +114,22 @@ def get_summary_repository(db: Session = Depends(get_session)) -> SummaryReposit
 
 
 def get_summary_service(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
     meeting_repo: MeetingRepository = Depends(get_meeting_repository),
     transcript_repo: TranscriptRepository = Depends(get_transcript_repository),
     summary_repo: SummaryRepository = Depends(get_summary_repository),
 ) -> SummaryService:
     try:
-        llm = get_llm_service()
+        user_llm_cfg = resolve_user_llm_config(db, current_user.id)
+        if user_llm_cfg is not None:
+            llm = get_llm_service(
+                provider=user_llm_cfg["provider"],
+                model=user_llm_cfg["model"],
+                api_key=user_llm_cfg["api_key"],
+            )
+        else:
+            llm = get_llm_service()
     except LLMError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

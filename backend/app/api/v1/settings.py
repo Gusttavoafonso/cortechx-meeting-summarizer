@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -16,8 +17,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
-from app.core.config import DEFAULT_OBSIDIAN_NOTES_FOLDER, settings
+from app.core.config import (
+    DEFAULT_LLM_MODEL,
+    DEFAULT_LLM_PROVIDER,
+    DEFAULT_OBSIDIAN_NOTES_FOLDER,
+    settings,
+)
 from app.core.database import get_session
+from app.core.secret_crypto import (
+    SecretDecryptionError,
+    decrypt_config_secrets,
+    encrypt_config_secrets,
+)
 from app.integrations.providers.discord import _mask_webhook_url
 from app.models.user import User
 from app.models.user_integration import UserIntegration
@@ -27,6 +38,7 @@ from app.schemas.settings import (
     IntegrationsSettingsResponse,
     IntegrationStatusItem,
     IntegrationTestResponse,
+    LLMIntegrationUpdate,
     NotionIntegrationUpdate,
     ObsidianIntegrationUpdate,
     ProviderName,
@@ -36,7 +48,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
-ALLOWED_PROVIDERS: set[str] = {"discord", "notion", "obsidian", "groq"}
+ALLOWED_PROVIDERS: set[str] = {"discord", "notion", "obsidian", "groq", "llm"}
+_GEMINI_MODEL_RE = re.compile(r"^[a-zA-Z0-9._-]+$")
 
 
 def _mask_secret(value: str | None) -> str | None:
@@ -70,6 +83,24 @@ def _get_user_integration(
     )
 
 
+def _read_decrypted_config(row: UserIntegration | None) -> dict[str, Any]:
+    if row is None or not isinstance(row.config, dict):
+        return {}
+    try:
+        return decrypt_config_secrets(
+            dict(row.config),
+            user_id=row.user_id,
+            provider=row.provider,
+        )
+    except SecretDecryptionError:
+        logger.warning(
+            "Falha ao descriptografar configuração '%s' do usuário %s.",
+            row.provider,
+            row.user_id,
+        )
+        return {}
+
+
 def _upsert_user_integration(
     db: Session,
     user_id: int,
@@ -78,18 +109,23 @@ def _upsert_user_integration(
     enabled: bool,
     config: dict[str, Any],
 ) -> UserIntegration:
+    encrypted_config = encrypt_config_secrets(
+        config,
+        user_id=user_id,
+        provider=provider,
+    )
     row = _get_user_integration(db, user_id, provider)
     if row is None:
         row = UserIntegration(
             user_id=user_id,
             provider=provider,
             enabled=enabled,
-            config=config,
+            config=encrypted_config,
         )
         db.add(row)
     else:
         row.enabled = enabled
-        row.config = dict(config)
+        row.config = encrypted_config
     db.commit()
     db.refresh(row)
     return row
@@ -99,7 +135,7 @@ def _build_status_item(
     provider: ProviderName,
     row: UserIntegration | None,
 ) -> IntegrationStatusItem:
-    cfg = dict(row.config or {}) if row is not None else {}
+    cfg = _read_decrypted_config(row)
 
     if provider == "discord":
         if row is not None:
@@ -185,6 +221,34 @@ def _build_status_item(
             notes_folder=settings.obsidian_notes_folder,
         )
 
+    if provider == "llm":
+        if row is not None:
+            api_key = cfg.get("api_key")
+            llm_provider = cfg.get("llm_provider") or DEFAULT_LLM_PROVIDER
+            llm_model = (
+                cfg.get("llm_model") or settings.llm_model or DEFAULT_LLM_MODEL
+            )
+            return IntegrationStatusItem(
+                provider="llm",
+                enabled=row.enabled,
+                is_configured=bool(api_key),
+                source="user",
+                api_key_masked=_mask_secret(api_key),
+                llm_provider=llm_provider,
+                llm_model=llm_model,
+            )
+        env_key = _secret_value(settings.llm_api_key)
+        has_env = bool(settings.llm_provider and settings.llm_model and env_key)
+        return IntegrationStatusItem(
+            provider="llm",
+            enabled=has_env,
+            is_configured=has_env,
+            source="env" if has_env else "none",
+            api_key_masked=_mask_secret(env_key) if has_env else None,
+            llm_provider=settings.llm_provider or DEFAULT_LLM_PROVIDER,
+            llm_model=settings.llm_model or DEFAULT_LLM_MODEL,
+        )
+
     # groq
     if row is not None:
         api_key = cfg.get("api_key")
@@ -225,6 +289,7 @@ def get_integrations_settings(
         notion=_build_status_item("notion", rows.get("notion")),
         obsidian=_build_status_item("obsidian", rows.get("obsidian")),
         groq=_build_status_item("groq", rows.get("groq")),
+        llm=_build_status_item("llm", rows.get("llm")),
     )
 
 
@@ -239,7 +304,7 @@ def update_discord_integration(
     db: Session = Depends(get_session),
 ) -> IntegrationStatusItem:
     existing = _get_user_integration(db, current_user.id, "discord")
-    existing_cfg = dict(existing.config or {}) if existing else {}
+    existing_cfg = _read_decrypted_config(existing)
     webhook_url = payload.webhook_url or existing_cfg.get("webhook_url")
 
     env_url = (
@@ -271,7 +336,7 @@ def update_notion_integration(
     db: Session = Depends(get_session),
 ) -> IntegrationStatusItem:
     existing = _get_user_integration(db, current_user.id, "notion")
-    existing_cfg = dict(existing.config or {}) if existing else {}
+    existing_cfg = _read_decrypted_config(existing)
 
     api_key = payload.api_key or existing_cfg.get("api_key")
     database_id = payload.database_id or existing_cfg.get("database_id")
@@ -306,7 +371,7 @@ def update_obsidian_integration(
     db: Session = Depends(get_session),
 ) -> IntegrationStatusItem:
     existing = _get_user_integration(db, current_user.id, "obsidian")
-    existing_cfg = dict(existing.config or {}) if existing else {}
+    existing_cfg = _read_decrypted_config(existing)
 
     vault_path = payload.vault_path or existing_cfg.get("vault_path")
     notes_folder = (
@@ -344,7 +409,7 @@ def update_groq_integration(
     db: Session = Depends(get_session),
 ) -> IntegrationStatusItem:
     existing = _get_user_integration(db, current_user.id, "groq")
-    existing_cfg = dict(existing.config or {}) if existing else {}
+    existing_cfg = _read_decrypted_config(existing)
     api_key = payload.api_key or existing_cfg.get("api_key")
 
     if payload.enabled and not api_key:
@@ -360,6 +425,47 @@ def update_groq_integration(
         db, current_user.id, "groq", enabled=payload.enabled, config=new_cfg
     )
     return _build_status_item("groq", row)
+
+
+@router.put(
+    "/integrations/llm",
+    response_model=IntegrationStatusItem,
+    summary="Salvar chave pessoal de LLM para sumarização",
+)
+def update_llm_integration(
+    payload: LLMIntegrationUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+) -> IntegrationStatusItem:
+    existing = _get_user_integration(db, current_user.id, "llm")
+    existing_cfg = _read_decrypted_config(existing)
+    api_key = payload.api_key or existing_cfg.get("api_key")
+    model_to_save = (
+        payload.llm_model
+        or existing_cfg.get("llm_model")
+        or settings.llm_model
+        or DEFAULT_LLM_MODEL
+    )
+
+    if payload.enabled and not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "Informe sua chave de API do provedor LLM para ativar "
+                "a sumarização pessoal."
+            ),
+        )
+
+    new_cfg: dict[str, Any] = {
+        "llm_provider": payload.llm_provider,
+        "llm_model": model_to_save,
+    }
+    if api_key:
+        new_cfg["api_key"] = api_key
+    row = _upsert_user_integration(
+        db, current_user.id, "llm", enabled=payload.enabled, config=new_cfg
+    )
+    return _build_status_item("llm", row)
 
 
 @router.delete(
@@ -404,7 +510,7 @@ def test_integration(
         )
 
     row = _get_user_integration(db, current_user.id, provider_name)
-    cfg = dict(row.config or {}) if row is not None else {}
+    cfg = _read_decrypted_config(row)
 
     if provider_name == "discord":
         return _test_discord(
@@ -429,6 +535,11 @@ def test_integration(
                 else None
             ),
             cfg.get("notes_folder") or settings.obsidian_notes_folder,
+        )
+    if provider_name == "llm":
+        return _test_llm(
+            cfg.get("api_key") or _secret_value(settings.llm_api_key),
+            cfg.get("llm_model") or settings.llm_model,
         )
     return _test_groq(cfg.get("api_key") or _secret_value(settings.groq_api_key))
 
@@ -588,4 +699,53 @@ def _test_groq(api_key: str | None) -> IntegrationTestResponse:
     except httpx.HTTPError as exc:
         return IntegrationTestResponse(
             ok=False, detail=f"Falha ao contatar a Groq: {exc.__class__.__name__}."
+        )
+
+
+def _test_llm(api_key: str | None, model: str | None) -> IntegrationTestResponse:
+    if not api_key or not api_key.strip():
+        return IntegrationTestResponse(
+            ok=False, detail="Chave de API de LLM não configurada."
+        )
+    clean_key = api_key.strip()
+    raw_model = (model or settings.llm_model or DEFAULT_LLM_MODEL).strip()
+    clean_model = (
+        raw_model[len("models/") :]
+        if raw_model.startswith("models/")
+        else raw_model
+    )
+    if not clean_model or not _GEMINI_MODEL_RE.fullmatch(clean_model):
+        return IntegrationTestResponse(
+            ok=False, detail="Nome de modelo Gemini inválido."
+        )
+    try:
+        response = httpx.get(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{clean_model}",
+            headers={"x-goog-api-key": clean_key},
+            timeout=10.0,
+        )
+        if response.status_code == 200:
+            return IntegrationTestResponse(
+                ok=True, detail="Chave Gemini validada com sucesso."
+            )
+        if response.status_code in {400, 401, 403}:
+            return IntegrationTestResponse(
+                ok=False,
+                detail=(
+                    "Chave Gemini inválida ou sem permissão para acessar este modelo."
+                ),
+            )
+        if response.status_code == 404:
+            return IntegrationTestResponse(
+                ok=False,
+                detail=f"Modelo '{clean_model}' não encontrado na API do Gemini.",
+            )
+        return IntegrationTestResponse(
+            ok=False,
+            detail=f"API do Gemini retornou status HTTP {response.status_code}.",
+        )
+    except httpx.HTTPError as exc:
+        return IntegrationTestResponse(
+            ok=False,
+            detail=f"Falha ao contatar a API do Gemini: {exc.__class__.__name__}.",
         )

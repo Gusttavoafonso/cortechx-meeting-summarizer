@@ -15,6 +15,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 PROJECT_DIR = BACKEND_DIR.parent
 DEFAULT_OBSIDIAN_NOTES_FOLDER = "Reuniões"
+DEFAULT_LLM_PROVIDER = "gemini"
+DEFAULT_LLM_MODEL = "gemini-2.5-flash"
 
 
 class Settings(BaseSettings):
@@ -64,6 +66,10 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr | None = Field(
         default=None,
         validation_alias="LLM_API_KEY",
+    )
+    encryption_key: SecretStr | None = Field(
+        default=None,
+        validation_alias="ENCRYPTION_KEY",
     )
 
     groq_api_key: SecretStr | None = None
@@ -200,6 +206,7 @@ class Settings(BaseSettings):
         "notion_token",
         "notion_database_id",
         "llm_api_key",
+        "encryption_key",
         "obsidian_vault_path",
         "google_client_id",
         mode="before",

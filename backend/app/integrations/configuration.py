@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.secret_crypto import SecretDecryptionError, decrypt_config_secrets
 from app.models.integration_configuration import IntegrationConfiguration
 from app.models.meeting import Meeting
 from app.models.user_integration import UserIntegration
@@ -99,8 +100,18 @@ class ProviderConfigurationResolver:
             raise ProviderConfigurationError(
                 "Configuração do provider do usuário inválida."
             )
+        try:
+            decrypted = decrypt_config_secrets(
+                user_integration.config,
+                user_id=user_id,
+                provider=provider,
+            )
+        except SecretDecryptionError as exc:
+            raise ProviderConfigurationError(
+                "Falha ao descriptografar as credenciais da integração."
+            ) from exc
         return {
             key: value
-            for key, value in user_integration.config.items()
+            for key, value in decrypted.items()
             if value is not None and value != ""
         }
