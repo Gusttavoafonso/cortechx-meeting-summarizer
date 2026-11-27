@@ -31,6 +31,20 @@ const navItems: NavItem[] = [
   { name: 'Configurações', to: '/settings', icon: Settings },
 ]
 
+function formatLlmProviderLabel(provider?: string | null): string {
+  switch ((provider || '').toLowerCase()) {
+    case 'openai':
+      return 'OpenAI'
+    case 'groq':
+      return 'Groq'
+    case 'anthropic':
+      return 'Anthropic'
+    case 'gemini':
+    default:
+      return 'Gemini'
+  }
+}
+
 export const Sidebar: React.FC = () => {
   const navigate = useNavigate()
   const { user, logout } = useAuth()
@@ -133,8 +147,8 @@ export const Sidebar: React.FC = () => {
             >
               {systemStatus.llm_configured
                 ? systemStatus.llm_source === 'user'
-                  ? 'Resumo: Gemini (chave pessoal)'
-                  : 'Resumo: Gemini (servidor)'
+                  ? `Resumo: ${formatLlmProviderLabel(systemStatus.llm_provider)} (chave pessoal)`
+                  : `Resumo: ${formatLlmProviderLabel(systemStatus.llm_provider)} (servidor)`
                 : 'Resumo: configure uma chave de IA'}
             </p>
           )}

@@ -1,6 +1,14 @@
 import { request } from './client'
 
 export type ProviderName = 'discord' | 'notion' | 'obsidian' | 'groq' | 'llm'
+export type LLMProviderName = 'gemini' | 'openai' | 'groq' | 'anthropic'
+
+export interface LLMProviderConfigItem {
+  llm_provider: LLMProviderName
+  llm_model?: string | null
+  api_key_masked?: string | null
+  is_configured: boolean
+}
 
 export interface IntegrationStatusItem {
   provider: ProviderName
@@ -14,6 +22,7 @@ export interface IntegrationStatusItem {
   notes_folder: string | null
   llm_provider?: string | null
   llm_model?: string | null
+  llm_providers?: Record<string, LLMProviderConfigItem> | null
 }
 
 export interface IntegrationsSettingsResponse {
@@ -77,7 +86,7 @@ export async function updateGroqIntegration(payload: {
 
 export async function updateLlmIntegration(payload: {
   enabled: boolean
-  llm_provider?: 'gemini'
+  llm_provider?: LLMProviderName
   llm_model?: string
   api_key?: string
 }): Promise<IntegrationStatusItem> {
@@ -87,16 +96,28 @@ export async function updateLlmIntegration(payload: {
   })
 }
 
-export async function deleteIntegration(provider: ProviderName): Promise<void> {
-  await request<void>(`/settings/integrations/${provider}`, {
+export async function deleteIntegration(
+  provider: ProviderName,
+  llmProvider?: LLMProviderName
+): Promise<void> {
+  const query =
+    provider === 'llm' && llmProvider
+      ? `?llm_provider=${encodeURIComponent(llmProvider)}`
+      : ''
+  await request<void>(`/settings/integrations/${provider}${query}`, {
     method: 'DELETE',
   })
 }
 
 export async function testIntegration(
-  provider: ProviderName
+  provider: ProviderName,
+  llmProvider?: LLMProviderName
 ): Promise<IntegrationTestResponse> {
-  return request<IntegrationTestResponse>(`/settings/integrations/${provider}/test`, {
+  const query =
+    provider === 'llm' && llmProvider
+      ? `?llm_provider=${encodeURIComponent(llmProvider)}`
+      : ''
+  return request<IntegrationTestResponse>(`/settings/integrations/${provider}/test${query}`, {
     method: 'POST',
   })
 }

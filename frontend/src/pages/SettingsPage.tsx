@@ -23,6 +23,7 @@ import {
   fetchIntegrationsSettings,
   IntegrationStatusItem,
   IntegrationTestResponse,
+  LLMProviderName,
   ProviderName,
   testIntegration,
   updateDiscordIntegration,
@@ -50,6 +51,52 @@ function resolveTabParam(raw: string | null): TabType {
 interface ProviderFeedback {
   ok: boolean
   message: string
+}
+
+const LLM_PROVIDER_META: Record<
+  LLMProviderName,
+  { label: string; defaultModel: string; keyPlaceholder: string; models: string[] }
+> = {
+  gemini: {
+    label: 'Google Gemini',
+    defaultModel: 'gemini-2.5-flash',
+    keyPlaceholder: 'AIza...',
+    models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
+  },
+  openai: {
+    label: 'OpenAI',
+    defaultModel: 'gpt-4o-mini',
+    keyPlaceholder: 'sk-...',
+    models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1'],
+  },
+  groq: {
+    label: 'Groq',
+    defaultModel: 'llama-3.3-70b-versatile',
+    keyPlaceholder: 'gsk_...',
+    models: [
+      'llama-3.3-70b-versatile',
+      'llama-3.1-8b-instant',
+      'meta-llama/llama-4-scout-17b-16e-instruct',
+    ],
+  },
+  anthropic: {
+    label: 'Anthropic Claude',
+    defaultModel: 'claude-sonnet-4-20250514',
+    keyPlaceholder: 'sk-ant-...',
+    models: [
+      'claude-sonnet-4-20250514',
+      'claude-3-5-haiku-latest',
+      'claude-3-7-sonnet-latest',
+    ],
+  },
+}
+
+function normalizeLlmProvider(raw?: string | null): LLMProviderName {
+  const val = (raw || '').toLowerCase()
+  if (val === 'openai' || val === 'groq' || val === 'anthropic') {
+    return val
+  }
+  return 'gemini'
 }
 
 export const SettingsPage: React.FC = () => {
@@ -99,7 +146,7 @@ export const SettingsPage: React.FC = () => {
   const [groqApiKey, setGroqApiKey] = useState('')
 
   const [llmEnabled, setLlmEnabled] = useState(false)
-  const [llmProvider, setLlmProvider] = useState<'gemini'>('gemini')
+  const [llmProvider, setLlmProvider] = useState<LLMProviderName>('gemini')
   const [llmModel, setLlmModel] = useState('gemini-2.5-flash')
   const [llmApiKey, setLlmApiKey] = useState('')
 
@@ -118,11 +165,21 @@ export const SettingsPage: React.FC = () => {
     setObsidianNotesFolder(integrationsData.obsidian.notes_folder || 'Reuniões')
     setGroqEnabled(integrationsData.groq.enabled)
     if (integrationsData.llm) {
+      const activeSub = normalizeLlmProvider(integrationsData.llm.llm_provider)
       setLlmEnabled(integrationsData.llm.enabled)
-      setLlmProvider('gemini')
-      setLlmModel(integrationsData.llm.llm_model || 'gemini-2.5-flash')
+      setLlmProvider(activeSub)
+      setLlmModel(
+        integrationsData.llm.llm_model || LLM_PROVIDER_META[activeSub].defaultModel
+      )
     }
   }, [integrationsData])
+
+  const handleSelectLlmProvider = (nextProvider: LLMProviderName) => {
+    setLlmProvider(nextProvider)
+    setLlmApiKey('')
+    const savedSub = integrationsData?.llm?.llm_providers?.[nextProvider]
+    setLlmModel(savedSub?.llm_model || LLM_PROVIDER_META[nextProvider].defaultModel)
+  }
 
   const refreshIntegrationsAndSystem = async () => {
     await Promise.all([
@@ -216,26 +273,32 @@ export const SettingsPage: React.FC = () => {
       await updateLlmIntegration({
         enabled: llmEnabled,
         llm_provider: llmProvider,
-        llm_model: llmModel.trim() || 'gemini-2.5-flash',
+        llm_model: llmModel.trim() || LLM_PROVIDER_META[llmProvider].defaultModel,
         ...(llmApiKey.trim() ? { api_key: llmApiKey.trim() } : {}),
       })
       setLlmApiKey('')
       await refreshIntegrationsAndSystem()
-      return 'Configuração da chave de sumarização IA atualizada.'
+      return `Configuração de ${LLM_PROVIDER_META[llmProvider].label} atualizada.`
     })
 
   const handleTestProvider = (provider: ProviderName) =>
     runProviderAction(provider, async () => {
-      const res: IntegrationTestResponse = await testIntegration(provider)
+      const res: IntegrationTestResponse = await testIntegration(
+        provider,
+        provider === 'llm' ? llmProvider : undefined
+      )
       if (!res.ok) {
         throw new Error(res.detail)
       }
       return res.detail
     })
 
-  const handleDeleteProvider = (provider: ProviderName) =>
+  const handleDeleteProvider = (
+    provider: ProviderName,
+    subProvider?: LLMProviderName
+  ) =>
     runProviderAction(provider, async () => {
-      await deleteIntegration(provider)
+      await deleteIntegration(provider, subProvider)
       if (provider === 'discord') setDiscordWebhook('')
       if (provider === 'notion') {
         setNotionApiKey('')
@@ -472,7 +535,7 @@ export const SettingsPage: React.FC = () => {
               isLoadingIntegrations && 'opacity-70 pointer-events-none'
             )}
           >
-            {/* Sumarização com IA (Gemini) Card */}
+            {/* Sumarização com IA (LLM) Card */}
             <Card className="p-6 bg-surface/60 border-[#DCE2FB] md:col-span-2 flex flex-col justify-between">
               <div>
                 <div className="flex items-start justify-between gap-3 mb-4">
@@ -482,7 +545,7 @@ export const SettingsPage: React.FC = () => {
                     </div>
                     <div>
                       <h3 className="text-lg font-bold font-sans text-ink">
-                        Sumarização com IA (Gemini)
+                        Sumarização com IA (LLM)
                       </h3>
                       {renderSourceBadge(integrationsData?.llm)}
                     </div>
@@ -498,16 +561,52 @@ export const SettingsPage: React.FC = () => {
                   </label>
                 </div>
 
-                <div className="mb-4 p-3 rounded-xl bg-white/80 border border-slate-200/80 text-xs text-ink-light flex items-start gap-2.5">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <p className="leading-relaxed">
-                    Sua chave é <strong>criptografada em repouso (AES-256-GCM)</strong> e{' '}
-                    <strong>vinculada exclusivamente à sua conta</strong> no servidor. Ela
-                    é tratada como <strong>write-only</strong>: nunca é exibida novamente
-                    pela API nem armazenada no <code className="font-mono">localStorage</code>{' '}
-                    do navegador.
-                  </p>
-                </div>
+                {integrationsData?.llm?.llm_providers &&
+                  Object.keys(integrationsData.llm.llm_providers).length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 mb-4">
+                      <span className="text-[11px] font-semibold text-muted">
+                        Cadastrados:
+                      </span>
+                      {(
+                        Object.keys(
+                          integrationsData.llm.llm_providers
+                        ) as LLMProviderName[]
+                      ).map((subKey) => {
+                        const meta = LLM_PROVIDER_META[subKey]
+                        if (!meta) return null
+                        const isActive =
+                          integrationsData.llm.llm_provider === subKey
+                        const isSelected = llmProvider === subKey
+                        return (
+                          <button
+                            key={subKey}
+                            type="button"
+                            onClick={() => handleSelectLlmProvider(subKey)}
+                            className={cn(
+                              'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors cursor-pointer',
+                              isSelected
+                                ? 'bg-primary-btn text-white border-primary-btn'
+                                : 'bg-white text-ink border-slate-200 hover:border-brand'
+                            )}
+                          >
+                            <span>{meta.label}</span>
+                            {isActive && (
+                              <span
+                                className={cn(
+                                  'text-[10px] px-1.5 py-0.2 rounded-full',
+                                  isSelected
+                                    ? 'bg-white/20 text-white'
+                                    : 'bg-emerald-50 text-emerald-700'
+                                )}
+                              >
+                                Ativo
+                              </span>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
@@ -517,11 +616,16 @@ export const SettingsPage: React.FC = () => {
                     <select
                       value={llmProvider}
                       onChange={(e) =>
-                        setLlmProvider(e.target.value === 'gemini' ? 'gemini' : 'gemini')
+                        handleSelectLlmProvider(
+                          normalizeLlmProvider(e.target.value)
+                        )
                       }
                       className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-ink bg-white focus:outline-none focus:border-brand"
                     >
                       <option value="gemini">Google Gemini</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="groq">Groq</option>
+                      <option value="anthropic">Anthropic Claude</option>
                     </select>
                   </div>
 
@@ -531,22 +635,22 @@ export const SettingsPage: React.FC = () => {
                     </label>
                     <input
                       type="text"
-                      list="llm-gemini-models"
+                      list={`llm-models-${llmProvider}`}
                       value={llmModel}
                       onChange={(e) => setLlmModel(e.target.value)}
-                      placeholder="gemini-2.5-flash"
+                      placeholder={LLM_PROVIDER_META[llmProvider].defaultModel}
                       className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-ink bg-white focus:outline-none focus:border-brand font-mono"
                     />
-                    <datalist id="llm-gemini-models">
-                      <option value="gemini-2.5-flash" />
-                      <option value="gemini-2.5-pro" />
-                      <option value="gemini-2.0-flash" />
+                    <datalist id={`llm-models-${llmProvider}`}>
+                      {LLM_PROVIDER_META[llmProvider].models.map((m) => (
+                        <option key={m} value={m} />
+                      ))}
                     </datalist>
                   </div>
 
                   <div>
                     <label className="block text-xs font-semibold text-ink-light mb-1">
-                      Chave da API (LLM_API_KEY pessoal)
+                      Chave da API ({LLM_PROVIDER_META[llmProvider].label})
                     </label>
                     <input
                       type="password"
@@ -554,13 +658,24 @@ export const SettingsPage: React.FC = () => {
                       value={llmApiKey}
                       onChange={(e) => setLlmApiKey(e.target.value)}
                       placeholder={
-                        integrationsData?.llm?.api_key_masked || 'AIza...'
+                        integrationsData?.llm?.llm_providers?.[llmProvider]
+                          ?.api_key_masked ||
+                        (integrationsData?.llm?.llm_provider === llmProvider
+                          ? integrationsData.llm.api_key_masked
+                          : null) ||
+                        LLM_PROVIDER_META[llmProvider].keyPlaceholder
                       }
                       className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-ink bg-white focus:outline-none focus:border-brand font-mono"
                     />
-                    {integrationsData?.llm?.api_key_masked && (
+                    {(integrationsData?.llm?.llm_providers?.[llmProvider]
+                      ?.api_key_masked ||
+                      (integrationsData?.llm?.llm_provider === llmProvider &&
+                        integrationsData.llm.api_key_masked)) && (
                       <p className="text-[11px] text-muted mt-1 font-mono">
-                        Chave salva: {integrationsData.llm.api_key_masked}
+                        Chave salva:{' '}
+                        {integrationsData?.llm?.llm_providers?.[llmProvider]
+                          ?.api_key_masked ||
+                          integrationsData?.llm?.api_key_masked}
                       </p>
                     )}
                   </div>
@@ -591,7 +706,14 @@ export const SettingsPage: React.FC = () => {
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => handleDeleteProvider('llm')}
+                    onClick={() =>
+                      handleDeleteProvider(
+                        'llm',
+                        integrationsData?.llm?.llm_providers?.[llmProvider]
+                          ? llmProvider
+                          : undefined
+                      )
+                    }
                     disabled={busyProvider !== null}
                     leftIcon={<Trash2 className="w-3.5 h-3.5 text-rose-600" />}
                     className="text-rose-600 hover:bg-rose-50"
