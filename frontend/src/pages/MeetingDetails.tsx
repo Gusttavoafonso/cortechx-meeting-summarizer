@@ -313,7 +313,7 @@ export const MeetingDetails: React.FC = () => {
       <div className="flex-1 px-8 py-10 max-w-5xl mx-auto w-full">
         <Card className="p-10 text-center border-rose-200 bg-rose-50/20">
           <AlertCircle className="w-10 h-10 text-rose-600 mx-auto mb-3" />
-          <h2 className="text-lg font-bold text-ink mb-1">Reunião não encontrada</h2>
+          <h2 className="text-lg font-bold font-sans text-ink mb-1">Reunião não encontrada</h2>
           <p className="text-sm text-muted mb-6">
             {error instanceof Error
               ? error.message
@@ -419,7 +419,7 @@ export const MeetingDetails: React.FC = () => {
         <div>
           <div className="flex items-center gap-3 flex-wrap mb-1.5">
             <h1 className="text-3xl font-bold font-sans text-ink">{meeting.title}</h1>
-            <StatusBadge status={meeting.status} />
+            <StatusBadge status={meeting.status} className="bg-transparent" />
           </div>
           <p className="text-xs text-muted flex flex-wrap items-center gap-3">
             <span className="flex items-center gap-1">
@@ -467,8 +467,8 @@ export const MeetingDetails: React.FC = () => {
               size="sm"
               disabled={isProcessing}
               onClick={() => setConfirmDelete(true)}
-              leftIcon={<Trash2 className="w-3.5 h-3.5 text-rose-600" />}
-              className="text-rose-600 hover:bg-rose-50"
+              leftIcon={<Trash2 className="w-3.5 h-3.5 text-current" />}
+              className="bg-transparent text-rose-600 hover:bg-transparent hover:text-rose-700 active:bg-transparent"
             >
               Excluir
             </Button>
@@ -514,14 +514,14 @@ export const MeetingDetails: React.FC = () => {
 
       {/* Dedicated failure alert displaying last_error */}
       {meeting.status === 'failed' && (
-        <Card className="p-5 mb-6 border-rose-200 bg-rose-50/40">
+        <Card className="p-5 mb-6 border-rose-200">
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
             <div className="flex-1">
-              <h3 className="text-sm font-bold text-rose-800">
+              <h3 className="text-sm font-bold font-sans text-rose-800">
                 Falha no processamento desta reunião
               </h3>
-              <p className="text-xs text-rose-700 mt-1 leading-relaxed">
+              <p className="text-xs font-sans text-rose-700 mt-1 leading-relaxed">
                 {meeting.last_error ||
                   'Ocorreu um erro durante a transcrição ou sumarização. Tente reprocessar.'}
               </p>
@@ -535,7 +535,7 @@ export const MeetingDetails: React.FC = () => {
         <Card className="p-6 mb-8 border-amber-200 bg-amber-50/30">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1">
-              <h3 className="text-sm font-bold text-ink flex items-center gap-2">
+              <h3 className="text-sm font-bold font-sans text-ink flex items-center gap-2">
                 <Upload className="w-4 h-4 text-amber-600" />
                 <span>Reunião aguardando arquivo de áudio</span>
               </h3>
@@ -579,7 +579,7 @@ export const MeetingDetails: React.FC = () => {
         <Card className="p-6 mb-8 border-brand/25 bg-surface/50">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1">
-              <h3 className="text-sm font-bold text-ink">
+              <h3 className="text-sm font-bold font-sans text-ink">
                 {meeting.status === 'audio_uploaded'
                   ? 'Áudio carregado e pronto para processamento'
                   : 'Transcrição concluída, resumo ainda pendente'}
@@ -608,7 +608,7 @@ export const MeetingDetails: React.FC = () => {
             <RefreshCw className="w-5 h-5 animate-spin" />
           </div>
           <div className="flex-1">
-            <h3 className="text-sm font-semibold text-ink">
+            <h3 className="text-sm font-semibold font-sans text-ink">
               {meeting.status === 'transcribing'
                 ? 'Transcrição de áudio em andamento...'
                 : 'Análise e sumarização em andamento...'}
@@ -821,7 +821,7 @@ export const MeetingDetails: React.FC = () => {
       {meeting.transcript && (
         <Card className="p-6">
           <div className="flex items-center justify-between gap-3 mb-4">
-            <h3 className="text-sm font-semibold text-ink">Transcrição da Reunião</h3>
+            <h3 className="text-sm font-semibold font-sans text-ink">Transcrição da Reunião</h3>
             <button
               type="button"
               onClick={handleCopyTranscript}
