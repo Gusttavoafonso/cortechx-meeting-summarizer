@@ -8,6 +8,7 @@ import {
   KeyRound,
   Lock,
   ShieldCheck,
+  Sparkles,
   Trash2,
   User as UserIcon,
 } from 'lucide-react'
@@ -26,6 +27,7 @@ import {
   testIntegration,
   updateDiscordIntegration,
   updateGroqIntegration,
+  updateLlmIntegration,
   updateNotionIntegration,
   updateObsidianIntegration,
 } from '../api/settings'
@@ -96,6 +98,11 @@ export const SettingsPage: React.FC = () => {
   const [groqEnabled, setGroqEnabled] = useState(false)
   const [groqApiKey, setGroqApiKey] = useState('')
 
+  const [llmEnabled, setLlmEnabled] = useState(false)
+  const [llmProvider, setLlmProvider] = useState<'gemini'>('gemini')
+  const [llmModel, setLlmModel] = useState('gemini-2.5-flash')
+  const [llmApiKey, setLlmApiKey] = useState('')
+
   const [busyProvider, setBusyProvider] = useState<ProviderName | null>(null)
   const [providerFeedback, setProviderFeedback] = useState<
     Partial<Record<ProviderName, ProviderFeedback>>
@@ -110,6 +117,11 @@ export const SettingsPage: React.FC = () => {
     setObsidianVaultPath(integrationsData.obsidian.vault_path ?? '')
     setObsidianNotesFolder(integrationsData.obsidian.notes_folder || 'Reuniões')
     setGroqEnabled(integrationsData.groq.enabled)
+    if (integrationsData.llm) {
+      setLlmEnabled(integrationsData.llm.enabled)
+      setLlmProvider('gemini')
+      setLlmModel(integrationsData.llm.llm_model || 'gemini-2.5-flash')
+    }
   }, [integrationsData])
 
   const refreshIntegrationsAndSystem = async () => {
@@ -199,6 +211,19 @@ export const SettingsPage: React.FC = () => {
       return 'Configuração da chave Groq atualizada.'
     })
 
+  const handleSaveLlm = () =>
+    runProviderAction('llm', async () => {
+      await updateLlmIntegration({
+        enabled: llmEnabled,
+        llm_provider: llmProvider,
+        llm_model: llmModel.trim() || 'gemini-2.5-flash',
+        ...(llmApiKey.trim() ? { api_key: llmApiKey.trim() } : {}),
+      })
+      setLlmApiKey('')
+      await refreshIntegrationsAndSystem()
+      return 'Configuração da chave de sumarização IA atualizada.'
+    })
+
   const handleTestProvider = (provider: ProviderName) =>
     runProviderAction(provider, async () => {
       const res: IntegrationTestResponse = await testIntegration(provider)
@@ -221,6 +246,7 @@ export const SettingsPage: React.FC = () => {
         setObsidianNotesFolder('Reuniões')
       }
       if (provider === 'groq') setGroqApiKey('')
+      if (provider === 'llm') setLlmApiKey('')
       await refreshIntegrationsAndSystem()
       return 'Configuração pessoal removida.'
     })
@@ -380,7 +406,8 @@ export const SettingsPage: React.FC = () => {
       <div className="mb-6">
         <h1 className="text-3xl font-bold font-sans text-ink">Configurações</h1>
         <p className="text-sm text-muted mt-1">
-          Gerencie seu perfil, integrações externas, chave Groq e notificações.
+          Gerencie seu perfil, chave de sumarização IA, integrações externas, chave Groq e
+          notificações.
         </p>
       </div>
 
@@ -445,6 +472,136 @@ export const SettingsPage: React.FC = () => {
               isLoadingIntegrations && 'opacity-70 pointer-events-none'
             )}
           >
+            {/* Sumarização com IA (Gemini) Card */}
+            <Card className="p-6 bg-surface/60 border-[#DCE2FB] md:col-span-2 flex flex-col justify-between">
+              <div>
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-xl bg-brand text-white flex items-center justify-center shrink-0">
+                      <Sparkles className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold font-sans text-ink">
+                        Sumarização com IA (Gemini)
+                      </h3>
+                      {renderSourceBadge(integrationsData?.llm)}
+                    </div>
+                  </div>
+                  <label className="inline-flex items-center gap-2 text-xs font-semibold text-ink cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={llmEnabled}
+                      onChange={(e) => setLlmEnabled(e.target.checked)}
+                      className="w-4 h-4 accent-primary-btn rounded cursor-pointer"
+                    />
+                    <span>Ativo</span>
+                  </label>
+                </div>
+
+                <div className="mb-4 p-3 rounded-xl bg-white/80 border border-slate-200/80 text-xs text-ink-light flex items-start gap-2.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <p className="leading-relaxed">
+                    Sua chave é <strong>criptografada em repouso (AES-256-GCM)</strong> e{' '}
+                    <strong>vinculada exclusivamente à sua conta</strong> no servidor. Ela
+                    é tratada como <strong>write-only</strong>: nunca é exibida novamente
+                    pela API nem armazenada no <code className="font-mono">localStorage</code>{' '}
+                    do navegador.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-light mb-1">
+                      Provedor
+                    </label>
+                    <select
+                      value={llmProvider}
+                      onChange={(e) =>
+                        setLlmProvider(e.target.value === 'gemini' ? 'gemini' : 'gemini')
+                      }
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-ink bg-white focus:outline-none focus:border-brand"
+                    >
+                      <option value="gemini">Google Gemini</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-light mb-1">
+                      Modelo
+                    </label>
+                    <input
+                      type="text"
+                      list="llm-gemini-models"
+                      value={llmModel}
+                      onChange={(e) => setLlmModel(e.target.value)}
+                      placeholder="gemini-2.5-flash"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-ink bg-white focus:outline-none focus:border-brand font-mono"
+                    />
+                    <datalist id="llm-gemini-models">
+                      <option value="gemini-2.5-flash" />
+                      <option value="gemini-2.5-pro" />
+                      <option value="gemini-2.0-flash" />
+                    </datalist>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-light mb-1">
+                      Chave da API (LLM_API_KEY pessoal)
+                    </label>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={llmApiKey}
+                      onChange={(e) => setLlmApiKey(e.target.value)}
+                      placeholder={
+                        integrationsData?.llm?.api_key_masked || 'AIza...'
+                      }
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-ink bg-white focus:outline-none focus:border-brand font-mono"
+                    />
+                    {integrationsData?.llm?.api_key_masked && (
+                      <p className="text-[11px] text-muted mt-1 font-mono">
+                        Chave salva: {integrationsData.llm.api_key_masked}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {renderFeedback(providerFeedback.llm)}
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 mt-5 pt-4 border-t border-slate-200/70">
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={handleSaveLlm}
+                    isLoading={busyProvider === 'llm'}
+                  >
+                    Salvar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleTestProvider('llm')}
+                    disabled={busyProvider !== null}
+                  >
+                    Testar chave
+                  </Button>
+                </div>
+                {integrationsData?.llm?.source === 'user' && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleDeleteProvider('llm')}
+                    disabled={busyProvider !== null}
+                    leftIcon={<Trash2 className="w-3.5 h-3.5 text-rose-600" />}
+                    className="text-rose-600 hover:bg-rose-50"
+                  >
+                    Remover chave
+                  </Button>
+                )}
+              </div>
+            </Card>
+
             {/* Discord Card */}
             <Card className="p-6 bg-surface/60 border-[#DCE2FB] flex flex-col justify-between">
               <div>

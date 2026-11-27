@@ -1,6 +1,6 @@
 import { request } from './client'
 
-export type ProviderName = 'discord' | 'notion' | 'obsidian' | 'groq'
+export type ProviderName = 'discord' | 'notion' | 'obsidian' | 'groq' | 'llm'
 
 export interface IntegrationStatusItem {
   provider: ProviderName
@@ -12,6 +12,8 @@ export interface IntegrationStatusItem {
   database_id: string | null
   vault_path: string | null
   notes_folder: string | null
+  llm_provider?: string | null
+  llm_model?: string | null
 }
 
 export interface IntegrationsSettingsResponse {
@@ -19,6 +21,7 @@ export interface IntegrationsSettingsResponse {
   notion: IntegrationStatusItem
   obsidian: IntegrationStatusItem
   groq: IntegrationStatusItem
+  llm: IntegrationStatusItem
 }
 
 export interface IntegrationTestResponse {
@@ -67,6 +70,18 @@ export async function updateGroqIntegration(payload: {
   api_key?: string
 }): Promise<IntegrationStatusItem> {
   return request<IntegrationStatusItem>('/settings/integrations/groq', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updateLlmIntegration(payload: {
+  enabled: boolean
+  llm_provider?: 'gemini'
+  llm_model?: string
+  api_key?: string
+}): Promise<IntegrationStatusItem> {
+  return request<IntegrationStatusItem>('/settings/integrations/llm', {
     method: 'PUT',
     body: JSON.stringify(payload),
   })

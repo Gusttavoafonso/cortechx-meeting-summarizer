@@ -91,7 +91,7 @@ export const Sidebar: React.FC = () => {
       {/* Bottom Shortcuts / Status */}
       <div className="pt-3 border-t border-slate-200/60 mb-2.5 px-1">
         <Link
-          to="/settings?tab=integrations"
+          to="/settings?tab=integracoes"
           className="block bg-white/60 hover:bg-white border border-slate-200/80 rounded-xl p-2.5 transition-colors"
         >
           <div className="flex items-center gap-1.5">
@@ -122,6 +122,22 @@ export const Sidebar: React.FC = () => {
                   : 'Usando chave configurada no servidor.'
                 : `Modelo ${systemStatus?.whisper_model || 'small'} local.`}
           </p>
+          {!isSystemError && systemStatus && (
+            <p
+              className={cn(
+                'text-[10px] mt-1 pt-1 border-t border-slate-200/70 leading-snug truncate',
+                systemStatus.llm_configured
+                  ? 'text-muted'
+                  : 'text-amber-700 font-semibold'
+              )}
+            >
+              {systemStatus.llm_configured
+                ? systemStatus.llm_source === 'user'
+                  ? 'Resumo: Gemini (chave pessoal)'
+                  : 'Resumo: Gemini (servidor)'
+                : 'Resumo: configure uma chave de IA'}
+            </p>
+          )}
         </Link>
       </div>
 

@@ -6,6 +6,7 @@ export interface SystemStatus {
   stt_source: 'user' | 'server' | 'local'
   whisper_model: string
   llm_configured: boolean
+  llm_source?: 'user' | 'server' | 'none'
   llm_provider: string | null
   llm_model: string | null
 }
