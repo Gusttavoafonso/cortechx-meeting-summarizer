@@ -13,53 +13,46 @@ class MeetingRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def get_by_id(self, meeting_id: int) -> Meeting | None:
-        statement = (
-            select(Meeting)
-            .where(Meeting.id == meeting_id)
-            .options(
-                selectinload(Meeting.audio),
-                selectinload(Meeting.transcript).selectinload(Transcript.segments),
-            )
+    def _with_relations(self, statement):
+        """Aplica o carregamento ansioso usado por todas as leituras de reuniao."""
+        return statement.options(
+            selectinload(Meeting.audio),
+            selectinload(Meeting.transcript).selectinload(Transcript.segments),
         )
-        return self.db.scalars(statement).first()
 
-    def get_by_id_and_user(self, meeting_id: int, user_id: int) -> Meeting | None:
-        statement = (
-            select(Meeting)
-            .where(
+    def get_by_id(self, meeting_id: int, user_id: int) -> Meeting | None:
+        """Busca a reuniao pertencente ao usuario informado.
+
+        Reuniao de outro dono, ou sem dono (criada antes do controle de posse),
+        nao e encontrada: a API responde 404 e nao revela que ela existe.
+        """
+        statement = self._with_relations(
+            select(Meeting).where(
                 Meeting.id == meeting_id,
-                (Meeting.user_id == user_id) | (Meeting.user_id.is_(None)),
-            )
-            .options(
-                selectinload(Meeting.audio),
-                selectinload(Meeting.transcript).selectinload(Transcript.segments),
+                Meeting.user_id == user_id,
             )
         )
         return self.db.scalars(statement).first()
 
-    def list_all(self) -> list[Meeting]:
-        statement = (
-            select(Meeting)
-            .options(
-                selectinload(Meeting.audio),
-                selectinload(Meeting.transcript).selectinload(Transcript.segments),
-            )
-            .order_by(Meeting.created_at.desc())
-        )
+    def list_all(self, user_id: int) -> list[Meeting]:
+        """Lista somente as reunioes do usuario informado."""
+        statement = self._with_relations(
+            select(Meeting).where(Meeting.user_id == user_id)
+        ).order_by(Meeting.created_at.desc())
         return list(self.db.scalars(statement).all())
 
-    def list_by_user(self, user_id: int) -> list[Meeting]:
-        statement = (
-            select(Meeting)
-            .where((Meeting.user_id == user_id) | (Meeting.user_id.is_(None)))
-            .options(
-                selectinload(Meeting.audio),
-                selectinload(Meeting.transcript).selectinload(Transcript.segments),
-            )
-            .order_by(Meeting.created_at.desc())
+    def get_for_pipeline(self, meeting_id: int) -> Meeting | None:
+        """Busca a reuniao sem filtro de posse.
+
+        Uso exclusivo do pipeline interno (worker Celery, entrega das
+        integracoes e transicoes de estado), que recebe apenas o ``meeting_id``
+        porque a API ja validou a posse antes de enfileirar o job. Nenhuma rota
+        HTTP deve chamar este metodo.
+        """
+        statement = self._with_relations(
+            select(Meeting).where(Meeting.id == meeting_id)
         )
-        return list(self.db.scalars(statement).all())
+        return self.db.scalars(statement).first()
 
     def create(
         self,

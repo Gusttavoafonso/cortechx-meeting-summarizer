@@ -48,7 +48,7 @@ def test_process_meeting_completes_pipeline(
     transcript = MagicMock()
     audio_path = "/tmp/meeting.wav"
 
-    meeting_repository.get_by_id.return_value = meeting
+    meeting_repository.get_for_pipeline.return_value = meeting
     audio_storage_service.get_file_path.return_value = audio_path
     speech_to_text_service.transcribe.return_value = stt_result
     transcript_repository.save_transcript.return_value = transcript
@@ -73,7 +73,7 @@ def test_process_meeting_raises_when_meeting_does_not_exist(
     processor_dependencies: dict[str, MagicMock],
 ) -> None:
     meeting_repository = processor_dependencies["meeting_repository"]
-    meeting_repository.get_by_id.return_value = None
+    meeting_repository.get_for_pipeline.return_value = None
 
     with pytest.raises(ValueError, match="not found"):
         processor.process_meeting(1)
@@ -95,7 +95,7 @@ def test_process_meeting_raises_when_audio_is_missing() -> None:
     )
     meeting = MagicMock()
     meeting.audio = None
-    meeting_repository.get_by_id.return_value = meeting
+    meeting_repository.get_for_pipeline.return_value = meeting
 
     with pytest.raises(ValueError, match="Missing audio"):
         processor.process_meeting(1)
@@ -115,7 +115,7 @@ def test_process_meeting_marks_failed_when_audio_missing_and_processing() -> Non
     meeting = MagicMock()
     meeting.audio = None
     meeting.status = MeetingStatus.PROCESSING
-    meeting_repository.get_by_id.return_value = meeting
+    meeting_repository.get_for_pipeline.return_value = meeting
 
     with pytest.raises(ValueError, match="Missing audio"):
         processor.process_meeting(1, allow_already_processing=True)
@@ -134,7 +134,7 @@ def test_process_meeting_raises_when_already_processing(
 ) -> None:
     meeting_repository = processor_dependencies["meeting_repository"]
     meeting.status = MeetingStatus.PROCESSING
-    meeting_repository.get_by_id.return_value = meeting
+    meeting_repository.get_for_pipeline.return_value = meeting
 
     with pytest.raises(ValueError, match="already being processed"):
         processor.process_meeting(meeting.id)
@@ -151,7 +151,7 @@ def test_process_meeting_marks_as_failed_when_stt_fails(
     meeting_repository = processor_dependencies["meeting_repository"]
     speech_to_text_service = processor_dependencies["speech_to_text_service"]
     audio_storage_service = processor_dependencies["audio_storage_service"]
-    meeting_repository.get_by_id.return_value = meeting
+    meeting_repository.get_for_pipeline.return_value = meeting
     audio_storage_service.get_file_path.return_value = "/tmp/meeting.wav"
     speech_to_text_service.transcribe.side_effect = RuntimeError("STT failed")
 
@@ -173,7 +173,7 @@ def test_process_meeting_marks_as_failed_when_transcript_persistence_fails(
     transcript_repository = processor_dependencies["transcript_repository"]
     speech_to_text_service = processor_dependencies["speech_to_text_service"]
     audio_storage_service = processor_dependencies["audio_storage_service"]
-    meeting_repository.get_by_id.return_value = meeting
+    meeting_repository.get_for_pipeline.return_value = meeting
     audio_storage_service.get_file_path.return_value = "/tmp/meeting.wav"
     speech_to_text_service.transcribe.return_value = MagicMock(
         text="Texto transcrito",
@@ -200,7 +200,7 @@ def test_process_meeting_marks_as_failed_when_chunking_fails(
     speech_to_text_service = processor_dependencies["speech_to_text_service"]
     audio_storage_service = processor_dependencies["audio_storage_service"]
     chunking_service = processor_dependencies["chunking_service"]
-    meeting_repository.get_by_id.return_value = meeting
+    meeting_repository.get_for_pipeline.return_value = meeting
     audio_storage_service.get_file_path.return_value = "/tmp/meeting.wav"
     speech_to_text_service.transcribe.return_value = MagicMock(
         text="Texto transcrito",
@@ -254,7 +254,7 @@ def test_process_meeting_persists_summary_and_tasks_when_summary_repo_configured
     transcript = MagicMock()
     chunks = [MagicMock(text="[00:00:00 - 00:00:05] SPEAKER_00: Olá")]
 
-    processor_dependencies["meeting_repository"].get_by_id.return_value = meeting
+    processor_dependencies["meeting_repository"].get_for_pipeline.return_value = meeting
     processor_dependencies[
         "audio_storage_service"
     ].get_file_path.return_value = "/tmp/meeting.wav"
@@ -295,7 +295,7 @@ def test_process_meeting_marks_as_failed_when_llm_summarization_fails(
         summary_repository=summary_repository,
     )
 
-    processor_dependencies["meeting_repository"].get_by_id.return_value = meeting
+    processor_dependencies["meeting_repository"].get_for_pipeline.return_value = meeting
     processor_dependencies[
         "audio_storage_service"
     ].get_file_path.return_value = "/tmp/meeting.wav"
@@ -338,7 +338,7 @@ def test_process_meeting_marks_as_failed_when_summary_persistence_fails(
         summary_repository=summary_repository,
     )
 
-    processor_dependencies["meeting_repository"].get_by_id.return_value = meeting
+    processor_dependencies["meeting_repository"].get_for_pipeline.return_value = meeting
     processor_dependencies[
         "audio_storage_service"
     ].get_file_path.return_value = "/tmp/meeting.wav"
@@ -371,7 +371,7 @@ def test_process_meeting_keeps_completed_status_when_integration_dispatcher_fail
         integration_dispatcher=failing_dispatcher,
     )
 
-    processor_dependencies["meeting_repository"].get_by_id.return_value = meeting
+    processor_dependencies["meeting_repository"].get_for_pipeline.return_value = meeting
     processor_dependencies[
         "audio_storage_service"
     ].get_file_path.return_value = "/tmp/meeting.wav"

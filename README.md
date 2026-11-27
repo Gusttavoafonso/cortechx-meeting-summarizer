@@ -79,9 +79,28 @@ Defina `JWT_SECRET_KEY` no `.env` (obrigatória; a aplicação não inicia sem e
 | --- | --- |
 | `POST /auth/register` | JSON `{name, email, password}` (senha ≥ 8 caracteres). Retorna `201` sem o hash; e-mail duplicado retorna `409`. |
 | `POST /auth/login` | Formulário OAuth2 (`username` = e-mail, `password`). Retorna `{access_token, token_type}`; falhas retornam `401` genérico. |
-| `GET /users/me` | Dados do usuário autenticado (`Authorization: Bearer <token>`). |
+| `GET /users/me` | Dados do usuário autenticado (cookie de sessão ou `Authorization: Bearer <token>`). |
 
-As demais rotas (exceto `/health`) exigem o token. Tokens inválidos, expirados ou de usuário inativo retornam `401` com `WWW-Authenticate: Bearer`. Senhas são armazenadas com Argon2.
+As rotas protegidas aceitam o cookie de sessão ou `Authorization: Bearer <token>`; quando ambos são enviados, Bearer tem precedência. Tokens inválidos, expirados ou de usuário inativo retornam `401` com `WWW-Authenticate: Bearer`. Senhas são armazenadas com Argon2.
+
+## Autenticação e posse das reuniões
+
+**Todas as rotas de `/meetings` exigem uma sessão válida.** As rotas de
+autenticação (`/auth/register`, `/auth/login`, `/auth/google`), `/health` e a
+documentação (`/docs`, `/openapi.json`) continuam públicas.
+
+Obtenha a sessão em `POST /auth/register`, `POST /auth/login` ou
+`POST /auth/google`: a resposta traz um cookie `HttpOnly`. Clientes de API e o
+Swagger podem usar o mesmo token em `Authorization: Bearer <token>` (o botão
+**Authorize** do `/docs` aceita os dois).
+
+Cada reunião pertence ao usuário que a criou. Uma reunião de outro usuário —
+ou sem dono, criada antes do controle de posse — responde **404**, e não 403,
+para não revelar que ela existe. Sem token ou com token inválido, a resposta é
+**401**.
+
+O modelo de posse, o comportamento de 404 e a decisão sobre as reuniões
+anteriores estão em [`docs/autenticacao.md`](docs/autenticacao.md).
 
 ## Upload de Áudio e Formatos Suportados
 
@@ -221,6 +240,9 @@ versões. Essa abordagem evita resultados duplicados ou inconsistentes no
 banco.
 
 ## Endpoints de resumo
+
+Como todas as rotas de `/meetings`, as duas exigem sessão válida e só alcançam
+reuniões do próprio usuário.
 
 | Método | Rota | Descrição |
 |---|---|---|

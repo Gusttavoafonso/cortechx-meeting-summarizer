@@ -15,23 +15,32 @@ class MeetingService:
     def __init__(self, repository: MeetingRepository):
         self.repository = repository
 
-    def create(self, data: MeetingCreate, user_id: int | None = None) -> Meeting:
-        meeting = Meeting(title=data.title, status=MeetingStatus.RECEIVED, user_id=user_id)
+    def create(self, data: MeetingCreate, user_id: int) -> Meeting:
+        """Cria a reuniao ja vinculada ao usuario autenticado."""
+        meeting = Meeting(
+            title=data.title,
+            status=MeetingStatus.RECEIVED,
+            user_id=user_id,
+        )
         return self.repository.create(meeting)
 
-    def get_by_id(self, meeting_id: int, user_id: int | None = None) -> Meeting:
-        if user_id is not None:
-            meeting = self.repository.get_by_id_and_user(meeting_id, user_id)
-        else:
-            meeting = self.repository.get_by_id(meeting_id)
+    def get_by_id(self, meeting_id: int, user_id: int) -> Meeting:
+        """Busca a reuniao do usuario; levanta MeetingNotFoundError se for de outro."""
+        meeting = self.repository.get_by_id(meeting_id, user_id)
         if meeting is None:
             raise MeetingNotFoundError(meeting_id)
         return meeting
 
-    def list_all(self, user_id: int | None = None) -> list[Meeting]:
-        if user_id is not None:
-            return self.repository.list_by_user(user_id)
-        return self.repository.list_all()
+    def list_all(self, user_id: int) -> list[Meeting]:
+        """Lista somente as reunioes do usuario informado."""
+        return self.repository.list_all(user_id)
+
+    def get_for_pipeline(self, meeting_id: int) -> Meeting:
+        """Busca sem filtro de posse, para o pipeline interno (ver repositorio)."""
+        meeting = self.repository.get_for_pipeline(meeting_id)
+        if meeting is None:
+            raise MeetingNotFoundError(meeting_id)
+        return meeting
 
     def update_status(
         self,
@@ -40,8 +49,12 @@ class MeetingService:
         *,
         error_message: str | None = None,
     ) -> Meeting:
-        """Valida a transição, atualiza metadados e persiste o estado atomicamente."""
-        meeting = self.get_by_id(meeting_id)
+        """Valida a transição, atualiza metadados e persiste o estado atomicamente.
+
+        Chamada pelo pipeline interno e pelas rotas que ja validaram a posse,
+        por isso busca a reunião sem filtro de usuário.
+        """
+        meeting = self.get_for_pipeline(meeting_id)
         current = MeetingStatus(meeting.status)
         target = MeetingStatus(new_status)
 

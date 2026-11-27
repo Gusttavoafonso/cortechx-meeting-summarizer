@@ -34,7 +34,14 @@ from app.workers.integration_job import enqueue_integration_delivery
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    dependencies=[Depends(get_current_user)],
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "description": "Sessão ausente, inválida ou expirada."
+        }
+    },
+)
 
 _NOT_RETRYABLE = {
     IntegrationDeliveryStatus.SUCCESS.value,
@@ -58,14 +65,9 @@ def _validate_meeting_id(meeting_id: int) -> None:
         )
 
 
-def _get_meeting_or_404(
-    db: Session, meeting_id: int, user_id: int | None = None
-) -> Meeting:
-    repo = MeetingRepository(db)
-    if user_id is not None:
-        meeting = repo.get_by_id_and_user(meeting_id, user_id)
-    else:
-        meeting = repo.get_by_id(meeting_id)
+def _get_meeting_or_404(db: Session, meeting_id: int, user_id: int) -> Meeting:
+    """Carrega a reunião do usuário autenticado; de outro dono responde 404."""
+    meeting = MeetingRepository(db).get_by_id(meeting_id, user_id)
 
     if meeting is None:
         raise HTTPException(

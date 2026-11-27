@@ -12,8 +12,13 @@ from app.schemas.summary import SummaryResult, TaskItem
 from pydantic import ValidationError
 
 
-def _create_meeting(db_session, title: str = "Reuniao de planejamento") -> Meeting:
-    meeting = Meeting(title=title)
+def _create_meeting(
+    db_session,
+    title: str = "Reuniao de planejamento",
+    owner=None,
+) -> Meeting:
+    """Cria a reunião; `owner` é obrigatório para quem a acessa pela API."""
+    meeting = Meeting(title=title, user_id=owner.id if owner is not None else None)
     db_session.add(meeting)
     db_session.commit()
     db_session.refresh(meeting)
@@ -165,12 +170,12 @@ def test_summary_response_includes_tasks(db_session):
     assert response.tasks[1].responsible is None
 
 
-def test_get_summary_endpoint_returns_tasks(client, db_session):
-    meeting = _create_meeting(db_session)
+def test_get_summary_endpoint_returns_tasks(auth_client, db_session, test_user):
+    meeting = _create_meeting(db_session, owner=test_user)
     repository = SummaryRepository(db_session)
     repository.save_result(meeting.id, _result())
 
-    resp = client.get(f"/meetings/{meeting.id}/summary")
+    resp = auth_client.get(f"/meetings/{meeting.id}/summary")
     assert resp.status_code == 200
     data = resp.json()
     assert data["meeting_id"] == meeting.id
@@ -181,14 +186,14 @@ def test_get_summary_endpoint_returns_tasks(client, db_session):
     assert data["tasks"][0]["deadline"] == "2026-10-02"
 
 
-def test_get_summary_endpoint_not_found(client):
-    resp = client.get("/meetings/99999/summary")
+def test_get_summary_endpoint_not_found(auth_client):
+    resp = auth_client.get("/meetings/99999/summary")
     assert resp.status_code == 404
     assert "não encontrada" in resp.json()["detail"]
 
 
-def test_get_summary_endpoint_unprocessed(client, db_session):
-    meeting = _create_meeting(db_session)
-    resp = client.get(f"/meetings/{meeting.id}/summary")
+def test_get_summary_endpoint_unprocessed(auth_client, db_session, test_user):
+    meeting = _create_meeting(db_session, owner=test_user)
+    resp = auth_client.get(f"/meetings/{meeting.id}/summary")
     assert resp.status_code == 404
     assert "Resumo ainda não gerado" in resp.json()["detail"]
