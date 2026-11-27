@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 from app.core.config import DEFAULT_OBSIDIAN_NOTES_FOLDER
 
 ProviderName = Literal["discord", "notion", "obsidian", "groq", "llm"]
+LLMProviderType = Literal["gemini", "openai", "groq", "anthropic"]
 
 
 def _clean_optional_str(value: str | None) -> str | None:
@@ -87,7 +88,7 @@ class GroqIntegrationUpdate(BaseModel):
 
 class LLMIntegrationUpdate(BaseModel):
     enabled: bool
-    llm_provider: Literal["gemini"] = "gemini"
+    llm_provider: LLMProviderType = "gemini"
     llm_model: str | None = Field(default=None, max_length=128)
     api_key: str | None = Field(default=None, max_length=512)
 
@@ -95,6 +96,13 @@ class LLMIntegrationUpdate(BaseModel):
     @classmethod
     def clean_fields(cls, value: str | None) -> str | None:
         return _clean_optional_str(value)
+
+
+class LLMProviderItem(BaseModel):
+    llm_provider: LLMProviderType
+    llm_model: str | None = None
+    api_key_masked: str | None = None
+    is_configured: bool = False
 
 
 class IntegrationStatusItem(BaseModel):
@@ -109,6 +117,7 @@ class IntegrationStatusItem(BaseModel):
     notes_folder: str | None = None
     llm_provider: str | None = None
     llm_model: str | None = None
+    llm_providers: dict[str, LLMProviderItem] | None = None
 
 
 class IntegrationsSettingsResponse(BaseModel):

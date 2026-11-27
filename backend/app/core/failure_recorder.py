@@ -29,7 +29,8 @@ _REDACT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"gsk_[a-zA-Z0-9]{16,}", re.IGNORECASE), "gsk_***[REDACTED]"),
     (re.compile(r"AIza[a-zA-Z0-9_\-]{20,}", re.IGNORECASE), "AIza***[REDACTED]"),
     (re.compile(r"hf_[a-zA-Z0-9]{20,}", re.IGNORECASE), "hf_***[REDACTED]"),
-    (re.compile(r"sk-[a-zA-Z0-9]{20,}", re.IGNORECASE), "sk-***[REDACTED]"),
+    (re.compile(r"sk-ant-[a-zA-Z0-9_\-]{16,}", re.IGNORECASE), "sk-ant-***[REDACTED]"),
+    (re.compile(r"sk-[a-zA-Z0-9_\-]{20,}", re.IGNORECASE), "sk-***[REDACTED]"),
     # 3. Tokens de autenticação / Bearer / Basic
     (re.compile(r"(?i)\b(bearer\s+)[a-zA-Z0-9_\-\.]{15,}"), r"\1[REDACTED]"),
     (re.compile(r"(?i)\b(basic\s+)[a-zA-Z0-9+/=]{15,}"), r"\1[REDACTED]"),

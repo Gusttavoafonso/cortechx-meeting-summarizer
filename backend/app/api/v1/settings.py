@@ -19,8 +19,10 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.core.config import (
     DEFAULT_LLM_MODEL,
+    DEFAULT_LLM_MODELS,
     DEFAULT_LLM_PROVIDER,
     DEFAULT_OBSIDIAN_NOTES_FOLDER,
+    SUPPORTED_LLM_PROVIDERS,
     settings,
 )
 from app.core.database import get_session
@@ -39,6 +41,7 @@ from app.schemas.settings import (
     IntegrationStatusItem,
     IntegrationTestResponse,
     LLMIntegrationUpdate,
+    LLMProviderItem,
     NotionIntegrationUpdate,
     ObsidianIntegrationUpdate,
     ProviderName,
@@ -49,7 +52,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
 ALLOWED_PROVIDERS: set[str] = {"discord", "notion", "obsidian", "groq", "llm"}
-_GEMINI_MODEL_RE = re.compile(r"^[a-zA-Z0-9._-]+$")
+_LLM_MODEL_RE = re.compile(r"^[a-zA-Z0-9._-]+(?:/[a-zA-Z0-9._-]+)*$")
 
 
 def _mask_secret(value: str | None) -> str | None:
@@ -99,6 +102,50 @@ def _read_decrypted_config(row: UserIntegration | None) -> dict[str, Any]:
             row.user_id,
         )
         return {}
+
+
+def _extract_llm_providers_map(cfg: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """Extrai o mapa {provider: {llm_model, api_key}} mantendo legado compatível."""
+    providers_map: dict[str, dict[str, str]] = {}
+    raw_providers = cfg.get("providers")
+    if isinstance(raw_providers, dict):
+        for sub_name, sub_cfg in raw_providers.items():
+            if not isinstance(sub_cfg, dict):
+                continue
+            sub_key = str(sub_name).strip().lower()
+            if sub_key not in SUPPORTED_LLM_PROVIDERS:
+                continue
+            entry: dict[str, str] = {}
+            model_val = sub_cfg.get("llm_model")
+            key_val = sub_cfg.get("api_key")
+            if isinstance(model_val, str) and model_val.strip():
+                entry["llm_model"] = model_val.strip()
+            if isinstance(key_val, str) and key_val.strip():
+                entry["api_key"] = key_val.strip()
+            if entry:
+                providers_map[sub_key] = entry
+
+    active_provider = str(cfg.get("llm_provider") or "").strip().lower()
+    if active_provider in SUPPORTED_LLM_PROVIDERS:
+        entry = dict(providers_map.get(active_provider, {}))
+        active_model = cfg.get("llm_model")
+        active_key = cfg.get("api_key")
+        if (
+            "llm_model" not in entry
+            and isinstance(active_model, str)
+            and active_model.strip()
+        ):
+            entry["llm_model"] = active_model.strip()
+        if (
+            "api_key" not in entry
+            and isinstance(active_key, str)
+            and active_key.strip()
+        ):
+            entry["api_key"] = active_key.strip()
+        if entry:
+            providers_map[active_provider] = entry
+
+    return providers_map
 
 
 def _upsert_user_integration(
@@ -223,11 +270,29 @@ def _build_status_item(
 
     if provider == "llm":
         if row is not None:
-            api_key = cfg.get("api_key")
-            llm_provider = cfg.get("llm_provider") or DEFAULT_LLM_PROVIDER
-            llm_model = (
-                cfg.get("llm_model") or settings.llm_model or DEFAULT_LLM_MODEL
+            providers_map = _extract_llm_providers_map(cfg)
+            llm_provider = (
+                str(cfg.get("llm_provider") or DEFAULT_LLM_PROVIDER).strip().lower()
             )
+            sub_cfg = providers_map.get(llm_provider, {})
+            api_key = cfg.get("api_key") or sub_cfg.get("api_key")
+            default_for_provider = DEFAULT_LLM_MODELS.get(
+                llm_provider, settings.llm_model or DEFAULT_LLM_MODEL
+            )
+            llm_model = (
+                cfg.get("llm_model") or sub_cfg.get("llm_model") or default_for_provider
+            )
+            llm_providers = {
+                sub: LLMProviderItem(
+                    llm_provider=sub,  # type: ignore[arg-type]
+                    llm_model=item.get("llm_model")
+                    or DEFAULT_LLM_MODELS.get(sub, DEFAULT_LLM_MODEL),
+                    api_key_masked=_mask_secret(item.get("api_key")),
+                    is_configured=bool(item.get("api_key")),
+                )
+                for sub, item in providers_map.items()
+                if item.get("api_key")
+            }
             return IntegrationStatusItem(
                 provider="llm",
                 enabled=row.enabled,
@@ -236,6 +301,7 @@ def _build_status_item(
                 api_key_masked=_mask_secret(api_key),
                 llm_provider=llm_provider,
                 llm_model=llm_model,
+                llm_providers=llm_providers or None,
             )
         env_key = _secret_value(settings.llm_api_key)
         has_env = bool(settings.llm_provider and settings.llm_model and env_key)
@@ -247,6 +313,7 @@ def _build_status_item(
             api_key_masked=_mask_secret(env_key) if has_env else None,
             llm_provider=settings.llm_provider or DEFAULT_LLM_PROVIDER,
             llm_model=settings.llm_model or DEFAULT_LLM_MODEL,
+            llm_providers=None,
         )
 
     # groq
@@ -439,12 +506,22 @@ def update_llm_integration(
 ) -> IntegrationStatusItem:
     existing = _get_user_integration(db, current_user.id, "llm")
     existing_cfg = _read_decrypted_config(existing)
-    api_key = payload.api_key or existing_cfg.get("api_key")
+    providers_map = _extract_llm_providers_map(existing_cfg)
+    sub = payload.llm_provider
+    sub_existing = providers_map.get(sub, {})
+
+    api_key = payload.api_key or sub_existing.get("api_key")
+    default_model = DEFAULT_LLM_MODELS.get(sub, DEFAULT_LLM_MODEL)
     model_to_save = (
         payload.llm_model
-        or existing_cfg.get("llm_model")
-        or settings.llm_model
-        or DEFAULT_LLM_MODEL
+        or sub_existing.get("llm_model")
+        or (
+            settings.llm_model
+            if sub == (settings.llm_provider or DEFAULT_LLM_PROVIDER).strip().lower()
+            and settings.llm_model
+            else None
+        )
+        or default_model
     )
 
     if payload.enabled and not api_key:
@@ -456,9 +533,15 @@ def update_llm_integration(
             ),
         )
 
+    sub_entry: dict[str, str] = {"llm_model": model_to_save}
+    if api_key:
+        sub_entry["api_key"] = api_key
+    providers_map[sub] = sub_entry
+
     new_cfg: dict[str, Any] = {
-        "llm_provider": payload.llm_provider,
+        "llm_provider": sub,
         "llm_model": model_to_save,
+        "providers": providers_map,
     }
     if api_key:
         new_cfg["api_key"] = api_key
@@ -476,6 +559,7 @@ def update_llm_integration(
 )
 def delete_integration(
     provider: str,
+    llm_provider: str | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session),
 ) -> Response:
@@ -487,6 +571,38 @@ def delete_integration(
         )
     row = _get_user_integration(db, current_user.id, provider_name)
     if row is not None:
+        if provider_name == "llm" and llm_provider and llm_provider.strip():
+            sub = llm_provider.strip().lower()
+            if sub not in SUPPORTED_LLM_PROVIDERS:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Provedor LLM desconhecido: {llm_provider}.",
+                )
+            cfg = _read_decrypted_config(row)
+            providers_map = _extract_llm_providers_map(cfg)
+            providers_map.pop(sub, None)
+            remaining = {
+                k: v for k, v in providers_map.items() if v.get("api_key")
+            }
+            if not remaining:
+                db.delete(row)
+                db.commit()
+                return Response(status_code=status.HTTP_204_NO_CONTENT)
+            active = str(cfg.get("llm_provider") or "").strip().lower()
+            if active not in remaining:
+                active = next(iter(remaining))
+            active_entry = remaining[active]
+            new_cfg: dict[str, Any] = {
+                "llm_provider": active,
+                "llm_model": active_entry.get("llm_model")
+                or DEFAULT_LLM_MODELS.get(active, DEFAULT_LLM_MODEL),
+                "api_key": active_entry["api_key"],
+                "providers": remaining,
+            }
+            _upsert_user_integration(
+                db, current_user.id, "llm", enabled=row.enabled, config=new_cfg
+            )
+            return Response(status_code=status.HTTP_204_NO_CONTENT)
         db.delete(row)
         db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -499,6 +615,7 @@ def delete_integration(
 )
 def test_integration(
     provider: str,
+    llm_provider: str | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session),
 ) -> IntegrationTestResponse:
@@ -537,10 +654,29 @@ def test_integration(
             cfg.get("notes_folder") or settings.obsidian_notes_folder,
         )
     if provider_name == "llm":
-        return _test_llm(
-            cfg.get("api_key") or _secret_value(settings.llm_api_key),
-            cfg.get("llm_model") or settings.llm_model,
+        providers_map = _extract_llm_providers_map(cfg)
+        target_provider = (
+            llm_provider.strip().lower()
+            if llm_provider and llm_provider.strip()
+            else str(
+                cfg.get("llm_provider")
+                or settings.llm_provider
+                or DEFAULT_LLM_PROVIDER
+            )
+            .strip()
+            .lower()
         )
+        sub_cfg = providers_map.get(target_provider, {})
+        env_matches = target_provider == (
+            settings.llm_provider or DEFAULT_LLM_PROVIDER
+        ).strip().lower()
+        test_key = sub_cfg.get("api_key") or (
+            _secret_value(settings.llm_api_key) if env_matches else None
+        )
+        test_model = sub_cfg.get("llm_model") or (
+            settings.llm_model if env_matches else None
+        )
+        return _test_llm(target_provider, test_key, test_model)
     return _test_groq(cfg.get("api_key") or _secret_value(settings.groq_api_key))
 
 
@@ -702,50 +838,95 @@ def _test_groq(api_key: str | None) -> IntegrationTestResponse:
         )
 
 
-def _test_llm(api_key: str | None, model: str | None) -> IntegrationTestResponse:
+def _test_llm(
+    provider_name: str, api_key: str | None, model: str | None
+) -> IntegrationTestResponse:
+    normalized = provider_name.strip().lower()
+    if normalized not in SUPPORTED_LLM_PROVIDERS:
+        return IntegrationTestResponse(
+            ok=False, detail=f"Provedor LLM não suportado: {provider_name}."
+        )
     if not api_key or not api_key.strip():
         return IntegrationTestResponse(
             ok=False, detail="Chave de API de LLM não configurada."
         )
     clean_key = api_key.strip()
-    raw_model = (model or settings.llm_model or DEFAULT_LLM_MODEL).strip()
+    raw_model = (
+        model or DEFAULT_LLM_MODELS.get(normalized, DEFAULT_LLM_MODEL)
+    ).strip()
     clean_model = (
         raw_model[len("models/") :]
-        if raw_model.startswith("models/")
+        if normalized == "gemini" and raw_model.startswith("models/")
         else raw_model
     )
-    if not clean_model or not _GEMINI_MODEL_RE.fullmatch(clean_model):
+    if (
+        not clean_model
+        or ".." in clean_model.split("/")
+        or not _LLM_MODEL_RE.fullmatch(clean_model)
+    ):
         return IntegrationTestResponse(
-            ok=False, detail="Nome de modelo Gemini inválido."
+            ok=False, detail=f"Nome de modelo inválido para {normalized}."
         )
+
+    provider_labels = {
+        "gemini": "Gemini",
+        "openai": "OpenAI",
+        "groq": "Groq",
+        "anthropic": "Anthropic",
+    }
+    label = provider_labels[normalized]
+
     try:
-        response = httpx.get(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{clean_model}",
-            headers={"x-goog-api-key": clean_key},
-            timeout=10.0,
-        )
+        if normalized == "gemini":
+            response = httpx.get(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{clean_model}",
+                headers={"x-goog-api-key": clean_key},
+                timeout=10.0,
+            )
+        elif normalized == "openai":
+            response = httpx.get(
+                f"https://api.openai.com/v1/models/{clean_model}",
+                headers={"Authorization": f"Bearer {clean_key}"},
+                timeout=10.0,
+            )
+        elif normalized == "groq":
+            response = httpx.get(
+                f"https://api.groq.com/openai/v1/models/{clean_model}",
+                headers={"Authorization": f"Bearer {clean_key}"},
+                timeout=10.0,
+            )
+        else:
+            response = httpx.get(
+                f"https://api.anthropic.com/v1/models/{clean_model}",
+                headers={
+                    "x-api-key": clean_key,
+                    "anthropic-version": "2023-06-01",
+                },
+                timeout=10.0,
+            )
+
         if response.status_code == 200:
             return IntegrationTestResponse(
-                ok=True, detail="Chave Gemini validada com sucesso."
+                ok=True, detail=f"Chave {label} validada com sucesso."
             )
         if response.status_code in {400, 401, 403}:
             return IntegrationTestResponse(
                 ok=False,
                 detail=(
-                    "Chave Gemini inválida ou sem permissão para acessar este modelo."
+                    f"Chave {label} inválida ou sem permissão para acessar este modelo."
                 ),
             )
         if response.status_code == 404:
             return IntegrationTestResponse(
                 ok=False,
-                detail=f"Modelo '{clean_model}' não encontrado na API do Gemini.",
+                detail=f"Modelo '{clean_model}' não encontrado na API do {label}.",
             )
         return IntegrationTestResponse(
             ok=False,
-            detail=f"API do Gemini retornou status HTTP {response.status_code}.",
+            detail=f"API do {label} retornou status HTTP {response.status_code}.",
         )
     except httpx.HTTPError as exc:
         return IntegrationTestResponse(
             ok=False,
-            detail=f"Falha ao contatar a API do Gemini: {exc.__class__.__name__}.",
+            detail=f"Falha ao contatar a API do {label}: {exc.__class__.__name__}.",
         )

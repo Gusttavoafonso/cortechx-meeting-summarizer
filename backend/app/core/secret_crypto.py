@@ -143,6 +143,27 @@ def encrypt_config_secrets(
                 provider=provider,
                 field=field,
             )
+
+    raw_providers = result.get("providers")
+    if isinstance(raw_providers, dict):
+        encrypted_providers: dict[str, Any] = {}
+        for sub_provider, sub_cfg in raw_providers.items():
+            if not isinstance(sub_cfg, dict):
+                encrypted_providers[sub_provider] = sub_cfg
+                continue
+            updated_sub = dict(sub_cfg)
+            for field in SENSITIVE_CONFIG_FIELDS:
+                val = updated_sub.get(field)
+                if isinstance(val, str) and val.strip() and not is_encrypted(val):
+                    updated_sub[field] = encrypt_secret(
+                        val.strip(),
+                        user_id=user_id,
+                        provider=provider,
+                        field=f"providers.{sub_provider.strip().lower()}.{field}",
+                    )
+            encrypted_providers[sub_provider] = updated_sub
+        result["providers"] = encrypted_providers
+
     return result
 
 
@@ -162,4 +183,25 @@ def decrypt_config_secrets(
                 provider=provider,
                 field=field,
             )
+
+    raw_providers = result.get("providers")
+    if isinstance(raw_providers, dict):
+        decrypted_providers: dict[str, Any] = {}
+        for sub_provider, sub_cfg in raw_providers.items():
+            if not isinstance(sub_cfg, dict):
+                decrypted_providers[sub_provider] = sub_cfg
+                continue
+            updated_sub = dict(sub_cfg)
+            for field in SENSITIVE_CONFIG_FIELDS:
+                val = updated_sub.get(field)
+                if isinstance(val, str) and val.strip():
+                    updated_sub[field] = decrypt_secret(
+                        val,
+                        user_id=user_id,
+                        provider=provider,
+                        field=f"providers.{sub_provider.strip().lower()}.{field}",
+                    )
+            decrypted_providers[sub_provider] = updated_sub
+        result["providers"] = decrypted_providers
+
     return result

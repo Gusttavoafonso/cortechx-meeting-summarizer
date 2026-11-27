@@ -17,6 +17,13 @@ PROJECT_DIR = BACKEND_DIR.parent
 DEFAULT_OBSIDIAN_NOTES_FOLDER = "Reuniões"
 DEFAULT_LLM_PROVIDER = "gemini"
 DEFAULT_LLM_MODEL = "gemini-2.5-flash"
+DEFAULT_LLM_MODELS: dict[str, str] = {
+    "gemini": "gemini-2.5-flash",
+    "openai": "gpt-4o-mini",
+    "groq": "llama-3.3-70b-versatile",
+    "anthropic": "claude-sonnet-4-20250514",
+}
+SUPPORTED_LLM_PROVIDERS = frozenset(DEFAULT_LLM_MODELS.keys())
 
 
 class Settings(BaseSettings):

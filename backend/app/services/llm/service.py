@@ -5,12 +5,21 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import DEFAULT_LLM_MODEL, DEFAULT_LLM_PROVIDER, settings
+from app.core.config import (
+    DEFAULT_LLM_MODEL,
+    DEFAULT_LLM_MODELS,
+    DEFAULT_LLM_PROVIDER,
+    settings,
+)
 from app.core.secret_crypto import SecretDecryptionError, decrypt_secret
 from app.models.user_integration import UserIntegration
 from app.services.llm.base import BaseLLMProvider
 from app.services.llm.exceptions import LLMConfigurationError
+from app.services.llm.providers.anthropic_provider import AnthropicProvider
 from app.services.llm.providers.gemini_provider import GeminiProvider
+from app.services.llm.providers.openai_compatible_provider import (
+    OpenAICompatibleProvider,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +37,31 @@ class LLMService:
         return self.provider.generate(prompt)
 
 
+def _instantiate_provider(
+    provider_name: str, *, api_key: str, model: str
+) -> BaseLLMProvider:
+    normalized = provider_name.strip().lower()
+    if normalized == "gemini":
+        return GeminiProvider(api_key=api_key, model=model)
+    if normalized == "openai":
+        return OpenAICompatibleProvider(
+            api_key=api_key,
+            model=model,
+            provider_name="openai",
+        )
+    if normalized == "groq":
+        return OpenAICompatibleProvider(
+            api_key=api_key,
+            model=model,
+            provider_name="groq",
+            base_url="https://api.groq.com/openai/v1",
+        )
+    if normalized == "anthropic":
+        return AnthropicProvider(api_key=api_key, model=model)
+
+    raise LLMConfigurationError(f"Provider não suportado: {provider_name}")
+
+
 def _build_provider(
     provider: str | None = None,
     model: str | None = None,
@@ -39,20 +73,17 @@ def _build_provider(
         except ValueError as exc:
             raise LLMConfigurationError(str(exc)) from exc
 
-        if settings.llm_provider == "gemini":
-            return GeminiProvider(
-                api_key=settings.llm_api_key.get_secret_value(),
-                model=settings.llm_model,
-            )
-
-        raise LLMConfigurationError(
-            f"Provider não suportado: {settings.llm_provider}"
+        return _instantiate_provider(
+            settings.llm_provider or DEFAULT_LLM_PROVIDER,
+            api_key=settings.llm_api_key.get_secret_value(),
+            model=settings.llm_model or DEFAULT_LLM_MODEL,
         )
 
     eff_provider = (
         (provider or settings.llm_provider or DEFAULT_LLM_PROVIDER).strip().lower()
     )
-    eff_model = (model or settings.llm_model or DEFAULT_LLM_MODEL).strip()
+    default_model_for_provider = DEFAULT_LLM_MODELS.get(eff_provider, DEFAULT_LLM_MODEL)
+    eff_model = (model or settings.llm_model or default_model_for_provider).strip()
     eff_key = (
         api_key
         if api_key is not None
@@ -68,10 +99,7 @@ def _build_provider(
     if not eff_key:
         raise LLMConfigurationError("Chave de API de LLM não configurada.")
 
-    if eff_provider == "gemini":
-        return GeminiProvider(api_key=eff_key, model=eff_model)
-
-    raise LLMConfigurationError(f"Provider não suportado: {eff_provider}")
+    return _instantiate_provider(eff_provider, api_key=eff_key, model=eff_model)
 
 
 def get_llm_service(
@@ -128,10 +156,13 @@ def resolve_user_llm_config(
         if isinstance(raw_provider, str) and raw_provider.strip()
         else DEFAULT_LLM_PROVIDER
     )
+    default_model_for_provider = DEFAULT_LLM_MODELS.get(
+        provider_name, settings.llm_model or DEFAULT_LLM_MODEL
+    )
     model_name = (
         str(raw_model).strip()
         if isinstance(raw_model, str) and raw_model.strip()
-        else (settings.llm_model or DEFAULT_LLM_MODEL)
+        else default_model_for_provider
     )
     return {
         "provider": provider_name,

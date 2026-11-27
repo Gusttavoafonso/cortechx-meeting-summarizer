@@ -448,17 +448,182 @@ def test_build_meeting_processor_and_system_status_use_per_user_llm(
 def test_sanitize_error_message_redacts_new_secret_and_ciphertext_patterns() -> None:
     raw_msg = (
         "Erro com Gemini AIzaSyShortOrLongKey_12345678, "
+        "Anthropic sk-ant-api03-abcdef1234567890, "
         "blob enc:v1:abcDEF1234567890==, "
         "Notion secret_abcdef1234567890 e ntn_1234567890abcdef12, "
         "Discord https://discord.com/api/webhooks/123456789/my-secret-webhook-token"
     )
     cleaned = sanitize_error_message(raw_msg)
     assert "AIzaSyShortOrLongKey_12345678" not in cleaned
+    assert "sk-ant-api03-abcdef1234567890" not in cleaned
     assert "abcDEF1234567890==" not in cleaned
     assert "secret_abcdef1234567890" not in cleaned
     assert "ntn_1234567890abcdef12" not in cleaned
     assert "my-secret-webhook-token" not in cleaned
     assert "AIza***[REDACTED]" in cleaned
+    assert "sk-ant-***[REDACTED]" in cleaned
     assert "enc:v1:[REDACTED]" in cleaned
     assert "[REDACTED_NOTION_TOKEN]" in cleaned
     assert "[REDACTED_DISCORD_WEBHOOK]" in cleaned
+
+
+def test_multi_provider_llm_registration_switching_encryption_and_testing(
+    make_auth_client, db_session: Session, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        settings, "encryption_key", SecretStr("multi-provider-test-key-2026")
+    )
+    monkeypatch.setattr(settings, "llm_api_key", None)
+    client, user = make_auth_client(email="multi_llm@example.com", name="Multi LLM")
+
+    openai_key = "sk-proj-openai-test-secret-key-12345"
+    groq_llm_key = "gsk_llm_groq_test_secret_key_67890"
+    anthropic_key = "sk-ant-api03-test-secret-key-998877"
+
+    # 1. Cadastra OpenAI
+    res_oai = client.put(
+        "/settings/integrations/llm",
+        json={
+            "enabled": True,
+            "llm_provider": "openai",
+            "llm_model": "gpt-4o-mini",
+            "api_key": openai_key,
+        },
+    )
+    assert res_oai.status_code == 200
+    body_oai = res_oai.json()
+    assert body_oai["llm_provider"] == "openai"
+    assert body_oai["llm_model"] == "gpt-4o-mini"
+    assert body_oai["api_key_masked"] == "sk-p...2345"
+    assert "openai" in body_oai["llm_providers"]
+
+    # 2. Cadastra Groq em paralelo (mantém OpenAI salvo em llm_providers)
+    res_groq = client.put(
+        "/settings/integrations/llm",
+        json={
+            "enabled": True,
+            "llm_provider": "groq",
+            "llm_model": "llama-3.3-70b-versatile",
+            "api_key": groq_llm_key,
+        },
+    )
+    assert res_groq.status_code == 200
+    body_groq = res_groq.json()
+    assert body_groq["llm_provider"] == "groq"
+    assert set(body_groq["llm_providers"].keys()) == {"openai", "groq"}
+
+    # 3. Cadastra Anthropic também
+    res_ant = client.put(
+        "/settings/integrations/llm",
+        json={
+            "enabled": True,
+            "llm_provider": "anthropic",
+            "llm_model": "claude-sonnet-4-20250514",
+            "api_key": anthropic_key,
+        },
+    )
+    assert res_ant.status_code == 200
+    assert set(res_ant.json()["llm_providers"].keys()) == {
+        "openai",
+        "groq",
+        "anthropic",
+    }
+
+    # Verifica que todas as chaves no JSON do banco estão criptografadas com enc:v1:
+    row = db_session.scalar(
+        select(UserIntegration).where(
+            UserIntegration.user_id == user.id,
+            UserIntegration.provider == "llm",
+        )
+    )
+    assert row is not None
+    raw_blob = str(row.config)
+    for raw_secret in (openai_key, groq_llm_key, anthropic_key):
+        assert raw_secret not in raw_blob
+    assert is_encrypted(row.config["api_key"])
+    for sub_name in ("openai", "groq", "anthropic"):
+        assert is_encrypted(row.config["providers"][sub_name]["api_key"])
+
+    # 4. Alterna ativo para OpenAI sem reenviar chave (usa chave salva do OpenAI)
+    res_switch = client.put(
+        "/settings/integrations/llm",
+        json={"enabled": True, "llm_provider": "openai"},
+    )
+    assert res_switch.status_code == 200
+    assert res_switch.json()["llm_provider"] == "openai"
+    assert res_switch.json()["api_key_masked"] == "sk-p...2345"
+
+    # 5. Testa endpoint POST /settings/integrations/llm/test para cada provedor
+    seen_calls: list[tuple[str, dict[str, str]]] = []
+
+    def _fake_get(url: str, *, headers: dict[str, str], timeout: float):
+        seen_calls.append((url, dict(headers)))
+        return SimpleNamespace(status_code=200)
+
+    monkeypatch.setattr("app.api.v1.settings.httpx.get", _fake_get)
+    assert client.post("/settings/integrations/llm/test?llm_provider=openai").json()[
+        "ok"
+    ]
+    assert client.post("/settings/integrations/llm/test?llm_provider=groq").json()["ok"]
+    assert client.post(
+        "/settings/integrations/llm/test?llm_provider=anthropic"
+    ).json()["ok"]
+
+    assert seen_calls[0][0] == "https://api.openai.com/v1/models/gpt-4o-mini"
+    assert seen_calls[0][1]["Authorization"] == f"Bearer {openai_key}"
+    assert (
+        seen_calls[1][0]
+        == "https://api.groq.com/openai/v1/models/llama-3.3-70b-versatile"
+    )
+    assert seen_calls[1][1]["Authorization"] == f"Bearer {groq_llm_key}"
+    assert (
+        seen_calls[2][0]
+        == "https://api.anthropic.com/v1/models/claude-sonnet-4-20250514"
+    )
+    assert seen_calls[2][1]["x-api-key"] == anthropic_key
+
+    # 6. Remoção seletiva de um provedor mantém os outros ativos
+    del_oai = client.delete("/settings/integrations/llm?llm_provider=openai")
+    assert del_oai.status_code == 204
+    after_del = client.get("/settings/integrations").json()["llm"]
+    assert set(after_del["llm_providers"].keys()) == {"groq", "anthropic"}
+    assert after_del["llm_provider"] in {"groq", "anthropic"}
+
+    # 7. Worker build_meeting_processor instancia o provedor ativo do usuário
+    captured_oai: list[tuple[str, str, str]] = []
+
+    class FakeOpenAICompat:
+        def __init__(
+            self,
+            api_key: str,
+            model: str,
+            *,
+            provider_name: str = "openai",
+            base_url: str | None = None,
+            retry_policy=None,
+        ) -> None:
+            captured_oai.append((provider_name, api_key, model))
+
+        def generate(self, prompt: str) -> str:
+            return "ok"
+
+    client.put(
+        "/settings/integrations/llm",
+        json={"enabled": True, "llm_provider": "groq"},
+    )
+    meeting = Meeting(
+        user_id=user.id, title="Groq LLM Meeting", status=MeetingStatus.PROCESSING
+    )
+    db_session.add(meeting)
+    db_session.commit()
+    db_session.refresh(meeting)
+
+    monkeypatch.setattr(
+        "app.services.llm.service.OpenAICompatibleProvider", FakeOpenAICompat
+    )
+    monkeypatch.setattr(
+        "app.workers.meeting_job._get_worker_stt_service",
+        lambda *args, **kwargs: MagicMock(),
+    )
+    build_meeting_processor(db_session, meeting_id=meeting.id)
+    assert captured_oai == [("groq", groq_llm_key, "llama-3.3-70b-versatile")]
