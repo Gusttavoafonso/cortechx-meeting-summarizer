@@ -324,12 +324,13 @@ def test_8_atualizacao_correta_do_status(db_session, tmp_path):
 # ==============================================================================
 # 9. Retry manual
 # ==============================================================================
-def test_9_retry_manual(auth_client, db_session, monkeypatch, test_user):
+def test_9_retry_manual(client, db_session, monkeypatch):
     """POST /meetings/{id}/retry permite reprocessar reunião FAILED."""
     meeting_repo = MeetingRepository(db_session)
-    failed_meeting = meeting_repo.create(
-        "Reunião Falhada", status=MeetingStatus.FAILED, user_id=test_user.id
-    )
+    failed_id = client.post("/meetings", json={"title": "Reunião Falhada"}).json()["id"]
+    failed_meeting = meeting_repo.get_by_id(failed_id)
+    assert failed_meeting is not None
+    meeting_repo.update_status(failed_meeting, MeetingStatus.FAILED)
 
     audio = AudioFile(
         meeting_id=failed_meeting.id,
@@ -351,19 +352,22 @@ def test_9_retry_manual(auth_client, db_session, monkeypatch, test_user):
     monkeypatch.setattr("app.api.v1.meetings.enqueue_meeting_processing", mock_enqueue)
 
     # 1. Sucesso no retry manual
-    res_retry = auth_client.post(f"/meetings/{failed_meeting.id}/retry")
+    res_retry = client.post(f"/meetings/{failed_meeting.id}/retry")
     assert res_retry.status_code == 200
     assert res_retry.json()["status"] == MeetingStatus.PROCESSING.value
     mock_enqueue.assert_called_once()
 
     # 2. Bloqueio de reunião inexistente (404)
-    res_404 = auth_client.post("/meetings/999999/retry")
+    res_404 = client.post("/meetings/999999/retry")
     assert res_404.status_code == 404
 
     # 3. Bloqueio de reunião já em processamento (409)
-    proc_meeting = meeting_repo.create(
-        "Reunião Processando", status=MeetingStatus.PROCESSING, user_id=test_user.id
-    )
+    proc_id = client.post("/meetings", json={"title": "Reunião Processando"}).json()[
+        "id"
+    ]
+    proc_meeting = meeting_repo.get_by_id(proc_id)
+    assert proc_meeting is not None
+    meeting_repo.update_status(proc_meeting, MeetingStatus.PROCESSING)
     audio_proc = AudioFile(
         meeting_id=proc_meeting.id,
         filename="test.mp3",
@@ -375,7 +379,7 @@ def test_9_retry_manual(auth_client, db_session, monkeypatch, test_user):
     db_session.add(audio_proc)
     db_session.commit()
 
-    res_409 = auth_client.post(f"/meetings/{proc_meeting.id}/retry")
+    res_409 = client.post(f"/meetings/{proc_meeting.id}/retry")
     assert res_409.status_code == 409
     assert "já está em processamento" in res_409.json()["detail"]
 

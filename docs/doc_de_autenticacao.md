@@ -14,12 +14,7 @@ O token também é aceito pelo cookie de sessão do login Google (`/auth/google`
 
 (tabela e geração da chave como antes)
 
-**Docker Compose:** o `docker-compose.yml` repassa `JWT_SECRET_KEY` por `environment`, e
-esse bloco tem precedência sobre o `env_file`. Por isso a chave precisa estar no `.env`
-**da raiz do repositório** (ou exportada no shell). Se estiver só em `backend/.env`, o
-container recebe o valor vazio e a aplicação não sobe. Confira com
-`docker compose config | grep JWT_SECRET_KEY` (o comando imprime o segredo: não cole a
-saída em chats nem em logs).
+**Docker Compose:** o `docker-compose.yml` carrega `JWT_SECRET_KEY` via `env_file` (`.env` da raiz do repositório e `backend/.env`) ou via variável exportada no shell. Recomenda-se defini-la no `.env` **da raiz do repositório**; sem `JWT_SECRET_KEY` configurada, a aplicação não sobe. Confira com `docker compose config | grep JWT_SECRET_KEY` (o comando imprime o segredo: não cole a saída em chats nem em logs).
 
 ## Fixtures de teste
 

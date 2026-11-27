@@ -30,12 +30,12 @@ def temp_storage_service(tmp_path: Path) -> AudioStorageService:
     app.dependency_overrides.pop(get_audio_storage_service, None)
 
 
-def _upload_sample_audio(auth_client: TestClient, meeting_id: int) -> None:
+def _upload_sample_audio(client: TestClient, meeting_id: int) -> None:
     wav_bytes = (
         b"RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00"
         b"D\xac\x00\x00\x88X\x01\x00\x02\x00\x10\x00data\x00\x00\x00\x00"
     )
-    response = auth_client.post(
+    response = client.post(
         f"/meetings/{meeting_id}/audio",
         files={"file": ("reuniao.wav", io.BytesIO(wav_bytes), "audio/wav")},
     )
@@ -43,34 +43,34 @@ def _upload_sample_audio(auth_client: TestClient, meeting_id: int) -> None:
 
 
 def test_post_process_returns_404_for_nonexistent_meeting(
-    auth_client: TestClient,
+    client: TestClient,
 ) -> None:
     dispatcher = MagicMock()
     app.dependency_overrides[get_meeting_job_dispatcher] = lambda: dispatcher
 
-    response = auth_client.post("/meetings/9999/process")
+    response = client.post("/meetings/9999/process")
 
     assert response.status_code == 404
     dispatcher.assert_not_called()
 
 
 def test_post_process_returns_404_when_meeting_has_no_audio(
-    auth_client: TestClient,
+    client: TestClient,
 ) -> None:
     dispatcher = MagicMock()
     app.dependency_overrides[get_meeting_job_dispatcher] = lambda: dispatcher
 
-    create_resp = auth_client.post("/meetings", json={"title": "Reunião sem áudio"})
+    create_resp = client.post("/meetings", json={"title": "Reunião sem áudio"})
     meeting_id = create_resp.json()["id"]
 
-    response = auth_client.post(f"/meetings/{meeting_id}/process")
+    response = client.post(f"/meetings/{meeting_id}/process")
 
     assert response.status_code == 404
     dispatcher.assert_not_called()
 
 
 def test_post_process_dispatches_job_and_returns_immediately_without_waiting(
-    auth_client: TestClient,
+    client: TestClient,
     temp_storage_service: AudioStorageService,
 ) -> None:
     dispatched_ids: list[int] = []
@@ -80,12 +80,12 @@ def test_post_process_dispatches_job_and_returns_immediately_without_waiting(
 
     app.dependency_overrides[get_meeting_job_dispatcher] = lambda: fake_dispatcher
 
-    create_resp = auth_client.post("/meetings", json={"title": "Sprint Review"})
+    create_resp = client.post("/meetings", json={"title": "Sprint Review"})
     meeting_id = create_resp.json()["id"]
-    _upload_sample_audio(auth_client, meeting_id)
+    _upload_sample_audio(client, meeting_id)
 
     start = time.perf_counter()
-    response = auth_client.post(f"/meetings/{meeting_id}/process")
+    response = client.post(f"/meetings/{meeting_id}/process")
     elapsed = time.perf_counter() - start
 
     assert response.status_code == 202
@@ -98,26 +98,26 @@ def test_post_process_dispatches_job_and_returns_immediately_without_waiting(
 
 
 def test_post_process_rejects_duplicate_concurrent_processing(
-    auth_client: TestClient,
+    client: TestClient,
     temp_storage_service: AudioStorageService,
 ) -> None:
     dispatcher = MagicMock()
     app.dependency_overrides[get_meeting_job_dispatcher] = lambda: dispatcher
 
-    create_resp = auth_client.post("/meetings", json={"title": "Daily"})
+    create_resp = client.post("/meetings", json={"title": "Daily"})
     meeting_id = create_resp.json()["id"]
-    _upload_sample_audio(auth_client, meeting_id)
+    _upload_sample_audio(client, meeting_id)
 
-    first_response = auth_client.post(f"/meetings/{meeting_id}/process")
+    first_response = client.post(f"/meetings/{meeting_id}/process")
     assert first_response.status_code == 202
 
-    second_response = auth_client.post(f"/meetings/{meeting_id}/process")
+    second_response = client.post(f"/meetings/{meeting_id}/process")
     assert second_response.status_code == 409
     assert dispatcher.call_count == 1
 
 
 def test_end_to_end_async_processing_pipeline_execution(
-    auth_client: TestClient,
+    client: TestClient,
     db_session: Session,
     temp_storage_service: AudioStorageService,
 ) -> None:
@@ -130,18 +130,18 @@ def test_end_to_end_async_processing_pipeline_execution(
         lambda _mid, _bg=None: None
     )
 
-    create_resp = auth_client.post("/meetings", json={"title": "Planejamento Q4"})
+    create_resp = client.post("/meetings", json={"title": "Planejamento Q4"})
     assert create_resp.status_code == 201
     meeting_id = create_resp.json()["id"]
 
-    _upload_sample_audio(auth_client, meeting_id)
+    _upload_sample_audio(client, meeting_id)
 
-    process_resp = auth_client.post(f"/meetings/{meeting_id}/process")
+    process_resp = client.post(f"/meetings/{meeting_id}/process")
     assert process_resp.status_code == 202
     assert process_resp.json()["status"] == "processing"
 
     # Antes do worker concluir, GET /transcript deve retornar 404
-    early_transcript = auth_client.get(f"/meetings/{meeting_id}/transcript")
+    early_transcript = client.get(f"/meetings/{meeting_id}/transcript")
     assert early_transcript.status_code == 404
 
     stt_service = MagicMock()
@@ -179,11 +179,11 @@ def test_end_to_end_async_processing_pipeline_execution(
 
     non_closing_session.close.assert_called_once()
 
-    meeting_resp = auth_client.get(f"/meetings/{meeting_id}")
+    meeting_resp = client.get(f"/meetings/{meeting_id}")
     assert meeting_resp.status_code == 200
     assert meeting_resp.json()["status"] == "completed"
 
-    transcript_resp = auth_client.get(f"/meetings/{meeting_id}/transcript")
+    transcript_resp = client.get(f"/meetings/{meeting_id}/transcript")
     assert transcript_resp.status_code == 200
     t_body = transcript_resp.json()
     assert len(t_body["segments"]) == 1
@@ -212,7 +212,7 @@ def test_worker_closes_session_even_when_processor_raises() -> None:
 
 
 def test_atomic_rollback_on_llm_failure_prevents_partial_transcript_and_marks_failed(
-    auth_client: TestClient,
+    client: TestClient,
     db_session: Session,
     temp_storage_service: AudioStorageService,
 ) -> None:
@@ -224,11 +224,11 @@ def test_atomic_rollback_on_llm_failure_prevents_partial_transcript_and_marks_fa
         lambda _mid, _bg=None: None
     )
 
-    create_resp = auth_client.post("/meetings", json={"title": "Reunião Atomicidade"})
+    create_resp = client.post("/meetings", json={"title": "Reunião Atomicidade"})
     meeting_id = create_resp.json()["id"]
-    _upload_sample_audio(auth_client, meeting_id)
+    _upload_sample_audio(client, meeting_id)
 
-    auth_client.post(f"/meetings/{meeting_id}/process")
+    client.post(f"/meetings/{meeting_id}/process")
 
     stt_service = MagicMock()
     stt_service.transcribe.return_value = TranscriptionResult(
@@ -263,31 +263,31 @@ def test_atomic_rollback_on_llm_failure_prevents_partial_transcript_and_marks_fa
     assert TranscriptRepository(db_session).get_by_meeting_id(meeting_id) is None
 
     # E o status da reunião no banco deve ter sido atualizado para FAILED
-    updated_meeting = MeetingRepository(db_session).get_for_pipeline(meeting_id)
+    updated_meeting = MeetingRepository(db_session).get_by_id(meeting_id)
     assert updated_meeting is not None
     assert updated_meeting.status.value == "failed"
 
 
 def test_upload_audio_is_blocked_while_meeting_is_processing(
-    auth_client: TestClient,
+    client: TestClient,
     temp_storage_service: AudioStorageService,
 ) -> None:
     app.dependency_overrides[get_meeting_job_dispatcher] = lambda: (
         lambda _mid, _bg=None: None
     )
 
-    create_resp = auth_client.post("/meetings", json={"title": "Reunião Bloqueada"})
+    create_resp = client.post("/meetings", json={"title": "Reunião Bloqueada"})
     meeting_id = create_resp.json()["id"]
-    _upload_sample_audio(auth_client, meeting_id)
+    _upload_sample_audio(client, meeting_id)
 
-    process_resp = auth_client.post(f"/meetings/{meeting_id}/process")
+    process_resp = client.post(f"/meetings/{meeting_id}/process")
     assert process_resp.status_code == 202
 
     wav_bytes = (
         b"RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00"
         b"D\xac\x00\x00\x88X\x01\x00\x02\x00\x10\x00data\x00\x00\x00\x00"
     )
-    replace_resp = auth_client.post(
+    replace_resp = client.post(
         f"/meetings/{meeting_id}/audio",
         files={"file": ("novo.wav", io.BytesIO(wav_bytes), "audio/wav")},
     )
@@ -312,8 +312,13 @@ def test_enqueue_meeting_processing_calls_celery_and_falls_back_to_background_ta
     assert len(bg_tasks.tasks) == 1
 
 
-def test_build_meeting_processor_wires_services(db_session: Session) -> None:
+def test_build_meeting_processor_wires_services(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from app.workers.meeting_job import build_meeting_processor
+
+    fake_llm = MagicMock()
+    monkeypatch.setattr("app.services.llm.service.get_llm_service", lambda: fake_llm)
 
     processor = build_meeting_processor(db_session)
     assert isinstance(processor, MeetingProcessor)
@@ -322,6 +327,8 @@ def test_build_meeting_processor_wires_services(db_session: Session) -> None:
     assert processor._audio_storage_service is not None
     assert processor._speech_to_text_service is not None
     assert processor._chunking_service is not None
+    assert processor._summarization_service is not None
+    assert processor._task_extraction_service is not None
 
 
 def test_run_meeting_processing_job_marks_failed_when_factory_fails(

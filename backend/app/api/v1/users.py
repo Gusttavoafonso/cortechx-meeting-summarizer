@@ -51,7 +51,10 @@ def change_current_user_password(
 ) -> Response:
     try:
         change_password(
-            db, current_user, payload.current_password, payload.new_password
+            db,
+            current_user,
+            payload.current_password.get_secret_value(),
+            payload.new_password.get_secret_value(),
         )
     except (InvalidCredentialsError, GoogleAccountPasswordMissingError) as exc:
         raise HTTPException(

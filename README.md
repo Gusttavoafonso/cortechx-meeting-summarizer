@@ -21,7 +21,7 @@ Para rodar os testes execute no Powershell:
 python -m pytest
 ```
 
-A API e a interface web do gravador ficarão disponíveis em `http://127.0.0.1:8000`. Verifique o status da API em
+A API e o Swagger ficarão disponíveis em `http://127.0.0.1:8000` (`/docs`). Verifique o status da API em
 `http://127.0.0.1:8000/health`.
 
 ## Backend (Linux)
@@ -41,16 +41,24 @@ Para rodar os testes execute no terminal:
 python -m pytest
 ```
 
-A API e a interface web do gravador ficarão disponíveis em `http://127.0.0.1:8000`. Verifique o status da API em
+A API e o Swagger ficarão disponíveis em `http://127.0.0.1:8000` (`/docs`). Verifique o status da API em
 `http://127.0.0.1:8000/health`.
 
-## Interface Web e Gravação Direta (Sem Anexar Arquivos)
+## Frontend Web (React + Vite)
 
-Ao acessar `http://127.0.0.1:8000`, o usuário tem acesso à interface web integrada do Zumo:
-* **Botão Imediato de Gravação:** Inicia a captura em 1 clique sem necessidade de gravar em software externo e anexar arquivos.
+A interface web oficial roda em React na porta **`3000`**, comunicando-se com a API na porta **`8000`**:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Ao acessar `http://localhost:3000`, o usuário tem acesso à interface web do Zumo:
+* **Gravação Direta no Navegador:** Inicia a captura em 1 clique sem necessidade de gravar em software externo e anexar arquivos.
 * **Captura Combinada (Dual Source):** Grava o som dos demais participantes (áudio da aba do Google Meet, Discord, etc.) somado ao microfone do próprio usuário via Web Audio API.
-* **VU Meters em Tempo Real:** Medidores de intensidade de som para confirmar visualmente a entrada do microfone e do áudio do sistema.
-* **Processamento Automatizado:** Ao finalizar a gravação, o arquivo é despachado automaticamente para `POST /meetings/{id}/audio` e o pipeline de transcrição/sumarização é disparado, exibindo o resultado diretamente na tela.
+* **VU Meters e Transcrição Parcial:** Medidores de intensidade de som e acompanhamento em tempo real durante a gravação.
+* **Processamento Automatizado:** Ao finalizar a gravação ou enviar um arquivo de áudio, o arquivo é despachado para `POST /meetings/{id}/audio` e o pipeline de transcrição/sumarização é disparado, exibindo o resultado diretamente na tela.
 
 ## Aplicativo Desktop Standalone (Tauri 2.0 em `desktop/`)
 
@@ -79,28 +87,9 @@ Defina `JWT_SECRET_KEY` no `.env` (obrigatória; a aplicação não inicia sem e
 | --- | --- |
 | `POST /auth/register` | JSON `{name, email, password}` (senha ≥ 8 caracteres). Retorna `201` sem o hash; e-mail duplicado retorna `409`. |
 | `POST /auth/login` | Formulário OAuth2 (`username` = e-mail, `password`). Retorna `{access_token, token_type}`; falhas retornam `401` genérico. |
-| `GET /users/me` | Dados do usuário autenticado (cookie de sessão ou `Authorization: Bearer <token>`). |
+| `GET /users/me` | Dados do usuário autenticado (`Authorization: Bearer <token>`). |
 
-As rotas protegidas aceitam o cookie de sessão ou `Authorization: Bearer <token>`; quando ambos são enviados, Bearer tem precedência. Tokens inválidos, expirados ou de usuário inativo retornam `401` com `WWW-Authenticate: Bearer`. Senhas são armazenadas com Argon2.
-
-## Autenticação e posse das reuniões
-
-**Todas as rotas de `/meetings` exigem uma sessão válida.** As rotas de
-autenticação (`/auth/register`, `/auth/login`, `/auth/google`), `/health` e a
-documentação (`/docs`, `/openapi.json`) continuam públicas.
-
-Obtenha a sessão em `POST /auth/register`, `POST /auth/login` ou
-`POST /auth/google`: a resposta traz um cookie `HttpOnly`. Clientes de API e o
-Swagger podem usar o mesmo token em `Authorization: Bearer <token>` (o botão
-**Authorize** do `/docs` aceita os dois).
-
-Cada reunião pertence ao usuário que a criou. Uma reunião de outro usuário —
-ou sem dono, criada antes do controle de posse — responde **404**, e não 403,
-para não revelar que ela existe. Sem token ou com token inválido, a resposta é
-**401**.
-
-O modelo de posse, o comportamento de 404 e a decisão sobre as reuniões
-anteriores estão em [`docs/autenticacao.md`](docs/autenticacao.md).
+As demais rotas (exceto `/health`) exigem o token. Tokens inválidos, expirados ou de usuário inativo retornam `401` com `WWW-Authenticate: Bearer`. Senhas são armazenadas com Argon2.
 
 ## Upload de Áudio e Formatos Suportados
 
@@ -221,7 +210,7 @@ flowchart TD
 
 5. **Persistência Estruturada (`TranscriptRepository`):**
    - Armazena a transcrição bruta completa unificada.
-   - Salva cada fala fragmentada na tabela `transcript_segments` com metadados de tempo (`start_time`, `end_time`), facilitando as futuras etapas de diarização de locutores e sumarização com LLMs.
+   - Salva cada fala fragmentada na tabela `transcript_segments` com metadados de tempo (`start_time`, `end_time`), facilitando a etapa de sumarização e extração de tarefas com LLMs.
 
 
 
@@ -240,9 +229,6 @@ versões. Essa abordagem evita resultados duplicados ou inconsistentes no
 banco.
 
 ## Endpoints de resumo
-
-Como todas as rotas de `/meetings`, as duas exigem sessão válida e só alcançam
-reuniões do próprio usuário.
 
 | Método | Rota | Descrição |
 |---|---|---|

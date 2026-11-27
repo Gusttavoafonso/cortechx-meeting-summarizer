@@ -7,7 +7,7 @@ clique.
 ## Pré-requisito: backend rodando localmente
 
 Este é um projeto acadêmico e ainda não existe um backend hospedado. O app
-sempre fala com `http://localhost:8001` (mesma `VITE_API_URL` usada em
+sempre fala com `http://localhost:8000` (mesma `VITE_API_URL` usada em
 desenvolvimento). **Antes de abrir o Zumo, rode o backend Python
 localmente** (veja o README na raiz do repositório). Sem o backend rodando,
 o app abre normalmente, mas criar/gravar reuniões vai falhar.

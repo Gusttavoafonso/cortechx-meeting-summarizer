@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -14,6 +15,25 @@ from app.schemas.summary import SummaryResult
 
 class SummaryMeetingNotFoundError(EntityNotFoundError, LookupError):
     """Reunião inexistente ao tentar persistir o resultado da sumarização."""
+
+
+def _coerce_deadline(value: Any) -> date | None:
+    """Converte prazos para ``date`` quando ISO-8601 válido; texto livre vira None."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        try:
+            return date.fromisoformat(cleaned[:10])
+        except ValueError:
+            return None
+    return None
 
 
 class SummaryRepository:
@@ -81,18 +101,23 @@ class SummaryRepository:
                 item.position = index
                 task_records.append(item)
             elif isinstance(item, dict):
+                desc = item.get("description") or item.get("task") or ""
                 task_records.append(
                     Task(
                         position=index,
-                        description=item.get("description", ""),
+                        description=desc,
                         responsible=item.get("responsible"),
-                        deadline=item.get("deadline"),
+                        deadline=_coerce_deadline(item.get("deadline")),
                     )
                 )
             else:
-                desc = getattr(item, "description", str(item))
+                desc = (
+                    getattr(item, "description", None)
+                    or getattr(item, "task", None)
+                    or str(item)
+                )
                 resp = getattr(item, "responsible", None)
-                dead = getattr(item, "deadline", None)
+                dead = _coerce_deadline(getattr(item, "deadline", None))
                 task_records.append(
                     Task(
                         position=index,

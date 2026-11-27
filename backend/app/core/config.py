@@ -15,6 +15,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 PROJECT_DIR = BACKEND_DIR.parent
 DEFAULT_OBSIDIAN_NOTES_FOLDER = "Reuniões"
+DEFAULT_LLM_PROVIDER = "gemini"
+DEFAULT_LLM_MODEL = "gemini-2.5-flash"
+DEFAULT_LLM_MODELS: dict[str, str] = {
+    "gemini": "gemini-2.5-flash",
+    "openai": "gpt-4o-mini",
+    "groq": "llama-3.3-70b-versatile",
+    "anthropic": "claude-sonnet-4-20250514",
+}
+SUPPORTED_LLM_PROVIDERS = frozenset(DEFAULT_LLM_MODELS.keys())
 
 
 class Settings(BaseSettings):
@@ -64,6 +73,10 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr | None = Field(
         default=None,
         validation_alias="LLM_API_KEY",
+    )
+    encryption_key: SecretStr | None = Field(
+        default=None,
+        validation_alias="ENCRYPTION_KEY",
     )
 
     groq_api_key: SecretStr | None = None
@@ -157,6 +170,23 @@ class Settings(BaseSettings):
         default="lax",
         validation_alias="SESSION_COOKIE_SAMESITE",
     )
+    cors_origins: str = Field(default="", validation_alias="CORS_ORIGINS")
+
+    @property
+    def parsed_cors_origins(self) -> list[str]:
+        defaults = [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "tauri://localhost",
+            "http://tauri.localhost",
+            "https://tauri.localhost",
+        ]
+        extras = [
+            origin.strip().rstrip("/")
+            for origin in self.cors_origins.split(",")
+            if origin.strip()
+        ]
+        return list(dict.fromkeys([*defaults, *extras]))
 
     @field_validator("AUDIO_STORAGE_PATH", mode="before")
     @classmethod
@@ -183,6 +213,7 @@ class Settings(BaseSettings):
         "notion_token",
         "notion_database_id",
         "llm_api_key",
+        "encryption_key",
         "obsidian_vault_path",
         "google_client_id",
         mode="before",
@@ -208,7 +239,9 @@ class Settings(BaseSettings):
                 "OBSIDIAN_NOTES_FOLDER deve ser um caminho relativo dentro do vault."
             )
         return folder
-    @field_validator("discord_enabled", "notion_enabled", mode="before")
+    @field_validator(
+        "discord_enabled", "notion_enabled", "obsidian_enabled", mode="before"
+    )
     @classmethod
     def empty_str_bool_to_false(cls, v: Any) -> Any:
         if isinstance(v, str) and not v.strip():

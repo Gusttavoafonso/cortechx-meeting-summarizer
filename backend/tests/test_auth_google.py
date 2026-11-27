@@ -32,9 +32,8 @@ def test_authenticate_google_success(client: TestClient, db_session: Session):
     assert response.status_code == 200
     data = response.json()
     assert data["name"] == "Ana Silva"
+    assert data["email"] == "ana.silva@example.com"
     assert data["picture_url"] == "https://lh3.googleusercontent.com/photo.jpg"
-    # Garante privacidade: email não deve vazar na resposta pública
-    assert "email" not in data
     assert "id" in data
 
     # Verifica se o cookie HTTP-Only foi setado corretamente

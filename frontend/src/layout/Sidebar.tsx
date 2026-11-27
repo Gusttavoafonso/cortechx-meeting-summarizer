@@ -1,5 +1,6 @@
 import React from 'react'
 import { NavLink, useNavigate, Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import {
   LayoutGrid,
   MessagesSquare,
@@ -13,6 +14,7 @@ import {
 import { ZumoLogo } from '../components/ZumoLogo'
 import { Button } from '../components/ui/Button'
 import { useAuth } from '../contexts/AuthContext'
+import { fetchSystemStatus } from '../api/system'
 import { cn } from '../lib/utils'
 
 interface NavItem {
@@ -29,9 +31,29 @@ const navItems: NavItem[] = [
   { name: 'Configurações', to: '/settings', icon: Settings },
 ]
 
+function formatLlmProviderLabel(provider?: string | null): string {
+  switch ((provider || '').toLowerCase()) {
+    case 'openai':
+      return 'OpenAI'
+    case 'groq':
+      return 'Groq'
+    case 'anthropic':
+      return 'Anthropic'
+    case 'gemini':
+    default:
+      return 'Gemini'
+  }
+}
+
 export const Sidebar: React.FC = () => {
   const navigate = useNavigate()
   const { user, logout } = useAuth()
+  const { data: systemStatus, isError: isSystemError } = useQuery({
+    queryKey: ['system-status'],
+    queryFn: fetchSystemStatus,
+    retry: 1,
+    staleTime: 30_000,
+  })
 
   return (
     <aside className="w-56 bg-surface shrink-0 min-h-screen flex flex-col px-3.5 py-4 select-none border-r border-[#DCE2FB]">
@@ -82,12 +104,55 @@ export const Sidebar: React.FC = () => {
 
       {/* Bottom Shortcuts / Status */}
       <div className="pt-3 border-t border-slate-200/60 mb-2.5 px-1">
-        <div className="bg-white/60 border border-slate-200/80 rounded-xl p-2.5">
-          <p className="text-[11px] font-semibold text-ink">Modo Local Ativo</p>
+        <Link
+          to="/settings?tab=integracoes"
+          className="block bg-white/60 hover:bg-white border border-slate-200/80 rounded-xl p-2.5 transition-colors"
+        >
+          <div className="flex items-center gap-1.5">
+            <span
+              className={cn(
+                'w-2 h-2 rounded-full shrink-0',
+                isSystemError
+                  ? 'bg-rose-500'
+                  : systemStatus?.stt_mode === 'groq'
+                    ? 'bg-emerald-500'
+                    : 'bg-brand'
+              )}
+            />
+            <p className="text-[11px] font-semibold text-ink truncate">
+              {isSystemError
+                ? 'Backend Indisponível'
+                : systemStatus?.stt_mode === 'groq'
+                  ? 'Groq Cloud Ativo'
+                  : 'Whisper Local Ativo'}
+            </p>
+          </div>
           <p className="text-[10px] text-muted mt-0.5 leading-snug">
-            Transcrições e resumos na nuvem ou localmente.
+            {isSystemError
+              ? 'Verifique o servidor na porta 8000.'
+              : systemStatus?.stt_mode === 'groq'
+                ? systemStatus.stt_source === 'user'
+                  ? 'Usando sua chave API pessoal.'
+                  : 'Usando chave configurada no servidor.'
+                : `Modelo ${systemStatus?.whisper_model || 'small'} local.`}
           </p>
-        </div>
+          {!isSystemError && systemStatus && (
+            <p
+              className={cn(
+                'text-[10px] mt-1 pt-1 border-t border-slate-200/70 leading-snug truncate',
+                systemStatus.llm_configured
+                  ? 'text-muted'
+                  : 'text-amber-700 font-semibold'
+              )}
+            >
+              {systemStatus.llm_configured
+                ? systemStatus.llm_source === 'user'
+                  ? `Resumo: ${formatLlmProviderLabel(systemStatus.llm_provider)} (chave pessoal)`
+                  : `Resumo: ${formatLlmProviderLabel(systemStatus.llm_provider)} (servidor)`
+                : 'Resumo: configure uma chave de IA'}
+            </p>
+          )}
+        </Link>
       </div>
 
       {/* User / Workspace Footer */}

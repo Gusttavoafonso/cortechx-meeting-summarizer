@@ -6,6 +6,7 @@ from pydantic import (
     ConfigDict,
     EmailStr,
     Field,
+    SecretStr,
     StringConstraints,
     model_validator,
 )
@@ -20,7 +21,7 @@ class UserCreate(BaseModel):
     # no cadastro precisa valer igual no login.
     name: Name
     email: EmailStr = Field(max_length=255)
-    password: str = Field(
+    password: SecretStr = Field(
         min_length=8,
         max_length=128,
         description="Mínimo de 8 caracteres",
@@ -34,6 +35,8 @@ class UserResponse(BaseModel):
     name: str
     email: str
     is_active: bool
+    picture_url: str | None = None
+    has_password: bool = False
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -51,7 +54,9 @@ class GoogleAuthRequest(BaseModel):
 class UserPublic(BaseModel):
     id: int
     name: str
+    email: str
     picture_url: str | None = None
+    has_password: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -61,8 +66,8 @@ class UserUpdate(BaseModel):
 
 
 class PasswordChange(BaseModel):
-    current_password: str
-    new_password: str = Field(
+    current_password: SecretStr
+    new_password: SecretStr = Field(
         min_length=8,
         max_length=128,
         description="Mínimo de 8 caracteres",
@@ -70,6 +75,27 @@ class PasswordChange(BaseModel):
 
     @model_validator(mode="after")
     def new_password_must_differ(self) -> "PasswordChange":
-        if self.new_password == self.current_password:
+        if (
+            self.new_password.get_secret_value()
+            == self.current_password.get_secret_value()
+        ):
             raise ValueError("A nova senha deve ser diferente da atual.")
         return self
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr = Field(max_length=255)
+
+
+class ForgotPasswordResponse(BaseModel):
+    message: str
+    reset_token: str | None = None
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=16, max_length=255)
+    new_password: SecretStr = Field(
+        min_length=8,
+        max_length=128,
+        description="Mínimo de 8 caracteres",
+    )

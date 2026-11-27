@@ -1,12 +1,19 @@
 import { request } from './client'
 import {
+  ForgotPasswordResponse,
   UserPublic,
   UserLoginRequest,
   UserRegisterRequest,
   GoogleAuthRequest,
 } from '../types/auth'
 
-export type { UserPublic, UserLoginRequest, UserRegisterRequest, GoogleAuthRequest }
+export type {
+  ForgotPasswordResponse,
+  UserPublic,
+  UserLoginRequest,
+  UserRegisterRequest,
+  GoogleAuthRequest,
+}
 
 export const authApi = {
   login: async (data: UserLoginRequest): Promise<UserPublic> => {
@@ -40,6 +47,40 @@ export const authApi = {
   logout: (): Promise<{ message: string }> =>
     request<{ message: string }>('/auth/logout', {
       method: 'POST',
+    }),
+
+  updateProfile: (name: string): Promise<UserPublic> =>
+    request<UserPublic>('/users/me', {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    }),
+
+  changePassword: async (
+    currentPassword: string,
+    newPassword: string
+  ): Promise<void> => {
+    await request<void>('/users/me/password', {
+      method: 'PUT',
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    })
+  },
+
+  forgotPassword: (email: string): Promise<ForgotPasswordResponse> =>
+    request<ForgotPasswordResponse>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  resetPassword: (
+    token: string,
+    newPassword: string
+  ): Promise<{ message: string }> =>
+    request<{ message: string }>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, new_password: newPassword }),
     }),
 }
 

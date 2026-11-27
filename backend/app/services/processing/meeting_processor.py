@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -72,6 +72,8 @@ class MeetingProcessor:
         language: str | None = None,
         skip_tasks: bool = False,
         skip_integrations: bool = False,
+        integration_providers: Sequence[str] | None = None,
+        excluded_providers: Sequence[str] | None = None,
     ) -> None:
         """Executa o processamento da reunião sob controle de retry e ciclo de vida."""
         meeting = self._get_meeting(meeting_id)
@@ -185,6 +187,11 @@ class MeetingProcessor:
                 )
 
             if self._summary_repository is not None and summary_result is not None:
+                tasks_to_save = (
+                    []
+                    if skip_tasks
+                    else (extracted_tasks or getattr(summary_result, "tasks", []))
+                )
                 save_kwargs: dict[str, Any] = {
                     "meeting_id": meeting_id,
                     "objective": getattr(summary_result, "objective", None),
@@ -195,7 +202,7 @@ class MeetingProcessor:
                         getattr(summary_result, "key_points", []),
                     ),
                     "decisions": getattr(summary_result, "decisions", []),
-                    "tasks": extracted_tasks or getattr(summary_result, "tasks", []),
+                    "tasks": tasks_to_save,
                 }
                 if use_atomic_unit_of_work:
                     save_kwargs["commit"] = False
@@ -208,7 +215,11 @@ class MeetingProcessor:
                     task_items = [
                         t
                         if isinstance(t, TaskItem)
-                        else TaskItem(description=getattr(t, "description", str(t)))
+                        else TaskItem(
+                            description=getattr(t, "description", None)
+                            or getattr(t, "task", None)
+                            or str(t)
+                        )
                         for t in save_kwargs["tasks"]
                     ]
                     result = SummaryResult(
@@ -233,14 +244,29 @@ class MeetingProcessor:
             # Falhas no agendamento/disparo externo não devem abortar o pipeline já
             # concluído.
             if not skip_integrations:
-                try:
-                    self._integration_dispatcher(meeting_id, reset=True)
-                except Exception:
-                    logger.exception(
-                        "Falha ao agendar integrações para a reunião %s; "
-                        "o status da reunião permanece COMPLETED.",
-                        meeting_id,
-                    )
+                providers_to_dispatch = self._resolve_integration_providers(
+                    integration_providers=integration_providers,
+                    excluded_providers=excluded_providers,
+                )
+                if providers_to_dispatch is None or providers_to_dispatch:
+                    try:
+                        if providers_to_dispatch is not None:
+                            try:
+                                self._integration_dispatcher(
+                                    meeting_id,
+                                    providers=providers_to_dispatch,
+                                    reset=True,
+                                )
+                            except TypeError:
+                                self._integration_dispatcher(meeting_id, reset=True)
+                        else:
+                            self._integration_dispatcher(meeting_id, reset=True)
+                    except Exception:
+                        logger.exception(
+                            "Falha ao agendar integrações para a reunião %s; "
+                            "o status da reunião permanece COMPLETED.",
+                            meeting_id,
+                        )
 
         except Exception as exc:
             logger.exception("Falha no pipeline da reunião %s", meeting_id)
@@ -283,8 +309,28 @@ class MeetingProcessor:
             if hasattr(db, "expire_all"):
                 db.expire_all()
 
+    @staticmethod
+    def _resolve_integration_providers(
+        *,
+        integration_providers: Sequence[str] | None,
+        excluded_providers: Sequence[str] | None,
+    ) -> list[str] | None:
+        excluded = {
+            p.strip().lower() for p in (excluded_providers or ()) if p and p.strip()
+        }
+        if integration_providers is not None:
+            return [
+                p.strip().lower()
+                for p in integration_providers
+                if p and p.strip() and p.strip().lower() not in excluded
+            ]
+        if excluded:
+            known_providers = ("discord", "notion", "obsidian")
+            return [p for p in known_providers if p not in excluded]
+        return None
+
     def _get_meeting(self, meeting_id: int) -> Meeting:
-        meeting = self._meeting_repository.get_for_pipeline(meeting_id)
+        meeting = self._meeting_repository.get_by_id(meeting_id)
         if meeting is None:
             raise ValueError(f"Meeting with ID {meeting_id} not found.")
         return meeting

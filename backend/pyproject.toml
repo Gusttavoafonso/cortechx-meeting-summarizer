@@ -29,6 +29,7 @@ dependencies = [
     "pyjwt>=2.8.0",
     "pwdlib[argon2]>=0.2.1",
     "httpx>=0.27.0",
+    "cryptography>=42.0.0",
 ]
 
 [project.optional-dependencies]

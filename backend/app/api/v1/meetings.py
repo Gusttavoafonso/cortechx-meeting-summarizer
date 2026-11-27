@@ -1,3 +1,4 @@
+import re
 from collections.abc import Callable
 
 from fastapi import (
@@ -7,9 +8,12 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Request,
+    Response,
     UploadFile,
     status,
 )
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -31,16 +35,19 @@ from app.repositories.transcript_repository import (
 )
 from app.schemas.audio import AudioUploadResponse
 from app.schemas.meeting import (
+    GlobalTaskItemResponse,
     MeetingCreate,
     MeetingProcessOptions,
     MeetingProcessResponse,
     MeetingResponse,
+    MeetingStatsResponse,
     MeetingStatusResponse,
+    MeetingSummaryPreview,
 )
 from app.schemas.summary import SummaryResponse
 from app.schemas.transcription import TranscriptResponse
 from app.services.audio_storage import AudioStorageService
-from app.services.llm.service import get_llm_service
+from app.services.llm.service import get_llm_service, resolve_user_llm_config
 from app.services.meeting_service import MeetingNotFoundError, MeetingService
 from app.services.summarization.service import create_summarization_service
 from app.services.summary_service import (
@@ -57,14 +64,7 @@ from app.services.transcription import (
 )
 from app.workers.meeting_job import enqueue_meeting_processing
 
-router = APIRouter(
-    dependencies=[Depends(get_current_user)],
-    responses={
-        status.HTTP_401_UNAUTHORIZED: {
-            "description": "Sessão ausente, inválida ou expirada."
-        }
-    },
-)
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 def get_meeting_repository(db: Session = Depends(get_session)) -> MeetingRepository:
@@ -116,12 +116,22 @@ def get_summary_repository(db: Session = Depends(get_session)) -> SummaryReposit
 
 
 def get_summary_service(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
     meeting_repo: MeetingRepository = Depends(get_meeting_repository),
     transcript_repo: TranscriptRepository = Depends(get_transcript_repository),
     summary_repo: SummaryRepository = Depends(get_summary_repository),
 ) -> SummaryService:
     try:
-        llm = get_llm_service()
+        user_llm_cfg = resolve_user_llm_config(db, current_user.id)
+        if user_llm_cfg is not None:
+            llm = get_llm_service(
+                provider=user_llm_cfg["provider"],
+                model=user_llm_cfg["model"],
+                api_key=user_llm_cfg["api_key"],
+            )
+        else:
+            llm = get_llm_service()
     except LLMError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -142,6 +152,38 @@ def _mark_failed(
     """Marca a reunião como falha no banco de dados com uma mensagem de erro."""
     MeetingService(meeting_repo).update_status(
         meeting_id, MeetingStatus.FAILED, error_message=message
+    )
+
+
+def _to_meeting_response(
+    meeting, *, include_transcript: bool = True
+) -> MeetingResponse:
+    summary_preview = None
+    if getattr(meeting, "summary", None) is not None:
+        summary_preview = MeetingSummaryPreview(
+            objective=meeting.summary.objective,
+            summary=meeting.summary.summary,
+            tasks_count=len(getattr(meeting, "tasks", None) or []),
+        )
+    transcript = (
+        TranscriptResponse.model_validate(meeting.transcript)
+        if include_transcript and getattr(meeting, "transcript", None) is not None
+        else None
+    )
+    return MeetingResponse(
+        id=meeting.id,
+        title=meeting.title,
+        status=meeting.status,
+        created_at=meeting.created_at,
+        updated_at=meeting.updated_at,
+        processing_started_at=meeting.processing_started_at,
+        processing_completed_at=meeting.processing_completed_at,
+        last_error=meeting.last_error,
+        audio=AudioUploadResponse.model_validate(meeting.audio)
+        if getattr(meeting, "audio", None) is not None
+        else None,
+        transcript=transcript,
+        summary=summary_preview,
     )
 
 
@@ -170,7 +212,56 @@ def list_meetings(
     meeting_service: MeetingService = Depends(get_meeting_service),
 ) -> list[MeetingResponse]:
     meetings = meeting_service.list_all(user_id=current_user.id)
-    return [MeetingResponse.model_validate(m) for m in meetings]
+    return [_to_meeting_response(m, include_transcript=False) for m in meetings]
+
+
+@router.get(
+    "/stats",
+    response_model=MeetingStatsResponse,
+    summary="Indicadores agregados das reuniões do usuário",
+)
+def get_meeting_stats(
+    current_user: User = Depends(get_current_user),
+    meeting_repo: MeetingRepository = Depends(get_meeting_repository),
+) -> MeetingStatsResponse:
+    stats = meeting_repo.get_stats_by_user(current_user.id)
+    return MeetingStatsResponse(
+        total_meetings=stats["total_meetings"],
+        completed_meetings=stats["completed_meetings"],
+        processing_meetings=stats["processing_meetings"],
+        failed_meetings=stats["failed_meetings"],
+        total_audio_seconds=stats["total_audio_seconds"],
+        total_tasks=stats["total_tasks"],
+        recent_meetings=[
+            _to_meeting_response(m, include_transcript=False)
+            for m in stats["recent_meetings"]
+        ],
+    )
+
+
+@router.get(
+    "/tasks",
+    response_model=list[GlobalTaskItemResponse],
+    summary="Listar todas as tarefas extraídas das reuniões do usuário",
+)
+def list_user_tasks(
+    current_user: User = Depends(get_current_user),
+    meeting_repo: MeetingRepository = Depends(get_meeting_repository),
+) -> list[GlobalTaskItemResponse]:
+    rows = meeting_repo.list_tasks_by_user(current_user.id)
+    return [
+        GlobalTaskItemResponse(
+            id=task.id,
+            meeting_id=task.meeting_id,
+            meeting_title=meeting_title,
+            meeting_status=meeting_status,
+            description=task.description,
+            responsible=task.responsible,
+            deadline=task.deadline,
+            created_at=task.created_at,
+        )
+        for task, meeting_title, meeting_status in rows
+    ]
 
 
 @router.get(
@@ -191,7 +282,41 @@ def get_meeting(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Reunião com ID {meeting_id} não encontrada.",
         )
-    return MeetingResponse.model_validate(meeting)
+    return _to_meeting_response(meeting, include_transcript=True)
+
+
+@router.delete(
+    "/{meeting_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    summary="Excluir reunião e seu áudio",
+)
+def delete_meeting(
+    meeting_id: int,
+    current_user: User = Depends(get_current_user),
+    meeting_repo: MeetingRepository = Depends(get_meeting_repository),
+    storage_service: AudioStorageService = Depends(get_audio_storage_service),
+) -> Response:
+    validate_meeting_id(meeting_id)
+    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
+    if meeting is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reunião com ID {meeting_id} não encontrada.",
+        )
+    if meeting.status in IN_PROGRESS_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Não é possível excluir uma reunião enquanto ela está em processamento."
+            ),
+        )
+
+    audio_path = meeting.audio.file_path if meeting.audio is not None else None
+    meeting_repo.delete(meeting)
+    if audio_path:
+        storage_service.delete_file(audio_path)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(
@@ -224,7 +349,7 @@ def upload_audio(
     storage_service: AudioStorageService = Depends(get_audio_storage_service),
 ) -> AudioUploadResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id(meeting_id, current_user.id)
+    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
     if not meeting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -313,7 +438,7 @@ def get_audio_metadata(
     audio_repo: AudioRepository = Depends(get_audio_repository),
 ) -> AudioUploadResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id(meeting_id, current_user.id)
+    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
     if not meeting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -339,6 +464,97 @@ def get_audio_metadata(
     )
 
 
+_RANGE_HEADER_RE = re.compile(r"^bytes=(\d*)-(\d*)$")
+
+
+def _iter_file_range(path, start: int, end: int, chunk_size: int = 64 * 1024):
+    remaining = end - start + 1
+    with open(path, "rb") as fh:
+        fh.seek(start)
+        while remaining > 0:
+            data = fh.read(min(chunk_size, remaining))
+            if not data:
+                break
+            remaining -= len(data)
+            yield data
+
+
+@router.get(
+    "/{meeting_id}/audio/file",
+    summary="Baixar ou reproduzir o arquivo de áudio da reunião",
+)
+def download_audio_file(
+    meeting_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    meeting_repo: MeetingRepository = Depends(get_meeting_repository),
+    audio_repo: AudioRepository = Depends(get_audio_repository),
+    storage_service: AudioStorageService = Depends(get_audio_storage_service),
+) -> Response:
+    validate_meeting_id(meeting_id)
+    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
+    if not meeting:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reunião com ID {meeting_id} não encontrada.",
+        )
+
+    audio_record = audio_repo.get_by_meeting_id(meeting_id)
+    if not audio_record or not storage_service.file_exists(audio_record.file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Arquivo de áudio não encontrado para a reunião com ID {meeting_id}."
+            ),
+        )
+
+    file_path = storage_service.get_file_path(audio_record.file_path)
+    storage_service.ensure_seekable_webm(file_path)
+    file_size = file_path.stat().st_size
+    range_header = request.headers.get("range")
+
+    if range_header and file_size > 0:
+        match = _RANGE_HEADER_RE.match(range_header.strip())
+        if not match or (not match.group(1) and not match.group(2)):
+            return Response(
+                status_code=status.HTTP_416_RANGE_NOT_SATISFIABLE,
+                headers={"Content-Range": f"bytes */{file_size}"},
+            )
+        start_str, end_str = match.group(1), match.group(2)
+        if start_str:
+            start = int(start_str)
+            end = int(end_str) if end_str else file_size - 1
+        else:
+            suffix_len = int(end_str)
+            start = max(0, file_size - suffix_len)
+            end = file_size - 1
+
+        if start >= file_size or end < start:
+            return Response(
+                status_code=status.HTTP_416_RANGE_NOT_SATISFIABLE,
+                headers={"Content-Range": f"bytes */{file_size}"},
+            )
+        end = min(end, file_size - 1)
+        content_length = end - start + 1
+        return StreamingResponse(
+            _iter_file_range(file_path, start, end),
+            status_code=status.HTTP_206_PARTIAL_CONTENT,
+            media_type=audio_record.content_type,
+            headers={
+                "Content-Range": f"bytes {start}-{end}/{file_size}",
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(content_length),
+            },
+        )
+
+    return FileResponse(
+        path=file_path,
+        media_type=audio_record.content_type,
+        filename=audio_record.original_filename,
+        headers={"Accept-Ranges": "bytes"},
+    )
+
+
 @router.post(
     "/{meeting_id}/transcribe",
     response_model=TranscriptResponse,
@@ -360,7 +576,7 @@ def transcribe_meeting(
     stt_service: BaseSpeechToTextService = Depends(get_transcription_service),
 ) -> TranscriptResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id(meeting_id, current_user.id)
+    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
     if not meeting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -512,7 +728,7 @@ def get_meeting_transcript(
     transcript_repo: TranscriptRepository = Depends(get_transcript_repository),
 ) -> TranscriptResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id(meeting_id, current_user.id)
+    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
 
     # trata erros de reunião inexistente ou transcrição não realizada
     if not meeting:
@@ -554,7 +770,7 @@ def process_meeting_async(
     ),
 ) -> MeetingProcessResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id(meeting_id, current_user.id)
+    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
 
     if not meeting:
         raise HTTPException(
@@ -585,6 +801,9 @@ def process_meeting_async(
         )
 
     options_dict = options.model_dump(exclude_none=True) if options else None
+    meeting.processing_options = options_dict
+    meeting_repo.db.add(meeting)
+    meeting_repo.db.commit()
 
     try:
         if options_dict:
@@ -622,7 +841,7 @@ def create_summary(
     summary_service: SummaryService = Depends(get_summary_service),
 ) -> SummaryResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id(meeting_id, current_user.id)
+    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
     if not meeting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -668,7 +887,7 @@ def get_summary(
 ) -> SummaryResponse:
     validate_meeting_id(meeting_id)
 
-    meeting = meeting_repo.get_by_id(meeting_id, current_user.id)
+    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
     if meeting is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -710,7 +929,7 @@ def retry_meeting(
     storage_service: AudioStorageService = Depends(get_audio_storage_service),
 ) -> MeetingResponse:
     validate_meeting_id(meeting_id)
-    meeting = meeting_repo.get_by_id(meeting_id, current_user.id)
+    meeting = meeting_repo.get_by_id_and_user(meeting_id, current_user.id)
     if not meeting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -756,7 +975,12 @@ def retry_meeting(
         )
 
     MeetingService(meeting_repo).update_status(meeting_id, MeetingStatus.PROCESSING)
-    enqueue_meeting_processing(meeting_id, background_tasks)
+    if meeting.processing_options:
+        enqueue_meeting_processing(
+            meeting_id, background_tasks, options=meeting.processing_options
+        )
+    else:
+        enqueue_meeting_processing(meeting_id, background_tasks)
     return MeetingResponse.model_validate(meeting)
 
 

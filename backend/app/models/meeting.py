@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -33,16 +33,14 @@ class Meeting(Base):
         nullable=False,
     )
 
-    # RESTRICT e nao CASCADE: apagar o usuario em cascata removeria as linhas,
-    # mas nao os audios ja gravados em disco (ver docs/autenticacao.md).
     user_id: Mapped[int | None] = mapped_column(
         Integer,
-        ForeignKey("users.id", ondelete="RESTRICT"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
     )
 
-    owner: Mapped[User | None] = relationship("User", back_populates="meetings")
+    user: Mapped[User | None] = relationship("User", back_populates="meetings")
 
     status: Mapped[MeetingStatus] = mapped_column(
         SqlEnum(
@@ -77,6 +75,8 @@ class Meeting(Base):
     )
 
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    processing_options: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     audio: Mapped["AudioFile | None"] = relationship(
         "AudioFile",

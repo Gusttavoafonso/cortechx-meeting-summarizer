@@ -1,11 +1,13 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import case, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
 
+from app.models.audio_file import AudioFile
 from app.models.meeting import Meeting
-from app.models.meeting_status import MeetingStatus
+from app.models.meeting_status import IN_PROGRESS_STATUSES, MeetingStatus
+from app.models.task import Task
 from app.models.transcript import Transcript
 
 
@@ -13,46 +15,147 @@ class MeetingRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def _with_relations(self, statement):
-        """Aplica o carregamento ansioso usado por todas as leituras de reuniao."""
-        return statement.options(
-            selectinload(Meeting.audio),
-            selectinload(Meeting.transcript).selectinload(Transcript.segments),
-        )
-
-    def get_by_id(self, meeting_id: int, user_id: int) -> Meeting | None:
-        """Busca a reuniao pertencente ao usuario informado.
-
-        Reuniao de outro dono, ou sem dono (criada antes do controle de posse),
-        nao e encontrada: a API responde 404 e nao revela que ela existe.
-        """
-        statement = self._with_relations(
-            select(Meeting).where(
-                Meeting.id == meeting_id,
-                Meeting.user_id == user_id,
+    def get_by_id(self, meeting_id: int) -> Meeting | None:
+        statement = (
+            select(Meeting)
+            .where(Meeting.id == meeting_id)
+            .options(
+                selectinload(Meeting.audio),
+                selectinload(Meeting.transcript).selectinload(Transcript.segments),
             )
         )
         return self.db.scalars(statement).first()
 
-    def list_all(self, user_id: int) -> list[Meeting]:
-        """Lista somente as reunioes do usuario informado."""
-        statement = self._with_relations(
-            select(Meeting).where(Meeting.user_id == user_id)
-        ).order_by(Meeting.created_at.desc())
-        return list(self.db.scalars(statement).all())
-
-    def get_for_pipeline(self, meeting_id: int) -> Meeting | None:
-        """Busca a reuniao sem filtro de posse.
-
-        Uso exclusivo do pipeline interno (worker Celery, entrega das
-        integracoes e transicoes de estado), que recebe apenas o ``meeting_id``
-        porque a API ja validou a posse antes de enfileirar o job. Nenhuma rota
-        HTTP deve chamar este metodo.
-        """
-        statement = self._with_relations(
-            select(Meeting).where(Meeting.id == meeting_id)
+    def get_by_id_and_user(self, meeting_id: int, user_id: int) -> Meeting | None:
+        statement = (
+            select(Meeting)
+            .where(
+                Meeting.id == meeting_id,
+                Meeting.user_id == user_id,
+            )
+            .options(
+                selectinload(Meeting.audio),
+                selectinload(Meeting.summary),
+                selectinload(Meeting.tasks),
+                selectinload(Meeting.transcript).selectinload(Transcript.segments),
+            )
         )
         return self.db.scalars(statement).first()
+
+    def list_all(self) -> list[Meeting]:
+        statement = (
+            select(Meeting)
+            .options(
+                selectinload(Meeting.audio),
+                selectinload(Meeting.transcript).selectinload(Transcript.segments),
+            )
+            .order_by(Meeting.created_at.desc())
+        )
+        return list(self.db.scalars(statement).all())
+
+    def list_by_user(self, user_id: int) -> list[Meeting]:
+        statement = (
+            select(Meeting)
+            .where(Meeting.user_id == user_id)
+            .options(
+                selectinload(Meeting.audio),
+                selectinload(Meeting.summary),
+                selectinload(Meeting.tasks),
+            )
+            .order_by(Meeting.created_at.desc())
+        )
+        return list(self.db.scalars(statement).all())
+
+    def delete(self, meeting: Meeting) -> None:
+        self.db.delete(meeting)
+        self.db.commit()
+
+    def get_stats_by_user(self, user_id: int) -> dict:
+        in_progress_values = [s.value for s in IN_PROGRESS_STATUSES]
+        counts_row = self.db.execute(
+            select(
+                func.count(Meeting.id),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (Meeting.status == MeetingStatus.COMPLETED, 1),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (Meeting.status.in_(in_progress_values), 1),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (Meeting.status == MeetingStatus.FAILED, 1),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+            ).where(Meeting.user_id == user_id)
+        ).one()
+
+        total_audio_seconds = self.db.scalar(
+            select(func.coalesce(func.sum(AudioFile.duration_seconds), 0.0))
+            .join(Meeting, AudioFile.meeting_id == Meeting.id)
+            .where(Meeting.user_id == user_id)
+        )
+        total_tasks = self.db.scalar(
+            select(func.count(Task.id))
+            .join(Meeting, Task.meeting_id == Meeting.id)
+            .where(Meeting.user_id == user_id)
+        )
+        recent_meetings = list(
+            self.db.scalars(
+                select(Meeting)
+                .where(Meeting.user_id == user_id)
+                .options(
+                    selectinload(Meeting.audio),
+                    selectinload(Meeting.summary),
+                    selectinload(Meeting.tasks),
+                )
+                .order_by(Meeting.created_at.desc(), Meeting.id.desc())
+                .limit(5)
+            ).all()
+        )
+        return {
+            "total_meetings": int(counts_row[0] or 0),
+            "completed_meetings": int(counts_row[1] or 0),
+            "processing_meetings": int(counts_row[2] or 0),
+            "failed_meetings": int(counts_row[3] or 0),
+            "total_audio_seconds": float(total_audio_seconds or 0.0),
+            "total_tasks": int(total_tasks or 0),
+            "recent_meetings": recent_meetings,
+        }
+
+    def list_tasks_by_user(
+        self, user_id: int
+    ) -> list[tuple[Task, str, MeetingStatus]]:
+        stmt = (
+            select(Task, Meeting.title, Meeting.status)
+            .join(Meeting, Task.meeting_id == Meeting.id)
+            .where(Meeting.user_id == user_id)
+            .order_by(
+                Meeting.created_at.desc(),
+                Meeting.id.desc(),
+                Task.position.asc(),
+                Task.id.asc(),
+            )
+        )
+        return [
+            (row[0], row[1], row[2])
+            for row in self.db.execute(stmt).all()
+        ]
 
     def create(
         self,

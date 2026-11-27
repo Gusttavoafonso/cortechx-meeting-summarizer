@@ -10,6 +10,8 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.meeting import Meeting
+    from app.models.password_reset_token import PasswordResetToken
+    from app.models.user_integration import UserIntegration
 
 
 def normalize_email(email: str) -> str:
@@ -79,10 +81,24 @@ class User(Base):
     def _normalize_email(self, _key: str, value: str) -> str:
         return normalize_email(value)
 
-    # passive_deletes="all" impede o ORM de apagar ou desvincular as reunioes:
-    # a exclusao de um usuario com reunioes e barrada pelo RESTRICT do banco.
+    @property
+    def has_password(self) -> bool:
+        return bool(self.hashed_password)
+
     meetings: Mapped[list[Meeting]] = relationship(
         "Meeting",
-        back_populates="owner",
-        passive_deletes="all",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    integrations: Mapped[list[UserIntegration]] = relationship(
+        "UserIntegration",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    password_reset_tokens: Mapped[list[PasswordResetToken]] = relationship(
+        "PasswordResetToken",
+        back_populates="user",
+        cascade="all, delete-orphan",
     )

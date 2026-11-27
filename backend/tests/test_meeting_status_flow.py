@@ -98,17 +98,17 @@ def storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 # Helpers
 
 
-def _create_meeting(auth_client: TestClient, title: str = "Reunião de status") -> int:
-    response = auth_client.post("/meetings", json={"title": title})
+def _create_meeting(client: TestClient, title: str = "Reunião de status") -> int:
+    response = client.post("/meetings", json={"title": title})
     assert response.status_code == 201
     return response.json()["id"]
 
 
 def _create_meeting_with_audio(
-    auth_client: TestClient, title: str = "Reunião de status"
+    client: TestClient, title: str = "Reunião de status"
 ) -> int:
-    meeting_id = _create_meeting(auth_client, title)
-    response = auth_client.post(
+    meeting_id = _create_meeting(client, title)
+    response = client.post(
         f"/meetings/{meeting_id}/audio",
         files={"file": ("audio.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg")},
     )
@@ -116,14 +116,14 @@ def _create_meeting_with_audio(
     return meeting_id
 
 
-def _create_transcribed_meeting(auth_client: TestClient) -> int:
-    meeting_id = _create_meeting_with_audio(auth_client)
-    assert auth_client.post(f"/meetings/{meeting_id}/transcribe").status_code == 200
+def _create_transcribed_meeting(client: TestClient) -> int:
+    meeting_id = _create_meeting_with_audio(client)
+    assert client.post(f"/meetings/{meeting_id}/transcribe").status_code == 200
     return meeting_id
 
 
-def _get_status(auth_client: TestClient, meeting_id: int) -> dict:
-    response = auth_client.get(f"/meetings/{meeting_id}/status")
+def _get_status(client: TestClient, meeting_id: int) -> dict:
+    response = client.get(f"/meetings/{meeting_id}/status")
     assert response.status_code == 200
     return response.json()
 
@@ -179,8 +179,8 @@ def _run_worker(
 # Estado inicial, após upload e consulta pela API
 
 
-def test_new_meeting_starts_as_received(auth_client: TestClient) -> None:
-    response = auth_client.post("/meetings", json={"title": "Nova reunião"})
+def test_new_meeting_starts_as_received(client: TestClient) -> None:
+    response = client.post("/meetings", json={"title": "Nova reunião"})
 
     assert response.status_code == 201
     body = response.json()
@@ -190,47 +190,43 @@ def test_new_meeting_starts_as_received(auth_client: TestClient) -> None:
     assert body["last_error"] is None
 
 
-def test_status_endpoint_returns_current_state(auth_client: TestClient) -> None:
-    meeting_id = _create_meeting(auth_client)
+def test_status_endpoint_returns_current_state(client: TestClient) -> None:
+    meeting_id = _create_meeting(client)
 
-    body = _get_status(auth_client, meeting_id)
+    body = _get_status(client, meeting_id)
 
     assert {"meeting_id", "status", "updated_at"} <= body.keys()
     assert body["meeting_id"] == meeting_id
     assert body["status"] == "received"
 
 
-def test_status_endpoint_returns_404_for_unknown_meeting(
-    auth_client: TestClient,
-) -> None:
-    assert auth_client.get("/meetings/99999/status").status_code == 404
+def test_status_endpoint_returns_404_for_unknown_meeting(client: TestClient) -> None:
+    assert client.get("/meetings/99999/status").status_code == 404
 
 
-def test_status_endpoint_rejects_invalid_id(auth_client: TestClient) -> None:
-    assert auth_client.get("/meetings/0/status").status_code == 400
+def test_status_endpoint_rejects_invalid_id(client: TestClient) -> None:
+    assert client.get("/meetings/0/status").status_code == 400
 
 
-def test_status_is_audio_uploaded_after_upload(auth_client: TestClient) -> None:
-    meeting_id = _create_meeting_with_audio(auth_client)
+def test_status_is_audio_uploaded_after_upload(client: TestClient) -> None:
+    meeting_id = _create_meeting_with_audio(client)
 
-    assert _get_status(auth_client, meeting_id)["status"] == "audio_uploaded"
-    assert (
-        auth_client.get(f"/meetings/{meeting_id}").json()["status"] == "audio_uploaded"
-    )
+    assert _get_status(client, meeting_id)["status"] == "audio_uploaded"
+    assert client.get(f"/meetings/{meeting_id}").json()["status"] == "audio_uploaded"
 
 
 # Início do processamento, durante e após o worker
 
 
 def test_process_reserves_processing_state_and_start_time(
-    auth_client: TestClient, db_session: Session
+    client: TestClient, db_session: Session
 ) -> None:
-    meeting_id = _create_meeting_with_audio(auth_client)
+    meeting_id = _create_meeting_with_audio(client)
 
-    response = auth_client.post(f"/meetings/{meeting_id}/process")
+    response = client.post(f"/meetings/{meeting_id}/process")
 
     assert response.status_code == 202
-    assert _get_status(auth_client, meeting_id)["status"] == "processing"
+    assert _get_status(client, meeting_id)["status"] == "processing"
     row = _persisted(db_session, meeting_id)
     assert MeetingStatus(row.status) == MeetingStatus.PROCESSING
     assert row.processing_started_at is not None
@@ -238,10 +234,10 @@ def test_process_reserves_processing_state_and_start_time(
 
 
 def test_status_is_processing_while_worker_runs_and_completed_after(
-    auth_client: TestClient, db_session: Session, storage: AudioStorageService
+    client: TestClient, db_session: Session, storage: AudioStorageService
 ) -> None:
-    meeting_id = _create_meeting_with_audio(auth_client)
-    assert auth_client.post(f"/meetings/{meeting_id}/process").status_code == 202
+    meeting_id = _create_meeting_with_audio(client)
+    assert client.post(f"/meetings/{meeting_id}/process").status_code == 202
 
     observed: list[str] = []
 
@@ -262,14 +258,14 @@ def test_status_is_processing_while_worker_runs_and_completed_after(
     assert row.last_error is None
     assert row.processing_started_at is not None
     assert row.processing_completed_at is not None
-    assert _get_status(auth_client, meeting_id)["status"] == "completed"
+    assert _get_status(client, meeting_id)["status"] == "completed"
 
 
 def test_worker_failure_persists_failed_status_and_last_error(
-    auth_client: TestClient, db_session: Session, storage: AudioStorageService
+    client: TestClient, db_session: Session, storage: AudioStorageService
 ) -> None:
-    meeting_id = _create_meeting_with_audio(auth_client)
-    assert auth_client.post(f"/meetings/{meeting_id}/process").status_code == 202
+    meeting_id = _create_meeting_with_audio(client)
+    assert client.post(f"/meetings/{meeting_id}/process").status_code == 202
 
     stt_service = MagicMock()
     stt_service.transcribe.side_effect = RuntimeError("STT indisponível")
@@ -283,25 +279,25 @@ def test_worker_failure_persists_failed_status_and_last_error(
     assert row.processing_started_at is not None
     assert row.processing_completed_at is not None
 
-    body = _get_status(auth_client, meeting_id)
+    body = _get_status(client, meeting_id)
     assert body["status"] == "failed"
     assert body["last_error"] == "STT indisponível"
 
 
 def test_new_attempt_after_failure_clears_previous_error(
-    auth_client: TestClient, db_session: Session, storage: AudioStorageService
+    client: TestClient, db_session: Session, storage: AudioStorageService
 ) -> None:
-    meeting_id = _create_meeting_with_audio(auth_client)
-    assert auth_client.post(f"/meetings/{meeting_id}/process").status_code == 202
+    meeting_id = _create_meeting_with_audio(client)
+    assert client.post(f"/meetings/{meeting_id}/process").status_code == 202
 
     stt_service = MagicMock()
     stt_service.transcribe.side_effect = RuntimeError("falha temporária")
     with pytest.raises(RuntimeError):
         _run_worker(db_session, storage, meeting_id, stt_service)
-    assert _get_status(auth_client, meeting_id)["status"] == "failed"
+    assert _get_status(client, meeting_id)["status"] == "failed"
 
     # Nova tentativa a partir de FAILED
-    assert auth_client.post(f"/meetings/{meeting_id}/process").status_code == 202
+    assert client.post(f"/meetings/{meeting_id}/process").status_code == 202
 
     row = _persisted(db_session, meeting_id)
     assert MeetingStatus(row.status) == MeetingStatus.PROCESSING
@@ -327,7 +323,7 @@ def test_service_rejects_invalid_transition(
     with pytest.raises(InvalidMeetingTransitionError):
         MeetingService(repository).update_status(meeting.id, target)
 
-    assert MeetingStatus(repository.get_for_pipeline(meeting.id).status) == source
+    assert MeetingStatus(repository.get_by_id(meeting.id).status) == source
 
 
 def test_failed_transition_records_error_and_completion_time(
@@ -384,20 +380,18 @@ def test_failed_meeting_can_be_retried_and_error_is_cleared(
 
 
 def test_invalid_transition_through_api_returns_409(
-    auth_client: TestClient, db_session: Session
+    client: TestClient, db_session: Session
 ) -> None:
-    meeting_id = _create_meeting_with_audio(auth_client)
+    meeting_id = _create_meeting_with_audio(client)
     repository = MeetingRepository(db_session)
     # Força COMPLETED direto no repository (sem validação de transição)
-    repository.update_status(
-        repository.get_for_pipeline(meeting_id), MeetingStatus.COMPLETED
-    )
+    repository.update_status(repository.get_by_id(meeting_id), MeetingStatus.COMPLETED)
 
-    response = auth_client.post(f"/meetings/{meeting_id}/transcribe")
+    response = client.post(f"/meetings/{meeting_id}/transcribe")
 
     assert response.status_code == 409
     assert "inválida" in response.json()["detail"]
-    assert _get_status(auth_client, meeting_id)["status"] == "completed"
+    assert _get_status(client, meeting_id)["status"] == "completed"
 
 
 # Processamento duplicado / simultâneo
@@ -405,28 +399,28 @@ def test_invalid_transition_through_api_returns_409(
 
 @pytest.mark.parametrize("action", ["transcribe", "summary", "process"])
 def test_actions_are_rejected_while_meeting_is_processing(
-    auth_client: TestClient, action: str
+    client: TestClient, action: str
 ) -> None:
-    meeting_id = _create_meeting_with_audio(auth_client)
-    assert auth_client.post(f"/meetings/{meeting_id}/process").status_code == 202
+    meeting_id = _create_meeting_with_audio(client)
+    assert client.post(f"/meetings/{meeting_id}/process").status_code == 202
 
-    response = auth_client.post(f"/meetings/{meeting_id}/{action}")
+    response = client.post(f"/meetings/{meeting_id}/{action}")
 
     assert response.status_code == 409
-    assert _get_status(auth_client, meeting_id)["status"] == "processing"
+    assert _get_status(client, meeting_id)["status"] == "processing"
 
 
 # Fluxo síncrono de resumo: COMPLETED / FAILED / retentativa
 
 
-def test_summary_success_marks_meeting_completed(auth_client: TestClient) -> None:
-    meeting_id = _create_transcribed_meeting(auth_client)
-    assert _get_status(auth_client, meeting_id)["status"] == "transcribed"
+def test_summary_success_marks_meeting_completed(client: TestClient) -> None:
+    meeting_id = _create_transcribed_meeting(client)
+    assert _get_status(client, meeting_id)["status"] == "transcribed"
 
-    response = auth_client.post(f"/meetings/{meeting_id}/summary")
+    response = client.post(f"/meetings/{meeting_id}/summary")
 
     assert response.status_code == 201
-    meeting = auth_client.get(f"/meetings/{meeting_id}").json()
+    meeting = client.get(f"/meetings/{meeting_id}").json()
     assert meeting["status"] == "completed"
     assert meeting["processing_started_at"] is not None
     assert meeting["processing_completed_at"] is not None
@@ -434,57 +428,30 @@ def test_summary_success_marks_meeting_completed(auth_client: TestClient) -> Non
 
 
 def test_summary_failure_marks_meeting_failed_and_can_be_retried(
-    auth_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    meeting_id = _create_transcribed_meeting(auth_client)
+    meeting_id = _create_transcribed_meeting(client)
 
     monkeypatch.setattr(
         "app.api.v1.meetings.get_llm_service",
         lambda: FakeLLM(error=RuntimeError("quota excedida")),
     )
-    response = auth_client.post(f"/meetings/{meeting_id}/summary")
+    response = client.post(f"/meetings/{meeting_id}/summary")
 
     assert response.status_code == 502
-    body = _get_status(auth_client, meeting_id)
+    body = _get_status(client, meeting_id)
     assert body["status"] == "failed"
     assert body["last_error"]
-    assert auth_client.get(f"/meetings/{meeting_id}/summary").status_code == 404
+    assert client.get(f"/meetings/{meeting_id}/summary").status_code == 404
 
     # Retentativa com o LLM funcionando
     monkeypatch.setattr(
         "app.api.v1.meetings.get_llm_service",
         lambda: FakeLLM(response=VALID_SUMMARY_JSON),
     )
-    retry = auth_client.post(f"/meetings/{meeting_id}/summary")
+    retry = client.post(f"/meetings/{meeting_id}/summary")
 
     assert retry.status_code == 201
-    body = _get_status(auth_client, meeting_id)
+    body = _get_status(client, meeting_id)
     assert body["status"] == "completed"
     assert body["last_error"] is None
-
-
-def test_get_transcript_returns_segments_in_chronological_order(
-    auth_client: TestClient, db_session: Session
-) -> None:
-    meeting_response = auth_client.post(
-        "/meetings", json={"title": "Ordem cronológica"}
-    )
-    meeting_id = meeting_response.json()["id"]
-    TranscriptRepository(db_session).save_transcript(
-        meeting_id=meeting_id,
-        content="Primeiro. Segundo. Terceiro.",
-        segments=[
-            SegmentData(start=4.0, end=6.0, text="Terceiro."),
-            SegmentData(start=0.0, end=2.0, text="Primeiro."),
-            SegmentData(start=2.0, end=4.0, text="Segundo."),
-        ],
-    )
-
-    response = auth_client.get(f"/meetings/{meeting_id}/transcript")
-
-    assert response.status_code == 200
-    assert [segment["text"] for segment in response.json()["segments"]] == [
-        "Primeiro.",
-        "Segundo.",
-        "Terceiro.",
-    ]

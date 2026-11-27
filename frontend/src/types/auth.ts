@@ -3,6 +3,12 @@ export interface UserPublic {
   name: string
   picture_url: string | null
   email?: string
+  has_password?: boolean
+}
+
+export interface ForgotPasswordResponse {
+  message: string
+  reset_token?: string | null
 }
 
 export interface UserLoginRequest {
@@ -29,4 +35,9 @@ export interface AuthContextType {
   loginWithGoogle: (credential: string) => Promise<UserPublic>
   logout: () => Promise<void>
   checkSession: () => Promise<void>
+  updateProfile: (name: string) => Promise<UserPublic>
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>
+  forgotPassword: (email: string) => Promise<ForgotPasswordResponse>
+  resetPassword: (token: string, newPassword: string) => Promise<{ message: string }>
+  refreshUser: () => Promise<UserPublic | null>
 }

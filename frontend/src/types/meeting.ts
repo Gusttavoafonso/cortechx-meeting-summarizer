@@ -23,6 +23,8 @@ export interface MeetingProcessOptions {
   provider?: 'auto' | 'groq' | 'local'
   auto_tasks?: boolean
   export_notion?: boolean
+  integrations?: string[]
+  skip_integrations?: boolean
 }
 
 export interface TranscriptSegment {
@@ -62,6 +64,12 @@ export interface SummaryResponse {
   updated_at: string
 }
 
+export interface MeetingSummaryPreview {
+  objective: string | null
+  summary: string | null
+  tasks_count?: number
+}
+
 export interface Meeting {
   id: number
   title: string
@@ -73,7 +81,7 @@ export interface Meeting {
   last_error: string | null
   audio: AudioMetadata | null
   transcript: TranscriptResponse | null
-  summary?: SummaryResponse | null
+  summary?: MeetingSummaryPreview | SummaryResponse | null
 }
 
 export interface MeetingCreate {
@@ -90,4 +98,47 @@ export interface MeetingStatusResponse {
   status: MeetingStatus
   updated_at: string
   last_error: string | null
+}
+
+export interface MeetingStats {
+  total_meetings: number
+  completed_meetings: number
+  processing_meetings: number
+  failed_meetings: number
+  total_audio_seconds: number
+  total_tasks: number
+  recent_meetings: Meeting[]
+}
+
+export interface GlobalTaskItem {
+  id: number
+  meeting_id: number
+  meeting_title: string
+  meeting_status: MeetingStatus
+  description: string
+  responsible: string | null
+  deadline: string | null
+  created_at: string
+}
+
+export type IntegrationDeliveryStatus = 'pending' | 'running' | 'success' | 'failed'
+
+export interface IntegrationDeliveryItem {
+  provider: string
+  status: IntegrationDeliveryStatus
+  attempts: number
+  error_message: string | null
+  external_id: string | null
+  executed_at: string | null
+  updated_at: string
+}
+
+export interface MeetingIntegrationsResponse {
+  meeting_id: number
+  integrations: IntegrationDeliveryItem[]
+}
+
+export interface IntegrationRetryResponse {
+  meeting_id: number
+  providers: string[]
 }

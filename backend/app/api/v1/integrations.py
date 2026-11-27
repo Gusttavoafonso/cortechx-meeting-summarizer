@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.database import get_session
-from app.integrations.delivery import enabled_providers_from_settings
+from app.integrations.delivery import enabled_providers_for_user
 from app.models.integration_delivery import IntegrationDeliveryStatus
 from app.models.meeting import Meeting
 from app.models.meeting_status import MeetingStatus
@@ -34,14 +34,7 @@ from app.workers.integration_job import enqueue_integration_delivery
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(
-    dependencies=[Depends(get_current_user)],
-    responses={
-        status.HTTP_401_UNAUTHORIZED: {
-            "description": "Sessão ausente, inválida ou expirada."
-        }
-    },
-)
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 _NOT_RETRYABLE = {
     IntegrationDeliveryStatus.SUCCESS.value,
@@ -49,8 +42,11 @@ _NOT_RETRYABLE = {
 }
 
 
-def get_enabled_providers() -> list[str]:
-    return enabled_providers_from_settings()
+def get_enabled_providers(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+) -> list[str]:
+    return enabled_providers_for_user(db, current_user.id)
 
 
 def get_integration_dispatcher() -> Callable[..., None]:
@@ -65,9 +61,14 @@ def _validate_meeting_id(meeting_id: int) -> None:
         )
 
 
-def _get_meeting_or_404(db: Session, meeting_id: int, user_id: int) -> Meeting:
-    """Carrega a reunião do usuário autenticado; de outro dono responde 404."""
-    meeting = MeetingRepository(db).get_by_id(meeting_id, user_id)
+def _get_meeting_or_404(
+    db: Session, meeting_id: int, user_id: int | None = None
+) -> Meeting:
+    repo = MeetingRepository(db)
+    if user_id is not None:
+        meeting = repo.get_by_id_and_user(meeting_id, user_id)
+    else:
+        meeting = repo.get_by_id(meeting_id)
 
     if meeting is None:
         raise HTTPException(

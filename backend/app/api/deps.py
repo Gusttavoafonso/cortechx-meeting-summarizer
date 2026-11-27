@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException, Security, status
-from fastapi.security import APIKeyCookie, HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -10,6 +10,10 @@ from app.core.exceptions import InvalidSessionTokenError
 from app.core.security import decode_access_token
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
+
+# auto_error=False: a resposta 401 (com WWW-Authenticate) é montada abaixo, e o
+# cookie HTTP-Only emitido pelo login Google continua aceito como alternativa.
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 
 def _unauthorized(detail: str) -> HTTPException:
@@ -20,35 +24,15 @@ def _unauthorized(detail: str) -> HTTPException:
     )
 
 
-# Declarados como schemes para que apareçam no OpenAPI: sem isso o Swagger não
-# mostra que as rotas exigem sessão nem oferece o botão "Authorize".
-# auto_error=False porque a ausência dos dois é tratada aqui, com uma mensagem
-# única.
-session_cookie_scheme = APIKeyCookie(
-    name=settings.session_cookie_name,
-    auto_error=False,
-    scheme_name="Cookie de sessão",
-    description=(
-        "Cookie HttpOnly emitido por /auth/login, /auth/register ou /auth/google."
-    ),
-)
-bearer_scheme = HTTPBearer(
-    auto_error=False,
-    scheme_name="Bearer",
-    description="Alternativa ao cookie, para o Swagger e clientes de API.",
-)
-
-
 def get_current_user(
-    cookie_token: str | None = Security(session_cookie_scheme),
-    bearer: HTTPAuthorizationCredentials | None = Security(bearer_scheme),
+    request: Request,
+    bearer_token: str | None = Depends(oauth2_scheme),
     db: Session = Depends(get_session),
 ) -> User:
-    """Extrai e valida a sessão via Cookie HTTP-Only ou cabeçalho Authorization."""
-    token = (bearer.credentials if bearer else None) or cookie_token
-
+    """Valida o JWT (Bearer ou cookie de sessão) e devolve o usuário ativo."""
+    token = bearer_token or request.cookies.get(settings.session_cookie_name)
     if not token:
-        raise _unauthorized("Não autenticado. Sessão ausente.")
+        raise _unauthorized("Não autenticado.")
 
     try:
         user_id = decode_access_token(token)
@@ -59,4 +43,25 @@ def get_current_user(
     if user is None or not user.is_active:
         raise _unauthorized("Usuário não encontrado ou inativo.")
 
+    return user
+
+
+def get_optional_current_user(
+    request: Request,
+    bearer_token: str | None = Depends(oauth2_scheme),
+    db: Session = Depends(get_session),
+) -> User | None:
+    """Retorna o usuário autenticado se houver token válido, ou None caso contrário."""
+    token = bearer_token or request.cookies.get(settings.session_cookie_name)
+    if not token:
+        return None
+
+    try:
+        user_id = decode_access_token(token)
+    except InvalidSessionTokenError:
+        return None
+
+    user = UserRepository(db).get_by_id(user_id)
+    if user is None or not user.is_active:
+        return None
     return user

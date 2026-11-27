@@ -172,19 +172,21 @@ export const MeetingOptionsModal: React.FC<MeetingOptionsModalProps> = ({
               <div className="flex items-start gap-2.5">
                 <FileText className="w-4 h-4 text-brand shrink-0 mt-0.5 stroke-[2]" />
                 <div>
-                  <p className="text-xs font-semibold text-ink">Sincronizar com Notion</p>
+                  <p className="text-xs font-semibold text-ink">
+                    Enviar para integrações conectadas
+                  </p>
                   <p className="text-[11px] text-muted">
-                    Envia o resumo diretamente para o banco de dados configurado
+                    Publica o resumo nos provedores ativos (Discord, Notion e Obsidian)
                   </p>
                 </div>
               </div>
               <input
                 type="checkbox"
-                checked={localOptions.exportNotion}
+                checked={localOptions.exportIntegrations}
                 onChange={(e) =>
                   setLocalOptions((prev) => ({
                     ...prev,
-                    exportNotion: e.target.checked,
+                    exportIntegrations: e.target.checked,
                   }))
                 }
                 className="w-4 h-4 mt-0.5 accent-primary-btn rounded cursor-pointer"

@@ -1,20 +1,18 @@
 # ruff: noqa: E402
 import os
 
-# Deve preceder imports de app: Settings exige JWT_SECRET_KEY.
+# Precisa vir antes de qualquer import de `app`: Settings exige JWT_SECRET_KEY.
 os.environ.setdefault(
     "JWT_SECRET_KEY", "test-only-secret-key-with-at-least-32-characters"
 )
 
-from collections.abc import Callable, Generator
+from collections.abc import Generator, Callable
 
 import pytest
 from app.api.deps import get_current_user
-from app.core.config import settings
 from app.core.database import Base, get_session
 from app.main import app
 from app.models.user import User
-from app.services.auth_service import create_session_token
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -41,101 +39,81 @@ def db_session() -> Generator[Session, None, None]:
 
 
 @pytest.fixture
-def _api_database(db_session: Session) -> Generator[None, None, None]:
-    """Substitui apenas o banco; get_current_user valida o JWT de verdade."""
+def client(db_session: Session) -> Generator[TestClient, None, None]:
+    """Cliente HTTP reutilizável para os testes da API, com banco isolado."""
+
+    def override_get_session():
+        try:
+            yield db_session
+        finally:
+            pass
+
+    def override_get_current_user():
+        user = db_session.query(User).filter(User.google_id == "default_test_sub").first()
+        if not user:
+            user = User(
+                google_id="default_test_sub",
+                email="default_test@cortechx.com",
+                name="Default Test User",
+                picture_url="https://lh3.googleusercontent.com/test.jpg",
+            )
+            db_session.add(user)
+            db_session.commit()
+            db_session.refresh(user)
+        return user
+
+    app.dependency_overrides[get_session] = override_get_session
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
+
+@pytest.fixture
+def real_auth_overrides(db_session: Session) -> Generator[None, None, None]:
+    """Só get_session é sobrescrito; get_current_user usa o JWT de verdade."""
 
     def override_get_session():
         yield db_session
 
     app.dependency_overrides[get_session] = override_get_session
     app.dependency_overrides.pop(get_current_user, None)
-    try:
-        yield
-    finally:
-        app.dependency_overrides.clear()
-
-
-@pytest.fixture
-def real_auth_overrides(_api_database: None) -> Generator[None, None, None]:
-    """Mantém o contrato de fixtures Dev com autenticação real."""
     yield
-
-
-@pytest.fixture
-def create_user(db_session: Session) -> Callable[..., User]:
-    """Fábrica de usuários persistidos para os testes de posse."""
-
-    def _create_user(
-        email: str = "user@cortechx.com", name: str = "Usuário de Teste"
-    ) -> User:
-        user = User(email=email, name=name)
-        db_session.add(user)
-        db_session.commit()
-        db_session.refresh(user)
-        return user
-
-    return _create_user
-
-
-@pytest.fixture
-def auth_user(db_session: Session) -> User:
-    """Usuário ativo com senha DEFAULT_PASSWORD e e-mail único."""
-    return create_test_user(db_session)
-
-
-@pytest.fixture
-def test_user(auth_user: User) -> User:
-    """Nome usado pela PR para o mesmo dono autenticado em auth_client."""
-    return auth_user
-
-
-@pytest.fixture
-def client(_api_database: None) -> Generator[TestClient, None, None]:
-    """Cliente sem sessão para rotas públicas e rejeições 401 reais."""
-    with TestClient(app) as test_client:
-        yield test_client
+    app.dependency_overrides.pop(get_session, None)
 
 
 @pytest.fixture
 def anon_client(real_auth_overrides: None) -> Generator[TestClient, None, None]:
-    with TestClient(app) as test_client:
-        yield test_client
+    """Cliente SEM token e sem override: autenticação real (testes de 401)."""
+    test_client = TestClient(app)
+    yield test_client
+    test_client.close()
+
+
+@pytest.fixture
+def auth_user(db_session: Session) -> User:
+    """Usuário ativo já persistido (senha: DEFAULT_PASSWORD)."""
+    return create_test_user(db_session)
 
 
 @pytest.fixture
 def auth_client(
     auth_user: User, real_auth_overrides: None
 ) -> Generator[TestClient, None, None]:
-    """Cliente autenticado como auth_user/test_user com Bearer real."""
-    with TestClient(app, headers=auth_headers(auth_user)) as test_client:
-        yield test_client
-
-
-@pytest.fixture
-def authenticate(
-    _api_database: None,
-) -> Generator[Callable[[User], TestClient], None, None]:
-    """Fábrica da PR: clientes por usuário com cookie real e cleanup."""
-    clients: list[TestClient] = []
-
-    def factory(user: User) -> TestClient:
-        authenticated = TestClient(app)
-        authenticated.cookies.set(
-            settings.session_cookie_name, create_session_token(user.id)
-        )
-        clients.append(authenticated)
-        return authenticated
-
-    yield factory
-    for test_client in clients:
-        test_client.close()
+    """Cliente já autenticado como ``auth_user`` (Bearer token real)."""
+    test_client = TestClient(app, headers=auth_headers(auth_user))
+    yield test_client
+    test_client.close()
 
 
 @pytest.fixture
 def make_auth_client(
     db_session: Session, real_auth_overrides: None
 ) -> Generator[Callable[..., tuple[TestClient, User]], None, None]:
-    """Fábrica Dev: cria usuário e cliente com Bearer real."""
+    """Fábrica para testes com mais de um usuário (isolamento da 1B):
+
+        alice_client, alice = make_auth_client(name="Alice")
+        bob_client, bob = make_auth_client(name="Bob")
+    """
     clients: list[TestClient] = []
 
     def factory(**user_kwargs) -> tuple[TestClient, User]:

@@ -2,12 +2,12 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.frontend import configure_frontend
 from app.api.v1.auth import router as auth_router
-from app.api.v1.decoder_diagnostics import router as decoder_diagnostics_router
 from app.api.v1.integrations import router as integrations_router
 from app.api.v1.meetings import router as meetings_router
 from app.api.v1.partial_sessions import router as partial_sessions_router
+from app.api.v1.settings import router as settings_router
+from app.api.v1.system import router as system_router
 from app.api.v1.users import router as users_router
 from app.core.config import settings
 from app.core.errors import register_exception_handlers
@@ -20,30 +20,30 @@ app = FastAPI(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:5172",
-        "http://127.0.0.1:5172",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "tauri://localhost",
-        "http://tauri.localhost",
-        "https://tauri.localhost",
-    ],
+    allow_origins=settings.parsed_cors_origins,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-configure_frontend(app)
 register_exception_handlers(app)
+
 
 @app.exception_handler(InvalidMeetingTransitionError)
 def invalid_transition_handler(request: Request, exc: InvalidMeetingTransitionError):
     return JSONResponse(
         status_code=status.HTTP_409_CONFLICT, content={"detail": str(exc)}
     )
+
+
+@app.get("/", tags=["Root"])
+def root():
+    return {
+        "message": "CortechX Meeting Summarizer API",
+        "docs": "/docs",
+        "health": "/health",
+    }
 
 
 @app.get("/health", tags=["Health"])
@@ -58,8 +58,5 @@ app.include_router(
 )
 app.include_router(meetings_router, prefix="/meetings", tags=["Meetings"])
 app.include_router(integrations_router, prefix="/meetings", tags=["Integrations"])
-
-# Diagnostic routes are absent from production routing and OpenAPI.
-
-if settings.DEBUG:
-    app.include_router(decoder_diagnostics_router, prefix="/dev", tags=["Diagnostics"])
+app.include_router(settings_router, prefix="/settings", tags=["Settings"])
+app.include_router(system_router, prefix="/system", tags=["System"])
