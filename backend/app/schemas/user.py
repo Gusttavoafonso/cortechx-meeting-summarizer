@@ -56,6 +56,7 @@ class UserPublic(BaseModel):
     name: str
     email: str
     picture_url: str | None = None
+    has_password: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

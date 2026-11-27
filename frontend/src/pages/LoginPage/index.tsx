@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Mail,
@@ -178,8 +178,12 @@ export const LoginPage: React.FC = () => {
       navigate(redirectTarget, { replace: true })
     } catch (err: unknown) {
       if (err instanceof ApiError) {
-        const detail = (err.data as { detail?: string })?.detail
-        setError(detail || err.message || 'Erro ao realizar autenticação.')
+        const detail = (err.data as { detail?: unknown })?.detail
+        setError(
+          typeof detail === 'string' && detail
+            ? detail
+            : err.message || 'Erro ao realizar autenticação.'
+        )
       } else if (err instanceof Error) {
         setError(err.message)
       } else {
@@ -190,25 +194,32 @@ export const LoginPage: React.FC = () => {
     }
   }
 
-  const handleGoogleSuccess = async (credential: string) => {
-    setError(null)
-    try {
-      setIsSubmitting(true)
-      await loginWithGoogle(credential)
-      navigate(redirectTarget, { replace: true })
-    } catch (err: unknown) {
-      if (err instanceof ApiError) {
-        const detail = (err.data as { detail?: string })?.detail
-        setError(detail || err.message)
-      } else if (err instanceof Error) {
-        setError(err.message)
-      } else {
-        setError('Falha ao autenticar com a conta do Google.')
+  const handleGoogleSuccess = useCallback(
+    async (credential: string) => {
+      setError(null)
+      try {
+        setIsSubmitting(true)
+        await loginWithGoogle(credential)
+        navigate(redirectTarget, { replace: true })
+      } catch (err: unknown) {
+        if (err instanceof ApiError) {
+          const detail = (err.data as { detail?: unknown })?.detail
+          setError(typeof detail === 'string' && detail ? detail : err.message)
+        } else if (err instanceof Error) {
+          setError(err.message)
+        } else {
+          setError('Falha ao autenticar com a conta do Google.')
+        }
+      } finally {
+        setIsSubmitting(false)
       }
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
+    },
+    [loginWithGoogle, navigate, redirectTarget]
+  )
+
+  const handleGoogleError = useCallback((err: Error) => {
+    setError(err.message)
+  }, [])
 
   return (
     <div className="min-h-screen bg-page flex flex-col justify-center py-12 sm:px-6 lg:px-8 selection:bg-surface selection:text-brand relative overflow-hidden">
@@ -445,7 +456,7 @@ export const LoginPage: React.FC = () => {
               <div className="mb-6">
                 <GoogleLoginButton
                   onSuccess={handleGoogleSuccess}
-                  onError={(err) => setError(err.message)}
+                  onError={handleGoogleError}
                   disabled={isSubmitting}
                   text={mode === 'login' ? 'continue_with' : 'signup_with'}
                 />

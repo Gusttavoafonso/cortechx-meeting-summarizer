@@ -9,6 +9,7 @@ from app.api.v1.partial_sessions import router as partial_sessions_router
 from app.api.v1.settings import router as settings_router
 from app.api.v1.system import router as system_router
 from app.api.v1.users import router as users_router
+from app.core.config import settings
 from app.core.errors import register_exception_handlers
 from app.services.meeting_service import InvalidMeetingTransitionError
 
@@ -19,13 +20,8 @@ app = FastAPI(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "tauri://localhost",
-        "http://tauri.localhost",
-        "https://tauri.localhost",
-    ],
+    allow_origins=settings.parsed_cors_origins,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -157,6 +157,23 @@ class Settings(BaseSettings):
         default="lax",
         validation_alias="SESSION_COOKIE_SAMESITE",
     )
+    cors_origins: str = Field(default="", validation_alias="CORS_ORIGINS")
+
+    @property
+    def parsed_cors_origins(self) -> list[str]:
+        defaults = [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "tauri://localhost",
+            "http://tauri.localhost",
+            "https://tauri.localhost",
+        ]
+        extras = [
+            origin.strip().rstrip("/")
+            for origin in self.cors_origins.split(",")
+            if origin.strip()
+        ]
+        return list(dict.fromkeys([*defaults, *extras]))
 
     @field_validator("AUDIO_STORAGE_PATH", mode="before")
     @classmethod

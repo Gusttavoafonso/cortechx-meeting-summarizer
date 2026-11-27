@@ -45,43 +45,63 @@ export const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
   text = 'continue_with',
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const onSuccessRef = useRef(onSuccess)
+  const onErrorRef = useRef(onError)
+
   const [gisLoaded, setGisLoaded] = useState(false)
+  const [gisTimedOut, setGisTimedOut] = useState(false)
   const clientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string) || ''
+
+  useEffect(() => {
+    onSuccessRef.current = onSuccess
+    onErrorRef.current = onError
+  }, [onSuccess, onError])
 
   useEffect(() => {
     if (!clientId) return
 
-    let intervalId: NodeJS.Timeout | null = null
-
-    const checkGis = () => {
-      if (window.google?.accounts?.id) {
-        setGisLoaded(true)
-        if (intervalId) clearInterval(intervalId)
-      }
-    }
+    let intervalId: ReturnType<typeof setInterval> | null = null
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
 
     if (window.google?.accounts?.id) {
       setGisLoaded(true)
-    } else {
-      intervalId = setInterval(checkGis, 200)
+      setGisTimedOut(false)
+      return
     }
+
+    intervalId = setInterval(() => {
+      if (window.google?.accounts?.id) {
+        setGisLoaded(true)
+        setGisTimedOut(false)
+        if (intervalId) clearInterval(intervalId)
+        if (timeoutId) clearTimeout(timeoutId)
+      }
+    }, 200)
+
+    timeoutId = setTimeout(() => {
+      if (!window.google?.accounts?.id) {
+        setGisTimedOut(true)
+        if (intervalId) clearInterval(intervalId)
+      }
+    }, 6000)
 
     return () => {
       if (intervalId) clearInterval(intervalId)
+      if (timeoutId) clearTimeout(timeoutId)
     }
   }, [clientId])
 
   useEffect(() => {
-    if (!clientId || !gisLoaded || !containerRef.current || disabled) return
+    if (!clientId || !gisLoaded || !containerRef.current) return
 
     try {
       window.google?.accounts.id.initialize({
         client_id: clientId,
         callback: (response) => {
           if (response?.credential) {
-            onSuccess(response.credential)
+            onSuccessRef.current(response.credential)
           } else {
-            onError?.(new Error('Credencial do Google não recebida'))
+            onErrorRef.current?.(new Error('Credencial do Google não recebida'))
           }
         },
       })
@@ -94,38 +114,54 @@ export const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
         type: 'standard',
         theme: 'outline',
         size: 'large',
-        text: text,
+        text,
         shape: 'rectangular',
         logo_alignment: 'center',
         width: buttonWidth,
       })
     } catch (e) {
-      onError?.(e instanceof Error ? e : new Error(String(e)))
+      onErrorRef.current?.(e instanceof Error ? e : new Error(String(e)))
     }
-  }, [clientId, gisLoaded, disabled, onSuccess, onError, text])
+  }, [clientId, gisLoaded, text])
 
-  // Custom Google Button when Client ID is not configured or GIS is loading
-  const handleSimulatedOrMissing = () => {
+  const handleMissingClientId = () => {
     if (!clientId) {
-      const msg =
-        'VITE_GOOGLE_CLIENT_ID não está configurado no arquivo .env. Configure sua chave OAuth do Google para autenticar.'
-      onError?.(new Error(msg))
+      onErrorRef.current?.(
+        new Error(
+          'VITE_GOOGLE_CLIENT_ID não está configurado no arquivo .env. Configure sua chave OAuth do Google para autenticar.'
+        )
+      )
     }
   }
 
   return (
     <div className="w-full">
       {clientId ? (
-        <div ref={containerRef} className="w-full min-h-[44px] flex justify-center" />
+        <div className="space-y-2">
+          <div
+            ref={containerRef}
+            className={`w-full min-h-[44px] flex justify-center transition-opacity ${
+              disabled ? 'pointer-events-none opacity-60' : ''
+            }`}
+          />
+          {gisTimedOut && !gisLoaded && (
+            <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200/80 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              <span>
+                Não foi possível carregar o botão do Google (verifique bloqueadores de
+                anúncios, conexão ou origem autorizada no Google Cloud).
+              </span>
+            </p>
+          )}
+        </div>
       ) : (
         <div className="space-y-2">
           <button
             type="button"
-            onClick={handleSimulatedOrMissing}
+            onClick={handleMissingClientId}
             disabled={disabled}
             className="w-full h-11 px-4 flex items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 active:bg-slate-100 text-ink text-sm font-medium transition-colors shadow-xs group"
           >
-            {/* Google SVG Logo */}
             <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
               <path
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"

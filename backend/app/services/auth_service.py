@@ -96,7 +96,10 @@ def verify_google_token(credential: str) -> dict[str, Any]:
     try:
         request = requests.Request()
         id_info = id_token.verify_oauth2_token(
-            credential, request, audience=settings.google_client_id
+            credential,
+            request,
+            audience=settings.google_client_id,
+            clock_skew_in_seconds=10,
         )
         if not id_info.get("email_verified", False):
             raise InvalidGoogleTokenError(
@@ -106,8 +109,18 @@ def verify_google_token(credential: str) -> dict[str, Any]:
     except InvalidGoogleTokenError:
         raise
     except ValueError as exc:
+        logger.warning(
+            "Falha ao verificar ID token do Google (%s): %s",
+            exc.__class__.__name__,
+            exc,
+        )
         raise InvalidGoogleTokenError("Token do Google inválido ou expirado.") from exc
     except Exception as exc:
+        logger.warning(
+            "Falha ao verificar ID token do Google (%s): %s",
+            exc.__class__.__name__,
+            exc,
+        )
         raise InvalidGoogleTokenError("Token do Google inválido.") from exc
 
 
