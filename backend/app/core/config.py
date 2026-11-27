@@ -2,11 +2,19 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from pydantic import AliasChoices, Field, HttpUrl, SecretStr, field_validator
+from pydantic import (
+    AliasChoices,
+    Field,
+    HttpUrl,
+    SecretStr,
+    ValidationError,
+    field_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 PROJECT_DIR = BACKEND_DIR.parent
+DEFAULT_OBSIDIAN_NOTES_FOLDER = "Reuniões"
 
 
 class Settings(BaseSettings):
@@ -27,6 +35,7 @@ class Settings(BaseSettings):
         ".m4a",
         ".mp4",
         ".webm",
+        ".ogg",
     }
     ALLOWED_AUDIO_MIME_TYPES: set[str] = {
         "audio/mpeg",
@@ -38,6 +47,7 @@ class Settings(BaseSettings):
         "audio/x-m4a",
         "audio/m4a",
         "audio/webm",
+        "audio/ogg",
         "video/mp4",
         "video/webm",
     }
@@ -76,8 +86,17 @@ class Settings(BaseSettings):
     discord_enabled: bool = Field(default=False, validation_alias="DISCORD_ENABLED")
     notion_enabled: bool = Field(default=False, validation_alias="NOTION_ENABLED")
 
+    obsidian_enabled: bool = Field(default=False, validation_alias="OBSIDIAN_ENABLED")
+    # Caminho do vault visto pelo backend (dentro do container, via volume montado).
+    obsidian_vault_path: Path | None = Field(
+        default=None, validation_alias="OBSIDIAN_VAULT_PATH"
+    )
+    obsidian_notes_folder: str = Field(
+        default=DEFAULT_OBSIDIAN_NOTES_FOLDER,
+        validation_alias="OBSIDIAN_NOTES_FOLDER",
+    )
+
     discord_webhook_url: HttpUrl | None = None
-    huggingface_token: SecretStr | None = None
 
     WHISPER_MODEL_SIZE: str = Field(
         default="small", validation_alias="WHISPER_MODEL_SIZE"
@@ -111,26 +130,24 @@ class Settings(BaseSettings):
         validation_alias="CELERY_TASK_ALWAYS_EAGER",
     )
 
-    # Configurações de Autenticação Google e Sessão
+    # Configurações de Autenticação Google (cookie de sessão)
     google_client_id: str | None = Field(
         default=None,
         validation_alias="GOOGLE_CLIENT_ID",
     )
-    jwt_secret_key: str = Field(
-        default="dev-secret-key-change-in-production",
-        validation_alias="JWT_SECRET_KEY",
+    # Configurações do JWT de acesso (sem valor padrão para o segredo: a aplicação
+    # não sobe sem JWT_SECRET_KEY definida).
+    JWT_SECRET_KEY: SecretStr = Field(validation_alias="JWT_SECRET_KEY")
+    JWT_ALGORITHM: str = Field(default="HS256", validation_alias="JWT_ALGORITHM")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
+        default=60,
+        gt=0,
+        validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES",
     )
-    jwt_algorithm: str = Field(
-        default="HS256",
-        validation_alias="JWT_ALGORITHM",
-    )
+
     session_cookie_name: str = Field(
         default="session_token",
         validation_alias="SESSION_COOKIE_NAME",
-    )
-    session_max_age_seconds: int = Field(
-        default=604800,  # 7 dias
-        validation_alias="SESSION_MAX_AGE_SECONDS",
     )
     session_cookie_secure: bool = Field(
         default=False,
@@ -151,6 +168,13 @@ class Settings(BaseSettings):
             return path
         return BACKEND_DIR / "storage" / "meetings"
 
+    @field_validator("JWT_SECRET_KEY", mode="after")
+    @classmethod
+    def jwt_secret_must_not_be_blank(cls, v: SecretStr) -> SecretStr:
+        if not v.get_secret_value().strip():
+            raise ValueError("JWT_SECRET_KEY não pode ser vazia")
+        return v
+
     @field_validator(
         "discord_webhook_url",
         "groq_api_key",
@@ -159,6 +183,7 @@ class Settings(BaseSettings):
         "notion_token",
         "notion_database_id",
         "llm_api_key",
+        "obsidian_vault_path",
         "google_client_id",
         mode="before",
     )
@@ -166,6 +191,28 @@ class Settings(BaseSettings):
     def empty_str_to_none(cls, v: Any) -> Any:
         if isinstance(v, str) and not v.strip():
             return None
+        return v
+
+    @field_validator("obsidian_notes_folder", mode="before")
+    @classmethod
+    def validate_obsidian_notes_folder(cls, v: Any) -> Any:
+        """Usa o padrão se vazio e rejeita pastas que escapem do vault."""
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return DEFAULT_OBSIDIAN_NOTES_FOLDER
+        if not isinstance(v, str):
+            return v
+        folder = v.strip()
+        parts = folder.replace("\\", "/").split("/")
+        if folder.startswith(("/", "\\")) or ".." in parts or ":" in parts[0]:
+            raise ValueError(
+                "OBSIDIAN_NOTES_FOLDER deve ser um caminho relativo dentro do vault."
+            )
+        return folder
+    @field_validator("discord_enabled", "notion_enabled", mode="before")
+    @classmethod
+    def empty_str_bool_to_false(cls, v: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            return False
         return v
 
     model_config = SettingsConfigDict(
@@ -195,7 +242,16 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    try:
+        return Settings()
+    except ValidationError as exc:
+        if any("JWT_SECRET_KEY" in map(str, err["loc"]) for err in exc.errors()):
+            raise RuntimeError(
+                "Configuração inválida: JWT_SECRET_KEY ausente ou vazia. "
+                "Defina JWT_SECRET_KEY no .env ou no ambiente. Para gerar um "
+                'valor: python -c "import secrets; print(secrets.token_urlsafe(64))"'
+            ) from exc
+        raise
 
 
 settings = get_settings()

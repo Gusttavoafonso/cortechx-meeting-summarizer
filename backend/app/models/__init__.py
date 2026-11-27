@@ -2,6 +2,7 @@ from app.models.audio_file import AudioFile
 from app.models.integration_configuration import IntegrationConfiguration
 from app.models.meeting import Meeting
 from app.models.meeting_status import MeetingStatus
+from app.models.partial_session import PartialSession
 from app.models.summary import Summary
 from app.models.task import Task
 from app.models.transcript import Transcript
@@ -12,6 +13,7 @@ __all__ = [
     "AudioFile",
     "Meeting",
     "MeetingStatus",
+    "PartialSession",
     "Transcript",
     "TranscriptSegment",
     "Summary",

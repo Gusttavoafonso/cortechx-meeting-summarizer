@@ -21,7 +21,7 @@ Para rodar os testes execute no Powershell:
 python -m pytest
 ```
 
-A API ficará disponível em `http://127.0.0.1:8000`. Verifique o status em
+A API e a interface web do gravador ficarão disponíveis em `http://127.0.0.1:8000`. Verifique o status da API em
 `http://127.0.0.1:8000/health`.
 
 ## Backend (Linux)
@@ -41,13 +41,53 @@ Para rodar os testes execute no terminal:
 python -m pytest
 ```
 
-A API ficará disponível em `http://127.0.0.1:8000`. Verifique o status em
+A API e a interface web do gravador ficarão disponíveis em `http://127.0.0.1:8000`. Verifique o status da API em
 `http://127.0.0.1:8000/health`.
+
+## Interface Web e Gravação Direta (Sem Anexar Arquivos)
+
+Ao acessar `http://127.0.0.1:8000`, o usuário tem acesso à interface web integrada do Zumo:
+* **Botão Imediato de Gravação:** Inicia a captura em 1 clique sem necessidade de gravar em software externo e anexar arquivos.
+* **Captura Combinada (Dual Source):** Grava o som dos demais participantes (áudio da aba do Google Meet, Discord, etc.) somado ao microfone do próprio usuário via Web Audio API.
+* **VU Meters em Tempo Real:** Medidores de intensidade de som para confirmar visualmente a entrada do microfone e do áudio do sistema.
+* **Processamento Automatizado:** Ao finalizar a gravação, o arquivo é despachado automaticamente para `POST /meetings/{id}/audio` e o pipeline de transcrição/sumarização é disparado, exibindo o resultado diretamente na tela.
+
+## Aplicativo Desktop Standalone (Tauri 2.0 em `desktop/`)
+
+Para disponibilizar o executável de aplicativo (.exe / .msi / .dmg) com detecção em segundo plano:
+* **Estrutura:** Configurado no diretório `desktop/` com casca nativa em Rust e empacotamento multi-plataforma.
+* **System Tray:** Roda minimizado na bandeja do sistema, consumindo cerca de ~30 MB de RAM.
+* **Detecção Automática:** Monitora as janelas e processos do SO e sugere a gravação automaticamente ao identificar reuniões ativas no **Google Meet**, **Discord**, **Zoom** ou **Microsoft Teams**.
+
+### Como baixar e instalar
+
+1. Acesse a página de [Releases](https://github.com/Gusttavoafonso/cortechx-meeting-summarizer/releases/latest).
+2. Baixe o instalador do seu sistema:
+   - Windows: `Zumo_<versão>_x64-setup.exe`
+   - macOS: `Zumo_<versão>_universal.dmg` (compatível com Mac Intel e Apple Silicon)
+3. Rode o backend localmente antes de abrir o app (veja [Backend (Windows)](#backend-windows) ou [Backend (Linux)](#backend-linux) acima) — ainda não há um backend hospedado, então o Zumo sempre se conecta a `localhost`.
+4. Windows vai mostrar o aviso **"Windows protegeu seu PC"** (instalador não assinado) — clique em "Mais informações" → "Executar assim mesmo".
+5. macOS vai bloquear a primeira abertura (Gatekeeper) — clique com o botão direito no app → "Abrir" e confirme.
+
+Mais detalhes (processo de release, como testar o CI) estão em [`desktop/README.md`](desktop/README.md).
+
+## Autenticação
+
+Defina `JWT_SECRET_KEY` no `.env` (obrigatória; a aplicação não inicia sem ela — veja `.env.example`). `JWT_ALGORITHM` (padrão `HS256`) e `ACCESS_TOKEN_EXPIRE_MINUTES` (padrão `60`) são opcionais. Depois de definir as variáveis, rode `alembic upgrade head` dentro de `backend/`.
+
+| Rota | Descrição |
+| --- | --- |
+| `POST /auth/register` | JSON `{name, email, password}` (senha ≥ 8 caracteres). Retorna `201` sem o hash; e-mail duplicado retorna `409`. |
+| `POST /auth/login` | Formulário OAuth2 (`username` = e-mail, `password`). Retorna `{access_token, token_type}`; falhas retornam `401` genérico. |
+| `GET /users/me` | Dados do usuário autenticado (cookie de sessão ou `Authorization: Bearer <token>`). |
+
+As rotas protegidas aceitam o cookie de sessão ou `Authorization: Bearer <token>`; quando ambos são enviados, Bearer tem precedência. Tokens inválidos, expirados ou de usuário inativo retornam `401` com `WWW-Authenticate: Bearer`. Senhas são armazenadas com Argon2.
 
 ## Autenticação e posse das reuniões
 
-**Todas as rotas de `/meetings` exigem uma sessão válida.** Apenas `/health` e a
-documentação (`/docs`, `/openapi.json`) são públicas.
+**Todas as rotas de `/meetings` exigem uma sessão válida.** As rotas de
+autenticação (`/auth/register`, `/auth/login`, `/auth/google`), `/health` e a
+documentação (`/docs`, `/openapi.json`) continuam públicas.
 
 Obtenha a sessão em `POST /auth/register`, `POST /auth/login` ou
 `POST /auth/google`: a resposta traz um cookie `HttpOnly`. Clientes de API e o
@@ -261,7 +301,7 @@ backend/
 
 ## Disparo das integrações externas
 
-O disparo das integrações ocorre de forma assíncrona após a conclusão do pipeline de processamento da reunião (`MeetingProcessor` marca o status como `completed`). Em segundo plano, o worker Celery (`deliver_integrations_task` via `IntegrationDeliveryService`) tenta entregar o resultado persistido aos provedores habilitados (Discord e Notion).
+O disparo das integrações ocorre de forma assíncrona após a conclusão do pipeline de processamento da reunião (`MeetingProcessor` marca o status como `completed`). Em segundo plano, o worker Celery (`deliver_integrations_task` via `IntegrationDeliveryService`) tenta entregar o resultado persistido aos provedores habilitados (Discord, Notion e Obsidian).
 
 Se o processamento ou persistência da reunião falhar, o pipeline encerra em `failed` e nenhuma integração é acionada. Falhas em entregas externas são registradas individualmente na tabela `integration_deliveries` e nunca revertem o resumo nem alteram o status principal da reunião.
 
@@ -273,6 +313,25 @@ DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 NOTION_ENABLED=true
 NOTION_API_KEY=secret_...
 NOTION_DATABASE_ID=...
+OBSIDIAN_ENABLED=true
+OBSIDIAN_VAULT_PATH=/vault
+OBSIDIAN_NOTES_FOLDER=Reuniões
+OBSIDIAN_VAULT_HOST_PATH=/caminho/para/seu/vault
 ```
 
 Uma integração só é executada quando estiver habilitada **e** suas credenciais/configurações estiverem presentes. Cada provider opera de forma isolada (`success` ou `failed`). Falhas transitórias sofrem retry automático com backoff exponencial no Celery. Caso necessário, é possível disparar o reenvio manual via rota `POST /meetings/{meeting_id}/integrations/retry` sem reexecutar o pipeline de transcrição e IA.
+
+O Obsidian grava arquivos Markdown diretamente no vault. Para usá-lo com
+Docker Compose, defina `OBSIDIAN_VAULT_HOST_PATH` como uma pasta de vault que já
+exista na máquina e inicie os serviços com o arquivo adicional:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.obsidian.yml up --build
+```
+
+O volume fica disponível em `/vault` tanto no backend quanto no worker. As notas
+são gravadas em `OBSIDIAN_NOTES_FOLDER`, com padrão `Reuniões`, usando nomes no
+formato `AAAA-MM-DD - Título (meeting_id).md` (ou `sem-data` quando a reunião
+não tem data). O título do arquivo é sanitizado e limitado; reenvios da mesma
+reunião atualizam a nota existente. O vault precisa estar acessível ao processo
+que executa o backend/worker.

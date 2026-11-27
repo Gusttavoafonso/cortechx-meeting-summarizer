@@ -10,7 +10,7 @@ sem dono e, por isso, inacessíveis pela API. Nenhuma linha é reescrita, então
 migration não falha em bancos com dados existentes.
 
 Revision ID: a1b2c3d4e5f6
-Revises: f6a7b8c9d0e1
+Revises: d51a01
 Create Date: 2026-11-06
 """
 
@@ -21,7 +21,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "a1b2c3d4e5f6"
-down_revision: Union[str, Sequence[str], None] = "f6a7b8c9d0e1"
+down_revision: Union[str, Sequence[str], None] = "d51a01"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -r
 COPY pyproject.toml .
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --upgrade pip && \
-    pip install --extra-index-url https://download.pytorch.org/whl/cpu .[dev]
+    pip install .[dev]
 
 COPY . /app/
 

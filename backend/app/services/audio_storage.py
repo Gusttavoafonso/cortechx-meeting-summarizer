@@ -86,7 +86,7 @@ class AudioStorageService(BaseAudioStorage):
                 ),
             )
 
-        content_type = (file.content_type or "").lower().strip()
+        content_type = (file.content_type or "").split(";", 1)[0].lower().strip()
         if not content_type:
             inferred_types = {
                 ".mp3": "audio/mpeg",
@@ -94,6 +94,7 @@ class AudioStorageService(BaseAudioStorage):
                 ".m4a": "audio/mp4",
                 ".mp4": "video/mp4",
                 ".webm": "audio/webm",
+                ".ogg": "audio/ogg",
             }
             content_type = inferred_types.get(ext, "")
 
@@ -140,6 +141,50 @@ class AudioStorageService(BaseAudioStorage):
             path.unlink()
             return True
         return False
+
+    def extract_audio_duration(self, file_path: Path) -> float | None:
+        """Extrai a duração real do áudio em segundos via PyAV (incluindo WebM sem header)."""
+        try:
+            import av
+
+            with av.open(str(file_path)) as container:
+                if container.duration and container.duration > 0:
+                    return round(float(container.duration) / av.time_base, 3)
+
+                audio_stream = next(
+                    (s for s in container.streams if s.type == "audio"), None
+                )
+                if audio_stream is not None:
+                    if audio_stream.duration and audio_stream.time_base:
+                        dur = float(audio_stream.duration * audio_stream.time_base)
+                        if dur > 0:
+                            return round(dur, 3)
+
+                    total_samples = 0
+                    sample_rate = audio_stream.sample_rate or 0
+                    last_end = 0.0
+                    for frame in container.decode(audio_stream):
+                        if frame.pts is not None and audio_stream.time_base:
+                            frame_dur = (
+                                frame.samples / frame.sample_rate
+                                if frame.samples and frame.sample_rate
+                                else 0.0
+                            )
+                            last_end = max(
+                                last_end,
+                                float(frame.pts * audio_stream.time_base) + frame_dur,
+                            )
+                        if frame.samples:
+                            total_samples += frame.samples
+                            if frame.sample_rate:
+                                sample_rate = frame.sample_rate
+                    if last_end > 0:
+                        return round(last_end, 3)
+                    if total_samples > 0 and sample_rate > 0:
+                        return round(total_samples / sample_rate, 3)
+        except Exception:
+            return None
+        return None
 
     def save_audio_file(
         self, meeting_id: int, file: UploadFile

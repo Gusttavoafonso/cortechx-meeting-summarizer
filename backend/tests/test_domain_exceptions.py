@@ -10,12 +10,6 @@ from app.core.exceptions import (
     AudioNotFoundError,
     ChunkingError,
     DatabaseError,
-    DiarizationAssociationError,
-    DiarizationAudioNotFoundError,
-    DiarizationConfigurationError,
-    DiarizationEmptyResponseError,
-    DiarizationError,
-    DiarizationProviderError,
     EntityConflictError,
     EntityNotFoundError,
     InvalidPersistenceDataError,
@@ -48,7 +42,6 @@ from app.core.exceptions import (
     TranscriptionTimeoutError,
     TranscriptNotFoundError,
 )
-from app.services.diarization import PyannoteDiarizationProvider
 from app.services.llm.providers.gemini_provider import GeminiProvider
 from app.services.summarization.service import SummarizationService
 from app.services.transcription.groq_whisper_service import GroqWhisperService
@@ -59,9 +52,8 @@ from google.genai import errors as google_errors
 # 1. Testes de Hierarquia de Herança
 # =====================================================================
 def test_all_domain_exceptions_inherit_from_application_error():
-    """Valida se todas as 5 categorias raízes herdam de ApplicationError."""
+    """Valida se todas as categorias raízes herdam de ApplicationError."""
     assert issubclass(TranscriptionError, ApplicationError)
-    assert issubclass(DiarizationError, ApplicationError)
     assert issubclass(LLMError, ApplicationError)
     assert issubclass(PersistenceError, ApplicationError)
     assert issubclass(ProcessingError, ApplicationError)
@@ -83,22 +75,6 @@ def test_transcription_hierarchy():
 
     # Compatibilidade com built-in
     assert issubclass(TranscriptionAudioNotFoundError, FileNotFoundError)
-
-
-def test_diarization_hierarchy():
-    """Valida hierarquia do ramo Diarization."""
-    subclasses = [
-        DiarizationConfigurationError,
-        DiarizationAudioNotFoundError,
-        DiarizationEmptyResponseError,
-        DiarizationAssociationError,
-        DiarizationProviderError,
-    ]
-    for cls in subclasses:
-        assert issubclass(cls, DiarizationError)
-        assert issubclass(cls, ApplicationError)
-
-    assert issubclass(DiarizationAudioNotFoundError, FileNotFoundError)
 
 
 def test_llm_hierarchy():
@@ -172,8 +148,6 @@ def test_permanent_non_retryable_exceptions():
     assert TranscriptionAudioNotFoundError().is_retryable is False
     assert TranscriptionAudioCorruptedError().is_retryable is False
     assert TranscriptionEmptyResponseError().is_retryable is False
-    assert DiarizationConfigurationError().is_retryable is False
-    assert DiarizationAssociationError().is_retryable is False
     assert LLMConfigurationError().is_retryable is False
     assert LLMAuthenticationError().is_retryable is False
     assert LLMEmptyResponseError().is_retryable is False
@@ -266,15 +240,6 @@ def test_groq_whisper_encapsulates_corrupted_audio():
         GroqWhisperService._handle_groq_exception(exc)
 
     assert exc_info.value.is_retryable is False
-
-
-def test_pyannote_provider_raises_diarization_configuration_error(monkeypatch):
-    """Garante que token HuggingFace ausente gera DiarizationConfigurationError."""
-    monkeypatch.setattr("app.core.config.settings.huggingface_token", None)
-    provider = PyannoteDiarizationProvider()
-
-    with pytest.raises(DiarizationConfigurationError):
-        provider._get_configured_token()
 
 
 def test_summarization_service_raises_domain_empty_input():

@@ -130,48 +130,7 @@ class TranscriptionProviderError(TranscriptionError, RecoverableError):
 
 
 # =====================================================================
-# 2. Diarization (Pyannote)
-# =====================================================================
-class DiarizationError(ApplicationError):
-    """Erro base para operações do serviço de diarização de locutores."""
-
-    is_retryable: bool = False
-
-
-class DiarizationConfigurationError(DiarizationError, DefinitiveError):
-    """Configuração necessária para diarização ausente ou inválida (ex: HF token)."""
-
-    is_retryable: bool = False
-
-
-class DiarizationAudioNotFoundError(
-    DiarizationError, DefinitiveError, FileNotFoundError
-):
-    """Arquivo de áudio não encontrado para execução da diarização."""
-
-    is_retryable: bool = False
-
-
-class DiarizationEmptyResponseError(DiarizationError, DefinitiveError):
-    """O provedor de diarização não retornou nenhum segmento de locução."""
-
-    is_retryable: bool = False
-
-
-class DiarizationAssociationError(DiarizationError, DefinitiveError):
-    """Falha ao associar locutores identificados aos segmentos de transcrição."""
-
-    is_retryable: bool = False
-
-
-class DiarizationProviderError(DiarizationError, DefinitiveError):
-    """Falha durante a execução interna do pipeline ou modelo de diarização."""
-
-    is_retryable: bool = False
-
-
-# =====================================================================
-# 3. LLM (Large Language Models)
+# 2. LLM (Large Language Models)
 # =====================================================================
 class LLMError(ApplicationError):
     """Erro base para qualquer falha do serviço de LLM."""

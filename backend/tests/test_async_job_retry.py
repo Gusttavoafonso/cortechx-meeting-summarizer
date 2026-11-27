@@ -255,9 +255,6 @@ def test_meeting_processor_retries_transient_operation_and_completes():
     stt_service = MagicMock()
     stt_service.transcribe = mock_transcribe
 
-    diarization_service = MagicMock()
-    diarization_service.diarize.return_value = []
-
     chunking_service = MagicMock()
     chunking_service.split.return_value = []
 
@@ -267,7 +264,6 @@ def test_meeting_processor_retries_transient_operation_and_completes():
         transcript_repository=transcript_repo,
         audio_storage_service=audio_storage,
         speech_to_text_service=stt_service,
-        diarization_service=diarization_service,
         chunking_service=chunking_service,
         retry_policy=policy,
     )
@@ -305,7 +301,6 @@ def test_meeting_processor_marks_failed_on_definitive_error():
         transcript_repository=transcript_repo,
         audio_storage_service=audio_storage,
         speech_to_text_service=stt_service,
-        diarization_service=MagicMock(),
         chunking_service=MagicMock(),
         retry_policy=RetryPolicy(max_attempts=3, initial_delay=0.01),
     )

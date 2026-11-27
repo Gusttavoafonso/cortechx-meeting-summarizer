@@ -15,3 +15,11 @@ backend/.pytest-tmp/
 backend/.pytest-tmp-local/
 storage/
 .coverage
+
+# Desktop (Tauri) build artifacts
+desktop/node_modules/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+
+# Superpowers process docs (specs/plans) - internal, not published in repo
+docs/superpowers/

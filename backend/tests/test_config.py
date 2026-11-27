@@ -1,6 +1,8 @@
+from pathlib import Path
+
 import pytest
-from app.core.config import Settings
-from pydantic import SecretStr
+from app.core.config import Settings, get_settings
+from pydantic import SecretStr, ValidationError
 
 
 def test_settings_load_database_defaults() -> None:
@@ -61,3 +63,85 @@ def test_validate_llm_configuration_missing(monkeypatch) -> None:
     assert "LLM_PROVIDER" in message
     assert "LLM_MODEL" in message
     assert "LLM_API_KEY" in message
+
+
+def test_settings_obsidian_defaults(monkeypatch) -> None:
+    for name in ("OBSIDIAN_ENABLED", "OBSIDIAN_VAULT_PATH", "OBSIDIAN_NOTES_FOLDER"):
+        monkeypatch.delenv(name, raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.obsidian_enabled is False
+    assert settings.obsidian_vault_path is None
+    assert settings.obsidian_notes_folder == "Reuniões"
+
+
+def test_settings_reads_obsidian_configuration(monkeypatch) -> None:
+    monkeypatch.setenv("OBSIDIAN_ENABLED", "true")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", "/vault")
+    monkeypatch.setenv("OBSIDIAN_NOTES_FOLDER", "Atas/2026")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.obsidian_enabled is True
+    assert settings.obsidian_vault_path == Path("/vault")
+    assert settings.obsidian_notes_folder == "Atas/2026"
+
+
+def test_settings_obsidian_empty_values_use_defaults(monkeypatch) -> None:
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", "")
+    monkeypatch.setenv("OBSIDIAN_NOTES_FOLDER", "  ")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.obsidian_vault_path is None
+    assert settings.obsidian_notes_folder == "Reuniões"
+
+
+@pytest.mark.parametrize(
+    "folder", ["../fora", "a/../../b", "/etc", "\\\\servidor", "C:/x", "a\\..\\b"]
+)
+def test_settings_rejects_obsidian_folder_outside_vault(monkeypatch, folder) -> None:
+    monkeypatch.setenv("OBSIDIAN_NOTES_FOLDER", folder)
+
+    with pytest.raises(ValueError):
+        Settings(_env_file=None)
+
+
+def test_jwt_settings_defaults(monkeypatch) -> None:
+    monkeypatch.setenv("JWT_SECRET_KEY", "segredo-de-teste")
+    monkeypatch.delenv("JWT_ALGORITHM", raising=False)
+    monkeypatch.delenv("ACCESS_TOKEN_EXPIRE_MINUTES", raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert isinstance(settings.JWT_SECRET_KEY, SecretStr)
+    assert settings.JWT_SECRET_KEY.get_secret_value() == "segredo-de-teste"
+    assert settings.JWT_ALGORITHM == "HS256"
+    assert settings.ACCESS_TOKEN_EXPIRE_MINUTES == 60
+    assert "segredo-de-teste" not in repr(settings)
+
+
+def test_missing_jwt_secret_fails_clearly(monkeypatch) -> None:
+    monkeypatch.delenv("JWT_SECRET_KEY", raising=False)
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+    get_settings.cache_clear()
+    try:
+        monkeypatch.setattr(
+            "app.core.config.Settings",
+            lambda: Settings(_env_file=None),
+        )
+        with pytest.raises(RuntimeError, match="JWT_SECRET_KEY"):
+            get_settings()
+    finally:
+        get_settings.cache_clear()
+
+
+def test_blank_jwt_secret_rejected(monkeypatch) -> None:
+    monkeypatch.setenv("JWT_SECRET_KEY", "   ")
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)

@@ -7,9 +7,18 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_session
 from app.core.exceptions import InvalidSessionTokenError
+from app.core.security import decode_access_token
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
-from app.services.auth_service import verify_session_token
+
+
+def _unauthorized(detail: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=detail,
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
 
 # Declarados como schemes para que apareçam no OpenAPI: sem isso o Swagger não
 # mostra que as rotas exigem sessão nem oferece o botão "Authorize".
@@ -36,27 +45,18 @@ def get_current_user(
     db: Session = Depends(get_session),
 ) -> User:
     """Extrai e valida a sessão via Cookie HTTP-Only ou cabeçalho Authorization."""
-    token = cookie_token or (bearer.credentials if bearer else None)
+    token = (bearer.credentials if bearer else None) or cookie_token
 
     if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Não autenticado. Sessão ausente.",
-        )
+        raise _unauthorized("Não autenticado. Sessão ausente.")
 
     try:
-        user_id = verify_session_token(token)
+        user_id = decode_access_token(token)
     except InvalidSessionTokenError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(exc),
-        ) from exc
+        raise _unauthorized(str(exc)) from exc
 
     user = UserRepository(db).get_by_id(user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Usuário não encontrado.",
-        )
+    if user is None or not user.is_active:
+        raise _unauthorized("Usuário não encontrado ou inativo.")
 
     return user

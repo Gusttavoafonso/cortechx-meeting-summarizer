@@ -12,7 +12,6 @@ import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from app.api.v1.meetings import (
-    get_diarization_service,
     get_meeting_job_dispatcher,
     get_summary_service,
     get_transcription_service,
@@ -38,7 +37,6 @@ MEETING_ROUTES = [
     ("upload-audio", "post", "/meetings/{id}/audio", AUDIO_UPLOAD),
     ("metadados-audio", "get", "/meetings/{id}/audio", {}),
     ("transcrever", "post", "/meetings/{id}/transcribe", {}),
-    ("diarizar", "post", "/meetings/{id}/diarize", {}),
     ("transcript", "get", "/meetings/{id}/transcript", {}),
     ("processar", "post", "/meetings/{id}/process", {}),
     ("criar-resumo", "post", "/meetings/{id}/summary", {}),
@@ -80,7 +78,7 @@ class _UnusableService:
 
 @pytest.fixture
 def stub_services(_api_database: None) -> None:
-    """Neutraliza STT, diarização, LLM e fila.
+    """Neutraliza STT, LLM e fila.
 
     As dependências são resolvidas antes do corpo da rota, então precisam
     existir; qualquer uso efetivo delas levanta AssertionError. Os overrides
@@ -97,7 +95,6 @@ def stub_services(_api_database: None) -> None:
         return _enqueue
 
     app.dependency_overrides[get_transcription_service] = _unusable
-    app.dependency_overrides[get_diarization_service] = _unusable
     app.dependency_overrides[get_summary_service] = _unusable
     app.dependency_overrides[get_meeting_job_dispatcher] = _dispatcher
 

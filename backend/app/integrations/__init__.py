@@ -16,6 +16,7 @@ from app.integrations.payload import (
 from app.integrations.providers import (
     DiscordProvider,
     NotionProvider,
+    ObsidianProvider,
     ProviderTeste,
 )
 from app.integrations.registry import (
@@ -41,6 +42,7 @@ __all__ = [
     "MeetingIntegrationPayload",
     "MeetingResultUnavailableError",
     "NotionProvider",
+    "ObsidianProvider",
     "ProviderExecutionError",
     "ProviderConfigurationError",
     "ProviderConfigurationResolver",

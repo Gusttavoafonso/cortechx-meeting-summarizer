@@ -12,7 +12,6 @@ def processor_dependencies() -> dict[str, MagicMock]:
         "transcript_repository": MagicMock(),
         "audio_storage_service": MagicMock(),
         "speech_to_text_service": MagicMock(),
-        "diarization_service": MagicMock(),
         "chunking_service": MagicMock(),
     }
 
@@ -43,19 +42,16 @@ def test_process_meeting_completes_pipeline(
     transcript_repository = processor_dependencies["transcript_repository"]
     audio_storage_service = processor_dependencies["audio_storage_service"]
     speech_to_text_service = processor_dependencies["speech_to_text_service"]
-    diarization_service = processor_dependencies["diarization_service"]
     chunking_service = processor_dependencies["chunking_service"]
 
     stt_result = MagicMock(text="Texto transcrito", segments=[MagicMock()])
     transcript = MagicMock()
-    diarization_segments = [MagicMock()]
     audio_path = "/tmp/meeting.wav"
 
     meeting_repository.get_for_pipeline.return_value = meeting
     audio_storage_service.get_file_path.return_value = audio_path
     speech_to_text_service.transcribe.return_value = stt_result
     transcript_repository.save_transcript.return_value = transcript
-    diarization_service.diarize.return_value = diarization_segments
 
     processor.process_meeting(meeting.id)
 
@@ -64,11 +60,6 @@ def test_process_meeting_completes_pipeline(
         meeting_id=meeting.id,
         content=stt_result.text,
         segments=stt_result.segments,
-    )
-    diarization_service.diarize.assert_called_once_with(audio_path)
-    transcript_repository.apply_diarization.assert_called_once_with(
-        transcript,
-        diarization_segments,
     )
     chunking_service.split.assert_called_once_with(transcript)
     assert meeting_repository.update_status.call_args_list == [
@@ -95,13 +86,11 @@ def test_process_meeting_raises_when_audio_is_missing() -> None:
     transcript_repository = MagicMock()
     audio_storage_service = MagicMock()
     speech_to_text_service = MagicMock()
-    diarization_service = MagicMock()
     processor = MeetingProcessor(
         meeting_repository=meeting_repository,
         transcript_repository=transcript_repository,
         audio_storage_service=audio_storage_service,
         speech_to_text_service=speech_to_text_service,
-        diarization_service=diarization_service,
         chunking_service=MagicMock(),
     )
     meeting = MagicMock()
@@ -121,7 +110,6 @@ def test_process_meeting_marks_failed_when_audio_missing_and_processing() -> Non
         transcript_repository=MagicMock(),
         audio_storage_service=MagicMock(),
         speech_to_text_service=MagicMock(),
-        diarization_service=MagicMock(),
         chunking_service=MagicMock(),
     )
     meeting = MagicMock()
@@ -174,7 +162,6 @@ def test_process_meeting_marks_as_failed_when_stt_fails(
         call(meeting, status=MeetingStatus.PROCESSING),
         call(meeting, status=MeetingStatus.FAILED),
     ]
-    processor_dependencies["diarization_service"].diarize.assert_not_called()
 
 
 def test_process_meeting_marks_as_failed_when_transcript_persistence_fails(
@@ -201,68 +188,6 @@ def test_process_meeting_marks_as_failed_when_transcript_persistence_fails(
         call(meeting, status=MeetingStatus.PROCESSING),
         call(meeting, status=MeetingStatus.FAILED),
     ]
-    processor_dependencies["diarization_service"].diarize.assert_not_called()
-
-
-def test_process_meeting_marks_as_failed_when_diarization_fails(
-    processor: MeetingProcessor,
-    processor_dependencies: dict[str, MagicMock],
-    meeting: MagicMock,
-) -> None:
-    meeting_repository = processor_dependencies["meeting_repository"]
-    transcript_repository = processor_dependencies["transcript_repository"]
-    speech_to_text_service = processor_dependencies["speech_to_text_service"]
-    audio_storage_service = processor_dependencies["audio_storage_service"]
-    diarization_service = processor_dependencies["diarization_service"]
-    meeting_repository.get_for_pipeline.return_value = meeting
-    audio_storage_service.get_file_path.return_value = "/tmp/meeting.wav"
-    speech_to_text_service.transcribe.return_value = MagicMock(
-        text="Texto transcrito",
-        segments=[MagicMock()],
-    )
-    transcript_repository.save_transcript.return_value = MagicMock()
-    diarization_service.diarize.side_effect = RuntimeError("Diarization failed")
-
-    with pytest.raises(RuntimeError, match="Diarization failed"):
-        processor.process_meeting(meeting.id)
-
-    assert meeting_repository.update_status.call_args_list == [
-        call(meeting, status=MeetingStatus.PROCESSING),
-        call(meeting, status=MeetingStatus.FAILED),
-    ]
-    transcript_repository.apply_diarization.assert_not_called()
-
-
-def test_process_meeting_marks_as_failed_when_diarization_persistence_fails(
-    processor: MeetingProcessor,
-    processor_dependencies: dict[str, MagicMock],
-    meeting: MagicMock,
-) -> None:
-    meeting_repository = processor_dependencies["meeting_repository"]
-    transcript_repository = processor_dependencies["transcript_repository"]
-    speech_to_text_service = processor_dependencies["speech_to_text_service"]
-    audio_storage_service = processor_dependencies["audio_storage_service"]
-    diarization_service = processor_dependencies["diarization_service"]
-    meeting_repository.get_for_pipeline.return_value = meeting
-    audio_storage_service.get_file_path.return_value = "/tmp/meeting.wav"
-    speech_to_text_service.transcribe.return_value = MagicMock(
-        text="Texto transcrito",
-        segments=[MagicMock()],
-    )
-    transcript = MagicMock()
-    transcript_repository.save_transcript.return_value = transcript
-    diarization_service.diarize.return_value = [MagicMock()]
-    transcript_repository.apply_diarization.side_effect = RuntimeError(
-        "Diarization persistence failed"
-    )
-
-    with pytest.raises(RuntimeError, match="Diarization persistence failed"):
-        processor.process_meeting(meeting.id)
-
-    assert meeting_repository.update_status.call_args_list == [
-        call(meeting, status=MeetingStatus.PROCESSING),
-        call(meeting, status=MeetingStatus.FAILED),
-    ]
 
 
 def test_process_meeting_marks_as_failed_when_chunking_fails(
@@ -274,7 +199,6 @@ def test_process_meeting_marks_as_failed_when_chunking_fails(
     transcript_repository = processor_dependencies["transcript_repository"]
     speech_to_text_service = processor_dependencies["speech_to_text_service"]
     audio_storage_service = processor_dependencies["audio_storage_service"]
-    diarization_service = processor_dependencies["diarization_service"]
     chunking_service = processor_dependencies["chunking_service"]
     meeting_repository.get_for_pipeline.return_value = meeting
     audio_storage_service.get_file_path.return_value = "/tmp/meeting.wav"
@@ -284,7 +208,6 @@ def test_process_meeting_marks_as_failed_when_chunking_fails(
     )
     transcript = MagicMock()
     transcript_repository.save_transcript.return_value = transcript
-    diarization_service.diarize.return_value = [MagicMock()]
     chunking_service.split.side_effect = RuntimeError("Chunking failed")
 
     with pytest.raises(RuntimeError, match="Chunking failed"):
