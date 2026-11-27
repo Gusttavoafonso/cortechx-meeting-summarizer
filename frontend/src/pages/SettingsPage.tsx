@@ -4,16 +4,19 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
   Bell,
-  BookOpen,
   CheckCircle2,
-  Cpu,
   KeyRound,
   Lock,
-  PlugZap,
   ShieldCheck,
   Trash2,
   User as UserIcon,
 } from 'lucide-react'
+import {
+  DiscordIcon,
+  GroqIcon,
+  NotionIcon,
+  ObsidianIcon,
+} from '../components/icons/IntegrationIcons'
 import {
   deleteIntegration,
   fetchIntegrationsSettings,
@@ -448,7 +451,7 @@ export const SettingsPage: React.FC = () => {
                 <div className="flex items-start justify-between gap-3 mb-4">
                   <div className="flex items-center gap-3">
                     <div className="w-11 h-11 rounded-xl bg-[#5865F2] text-white flex items-center justify-center shrink-0">
-                      <PlugZap className="w-5 h-5" />
+                      <DiscordIcon className="w-6 h-6" />
                     </div>
                     <div>
                       <h3 className="text-lg font-bold font-sans text-ink">Discord</h3>
@@ -535,8 +538,8 @@ export const SettingsPage: React.FC = () => {
               <div>
                 <div className="flex items-start justify-between gap-3 mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-xl bg-white border border-slate-200 text-ink flex items-center justify-center shrink-0 font-bold text-lg">
-                      N
+                    <div className="w-11 h-11 rounded-xl bg-white border border-slate-200 flex items-center justify-center shrink-0">
+                      <NotionIcon className="w-6 h-6" />
                     </div>
                     <div>
                       <h3 className="text-lg font-bold font-sans text-ink">Notion</h3>
@@ -629,7 +632,7 @@ export const SettingsPage: React.FC = () => {
                 <div className="flex items-start justify-between gap-3 mb-4">
                   <div className="flex items-center gap-3">
                     <div className="w-11 h-11 rounded-xl bg-[#7C3AED] text-white flex items-center justify-center shrink-0">
-                      <BookOpen className="w-5 h-5" />
+                      <ObsidianIcon className="w-6 h-6" />
                     </div>
                     <div>
                       <h3 className="text-lg font-bold font-sans text-ink">Obsidian</h3>
@@ -719,8 +722,8 @@ export const SettingsPage: React.FC = () => {
               <div>
                 <div className="flex items-start justify-between gap-3 mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-xl bg-ink text-white flex items-center justify-center shrink-0">
-                      <Cpu className="w-5 h-5" />
+                    <div className="w-11 h-11 rounded-xl bg-[#F55036] text-white flex items-center justify-center shrink-0">
+                      <GroqIcon className="w-6 h-6" />
                     </div>
                     <div>
                       <h3 className="text-lg font-bold font-sans text-ink">
