@@ -509,6 +509,7 @@ def download_audio_file(
         )
 
     file_path = storage_service.get_file_path(audio_record.file_path)
+    storage_service.ensure_seekable_webm(file_path)
     file_size = file_path.stat().st_size
     range_header = request.headers.get("range")
 

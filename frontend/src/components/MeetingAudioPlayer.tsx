@@ -37,15 +37,25 @@ export const MeetingAudioPlayer: React.FC<MeetingAudioPlayerProps> = ({
   useEffect(() => {
     if (!isPlaying) return
     let rafId = 0
+    let active = true
     const tick = () => {
+      if (!active) return
       const el = audioRef.current
-      if (el && !el.paused) {
+      if (el) {
         setCurrentTime(el.currentTime)
-        rafId = window.requestAnimationFrame(tick)
+        if (Number.isFinite(el.duration) && el.duration > 0) {
+          setMediaDuration(el.duration)
+        }
+        if (el.ended) {
+          setIsPlaying(false)
+          return
+        }
       }
+      rafId = window.requestAnimationFrame(tick)
     }
     rafId = window.requestAnimationFrame(tick)
     return () => {
+      active = false
       window.cancelAnimationFrame(rafId)
     }
   }, [isPlaying])
@@ -58,15 +68,15 @@ export const MeetingAudioPlayer: React.FC<MeetingAudioPlayerProps> = ({
         : 0
 
   const progressPercent =
-    mediaDuration > 0
-      ? Math.min(100, Math.max(0, (currentTime / mediaDuration) * 100))
+    effectiveDuration > 0
+      ? Math.min(100, Math.max(0, (currentTime / effectiveDuration) * 100))
       : 0
 
   const handleTogglePlay = async () => {
     const el = audioRef.current
     if (!el || hasError) return
     if (el.paused) {
-      if (el.ended || (mediaDuration > 0 && el.currentTime >= mediaDuration)) {
+      if (el.ended || (effectiveDuration > 0 && el.currentTime >= effectiveDuration)) {
         el.currentTime = 0
         setCurrentTime(0)
       }
@@ -90,13 +100,13 @@ export const MeetingAudioPlayer: React.FC<MeetingAudioPlayerProps> = ({
     setIsMuted(nextMuted)
   }
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSeek = (e: React.FormEvent<HTMLInputElement>) => {
     const el = audioRef.current
     if (!el || effectiveDuration <= 0) return
-    const target = Number(e.target.value)
+    const target = Number(e.currentTarget.value)
     if (!Number.isFinite(target)) return
     el.currentTime = target
-    setCurrentTime(el.currentTime)
+    setCurrentTime(target)
   }
 
   const syncDurationFromElement = (el: HTMLAudioElement) => {
@@ -104,6 +114,8 @@ export const MeetingAudioPlayer: React.FC<MeetingAudioPlayerProps> = ({
       setMediaDuration(el.duration)
     }
   }
+
+  const isCrossOrigin = /^https?:\/\//i.test(src)
 
   return (
     <div
@@ -115,12 +127,16 @@ export const MeetingAudioPlayer: React.FC<MeetingAudioPlayerProps> = ({
       <audio
         ref={audioRef}
         src={src}
-        preload="metadata"
-        crossOrigin="use-credentials"
+        preload="auto"
+        crossOrigin={isCrossOrigin ? 'use-credentials' : undefined}
         onLoadedMetadata={(e) => syncDurationFromElement(e.currentTarget)}
         onDurationChange={(e) => syncDurationFromElement(e.currentTarget)}
-        onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+        onTimeUpdate={(e) => {
+          setCurrentTime(e.currentTarget.currentTime)
+          syncDurationFromElement(e.currentTarget)
+        }}
         onPlay={() => setIsPlaying(true)}
+        onPlaying={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
         onEnded={(e) => {
           setIsPlaying(false)
@@ -157,13 +173,13 @@ export const MeetingAudioPlayer: React.FC<MeetingAudioPlayerProps> = ({
         <div className="relative flex-1 h-5 flex items-center group">
           <div className="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden">
             <div
-              className="h-full rounded-full bg-brand transition-[width] duration-75 ease-linear"
+              className="h-full rounded-full bg-brand"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
           {effectiveDuration > 0 && (
             <div
-              className="pointer-events-none absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-primary-btn shadow-xs opacity-0 group-hover:opacity-100 transition-opacity"
+              className="pointer-events-none absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-primary-btn shadow-xs transition-transform group-hover:scale-110"
               style={{ left: `${progressPercent}%` }}
             />
           )}
@@ -171,7 +187,7 @@ export const MeetingAudioPlayer: React.FC<MeetingAudioPlayerProps> = ({
             type="range"
             min={0}
             max={effectiveDuration || 0}
-            step={0.05}
+            step={0.01}
             value={Math.min(currentTime, effectiveDuration || 0)}
             onChange={handleSeek}
             disabled={hasError || effectiveDuration <= 0}

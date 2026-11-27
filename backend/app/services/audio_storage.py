@@ -1,3 +1,4 @@
+import os
 import re
 import uuid
 from abc import ABC, abstractmethod
@@ -143,7 +144,7 @@ class AudioStorageService(BaseAudioStorage):
         return False
 
     def extract_audio_duration(self, file_path: Path) -> float | None:
-        """Extrai a duração real do áudio em segundos via PyAV (incluindo WebM sem header)."""
+        """Extrai a duração real do áudio em segundos via PyAV."""
         try:
             import av
 
@@ -212,6 +213,41 @@ class AudioStorageService(BaseAudioStorage):
             return None
         return None
 
+    def ensure_seekable_webm(self, file_path: Path) -> bool:
+        """Garante metadados de duração/Cues em gravações WebM sem header."""
+        if file_path.suffix.lower() != ".webm" or not file_path.is_file():
+            return False
+        tmp_path = file_path.with_name(f".remux-{uuid.uuid4().hex[:8]}.webm")
+        try:
+            import av
+
+            with av.open(str(file_path), mode="r") as inp:
+                if inp.duration and inp.duration > 0:
+                    return False
+                audio_stream = next(
+                    (s for s in inp.streams if s.type == "audio"), None
+                )
+                if audio_stream is None:
+                    return False
+                with av.open(str(tmp_path), mode="w", format="webm") as out:
+                    out_stream = out.add_stream_from_template(audio_stream)
+                    for packet in inp.demux(audio_stream):
+                        if packet.dts is None:
+                            continue
+                        packet.stream = out_stream
+                        out.mux(packet)
+
+            with av.open(str(tmp_path), mode="r") as verify:
+                if not verify.duration or verify.duration <= 0:
+                    tmp_path.unlink(missing_ok=True)
+                    return False
+
+            os.replace(tmp_path, file_path)
+            return True
+        except Exception:
+            tmp_path.unlink(missing_ok=True)
+            return False
+
     def save_audio_file(
         self, meeting_id: int, file: UploadFile
     ) -> tuple[str, str, int, str]:
@@ -275,6 +311,9 @@ class AudioStorageService(BaseAudioStorage):
             )
         finally:
             file.file.close()
+
+        if ext == ".webm" and self.ensure_seekable_webm(destination_path):
+            total_bytes = destination_path.stat().st_size
 
         relative_path = (
             str(destination_path.relative_to(BACKEND_DIR))
