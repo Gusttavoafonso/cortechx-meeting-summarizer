@@ -259,25 +259,29 @@ export const LoginPage: React.FC = () => {
 
           {/* Mode Switch Tabs */}
           {recoveryStep === 'closed' && (
-            <div className="flex rounded-xl bg-surface/60 p-1 mb-6 border border-[#DCE2FB]">
+            <div className="relative flex rounded-xl bg-surface/60 p-1 mb-6 border border-[#DCE2FB]">
+              <span
+                aria-hidden="true"
+                className={`sliding-nav-indicator !left-1 !top-1 bottom-1 w-[calc(50%_-_0.25rem)] rounded-lg bg-white shadow-xs ${
+                  mode === 'register' ? 'translate-x-full' : 'translate-x-0'
+                }`}
+              />
               <button
                 type="button"
+                aria-pressed={mode === 'login'}
                 onClick={() => handleSwitchMode('login')}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                  mode === 'login'
-                    ? 'bg-white text-ink shadow-xs'
-                    : 'text-muted hover:text-ink'
+                className={`relative z-10 min-w-0 flex-1 py-1.5 text-xs font-bold rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand motion-safe:transition-colors ${
+                  mode === 'login' ? 'text-ink' : 'text-muted hover:text-ink'
                 }`}
               >
                 Entrar
               </button>
               <button
                 type="button"
+                aria-pressed={mode === 'register'}
                 onClick={() => handleSwitchMode('register')}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                  mode === 'register'
-                    ? 'bg-white text-ink shadow-xs'
-                    : 'text-muted hover:text-ink'
+                className={`relative z-10 min-w-0 flex-1 py-1.5 text-xs font-bold rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand motion-safe:transition-colors ${
+                  mode === 'register' ? 'text-ink' : 'text-muted hover:text-ink'
                 }`}
               >
                 Criar Conta

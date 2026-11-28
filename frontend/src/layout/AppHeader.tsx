@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { LogIn, LogOut, Menu, X } from 'lucide-react'
+import { Button } from '../components/ui/Button'
 import { useAuth } from '../contexts/AuthContext'
 import { AppNavigation } from './Sidebar'
 
@@ -11,9 +12,14 @@ export const AppHeader: React.FC = () => {
   const menuId = useId()
   const menuRef = useRef<HTMLDialogElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const logoutDialogId = useId()
+  const logoutRef = useRef<HTMLDialogElement>(null)
+  const logoutCancelRef = useRef<HTMLButtonElement>(null)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   useEffect(() => {
     menuRef.current?.close()
+    logoutRef.current?.close()
   }, [location])
 
   useEffect(() => {
@@ -75,11 +81,17 @@ export const AppHeader: React.FC = () => {
             type="button"
             aria-label="Sair da conta"
             title="Sair da conta"
-            onClick={async () => {
-              await logout()
-              navigate('/login')
+            aria-haspopup="dialog"
+            aria-controls={logoutDialogId}
+            disabled={isLoggingOut}
+            onClick={(event) => {
+              const dialog = logoutRef.current
+              if (!dialog || dialog.open) return
+              event.currentTarget.focus()
+              dialog.showModal()
+              logoutCancelRef.current?.focus()
             }}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted hover:bg-rose-50 hover:text-rose-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand motion-safe:transition-colors"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted hover:bg-rose-50 hover:text-rose-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand disabled:opacity-50 motion-safe:transition-colors"
           >
             <LogOut aria-hidden="true" className="h-4 w-4" />
           </button>
@@ -110,6 +122,49 @@ export const AppHeader: React.FC = () => {
           <X aria-hidden="true" className="h-5 w-5" />
         </button>
         <AppNavigation onNavigate={() => menuRef.current?.close()} />
+      </dialog>
+
+      <dialog
+        id={logoutDialogId}
+        ref={logoutRef}
+        aria-labelledby={`${logoutDialogId}-title`}
+        aria-describedby={`${logoutDialogId}-description`}
+        className="modal-dialog-enter m-auto w-11/12 max-w-sm rounded-2xl border border-subtle-border bg-white p-6 text-ink shadow-xl backdrop:bg-ink/40"
+      >
+        <h2 id={`${logoutDialogId}-title`} className="font-sans text-lg font-semibold">
+          Sair da conta?
+        </h2>
+        <p id={`${logoutDialogId}-description`} className="mt-2 text-sm text-muted">
+          Sua sessão será encerrada neste dispositivo.
+        </p>
+        <div className="mt-6 flex flex-wrap justify-end gap-2">
+          <Button
+            ref={logoutCancelRef}
+            type="button"
+            variant="outline"
+            onClick={() => logoutRef.current?.close()}
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            onClick={async () => {
+              logoutRef.current?.close()
+              setIsLoggingOut(true)
+              try {
+                await logout()
+              } catch {
+                // AuthContext clears the local session even if the request fails.
+              } finally {
+                setIsLoggingOut(false)
+                navigate('/login')
+              }
+            }}
+          >
+            Sair
+          </Button>
+        </div>
       </dialog>
     </header>
   )
