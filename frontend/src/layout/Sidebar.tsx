@@ -60,7 +60,7 @@ export const Sidebar: React.FC = () => {
       {/* Brand Header */}
       <div className="flex items-center justify-between mb-5 px-2">
         <NavLink
-          to="/meetings"
+          to="/dashboard"
           className="hover:opacity-90 transition-opacity focus:outline-hidden"
         >
           <ZumoLogo size="sm" />
