@@ -194,10 +194,7 @@ export const SettingsPage: React.FC = () => {
     return fallback
   }
 
-  const runProviderAction = async (
-    provider: ProviderName,
-    fn: () => Promise<string>
-  ) => {
+  const runProviderAction = async (provider: ProviderName, fn: () => Promise<string>) => {
     setBusyProvider(provider)
     setProviderFeedback((prev) => ({ ...prev, [provider]: undefined }))
     try {
@@ -235,9 +232,7 @@ export const SettingsPage: React.FC = () => {
       await updateNotionIntegration({
         enabled: notionEnabled,
         ...(notionApiKey.trim() ? { api_key: notionApiKey.trim() } : {}),
-        ...(notionDatabaseId.trim()
-          ? { database_id: notionDatabaseId.trim() }
-          : {}),
+        ...(notionDatabaseId.trim() ? { database_id: notionDatabaseId.trim() } : {}),
       })
       setNotionApiKey('')
       await refreshIntegrationsAndSystem()
@@ -248,9 +243,7 @@ export const SettingsPage: React.FC = () => {
     runProviderAction('obsidian', async () => {
       await updateObsidianIntegration({
         enabled: obsidianEnabled,
-        ...(obsidianVaultPath.trim()
-          ? { vault_path: obsidianVaultPath.trim() }
-          : {}),
+        ...(obsidianVaultPath.trim() ? { vault_path: obsidianVaultPath.trim() } : {}),
         notes_folder: obsidianNotesFolder.trim() || 'Reuniões',
       })
       await refreshIntegrationsAndSystem()
@@ -293,10 +286,7 @@ export const SettingsPage: React.FC = () => {
       return res.detail
     })
 
-  const handleDeleteProvider = (
-    provider: ProviderName,
-    subProvider?: LLMProviderName
-  ) =>
+  const handleDeleteProvider = (provider: ProviderName, subProvider?: LLMProviderName) =>
     runProviderAction(provider, async () => {
       await deleteIntegration(provider, subProvider)
       if (provider === 'discord') setDiscordWebhook('')
@@ -468,10 +458,6 @@ export const SettingsPage: React.FC = () => {
     <div className="flex-1 px-8 py-10 max-w-5xl mx-auto w-full">
       <div className="mb-6">
         <h1 className="text-3xl font-bold font-sans text-ink">Configurações</h1>
-        <p className="text-sm text-muted mt-1">
-          Gerencie seu perfil, chave de sumarização IA, integrações externas, chave Groq e
-          notificações.
-        </p>
       </div>
 
       {/* Tabs */}
@@ -508,12 +494,11 @@ export const SettingsPage: React.FC = () => {
         <div className="space-y-6">
           <div>
             <h2 className="text-xl font-bold font-sans text-ink mb-1">
-              Conecte suas ferramentas e motor de transcrição
+              Provedores e integrações
             </h2>
             <p className="text-sm text-muted max-w-2xl">
-              As credenciais são armazenadas por conta de usuário e mascaradas ao
-              recarregar. Quando uma reunião termina, o Zumo entrega o resumo nos
-              provedores ativos.
+              As credenciais são salvas por conta e exibidas de forma mascarada. Os
+              provedores ativos recebem o resumo ao fim do processamento.
             </p>
           </div>
 
@@ -574,8 +559,7 @@ export const SettingsPage: React.FC = () => {
                       ).map((subKey) => {
                         const meta = LLM_PROVIDER_META[subKey]
                         if (!meta) return null
-                        const isActive =
-                          integrationsData.llm.llm_provider === subKey
+                        const isActive = integrationsData.llm.llm_provider === subKey
                         const isSelected = llmProvider === subKey
                         return (
                           <button
@@ -616,9 +600,7 @@ export const SettingsPage: React.FC = () => {
                     <select
                       value={llmProvider}
                       onChange={(e) =>
-                        handleSelectLlmProvider(
-                          normalizeLlmProvider(e.target.value)
-                        )
+                        handleSelectLlmProvider(normalizeLlmProvider(e.target.value))
                       }
                       className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-ink bg-white focus:outline-none focus:border-brand"
                     >
@@ -674,8 +656,7 @@ export const SettingsPage: React.FC = () => {
                       <p className="text-[11px] text-muted mt-1 font-mono">
                         Chave salva:{' '}
                         {integrationsData?.llm?.llm_providers?.[llmProvider]
-                          ?.api_key_masked ||
-                          integrationsData?.llm?.api_key_masked}
+                          ?.api_key_masked || integrationsData?.llm?.api_key_masked}
                       </p>
                     )}
                   </div>
@@ -749,8 +730,7 @@ export const SettingsPage: React.FC = () => {
                 </div>
 
                 <p className="text-xs text-muted mb-4">
-                  Envia o resumo estruturado e tarefas diretamente para um canal via
-                  Webhook.
+                  Envia o resumo e as tarefas a um canal via webhook.
                 </p>
 
                 <div className="space-y-3">
@@ -837,7 +817,7 @@ export const SettingsPage: React.FC = () => {
                 </div>
 
                 <p className="text-xs text-muted mb-4">
-                  Cria uma página com resumo, decisões e tarefas na database escolhida.
+                  Cria uma página com resumo, decisões e tarefas na base escolhida.
                 </p>
 
                 <div className="space-y-3">
@@ -930,7 +910,7 @@ export const SettingsPage: React.FC = () => {
                 </div>
 
                 <p className="text-xs text-muted mb-4">
-                  Salva arquivos Markdown organizados automaticamente em seu vault local.
+                  Salva arquivos Markdown no vault local.
                 </p>
 
                 <div className="space-y-3">
@@ -1023,9 +1003,8 @@ export const SettingsPage: React.FC = () => {
                 </div>
 
                 <p className="text-xs text-muted mb-4 leading-relaxed">
-                  Conecte uma chave pessoal da Groq (<code className="font-mono">gsk_...</code>)
-                  para transcrições ultra-rápidas em nuvem. Sem chave pessoal, o sistema
-                  utiliza automaticamente o fallback local com Whisper.
+                  Use uma chave Groq (<code className="font-mono">gsk_...</code>) para
+                  transcrever na nuvem. Sem ela, o Zumo usa o Whisper local.
                 </p>
 
                 <div>
@@ -1036,9 +1015,7 @@ export const SettingsPage: React.FC = () => {
                     type="password"
                     value={groqApiKey}
                     onChange={(e) => setGroqApiKey(e.target.value)}
-                    placeholder={
-                      integrationsData?.groq.api_key_masked || 'gsk_...'
-                    }
+                    placeholder={integrationsData?.groq.api_key_masked || 'gsk_...'}
                     className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-ink bg-white focus:outline-none focus:border-brand font-mono"
                   />
                   {integrationsData?.groq.api_key_masked && (
@@ -1105,12 +1082,7 @@ export const SettingsPage: React.FC = () => {
                 </div>
               )}
               <div>
-                <h3 className="text-lg font-bold font-sans text-ink">
-                  Dados do Perfil
-                </h3>
-                <p className="text-xs text-muted">
-                  Atualize seu nome de exibição na conta.
-                </p>
+                <h3 className="text-lg font-bold font-sans text-ink">Dados do Perfil</h3>
               </div>
             </div>
 
@@ -1155,12 +1127,7 @@ export const SettingsPage: React.FC = () => {
                 <KeyRound className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-lg font-bold font-sans text-ink">
-                  Alterar senha
-                </h3>
-                <p className="text-xs text-muted">
-                  Mantenha sua senha forte e atualizada.
-                </p>
+                <h3 className="text-lg font-bold font-sans text-ink">Alterar senha</h3>
               </div>
             </div>
 
@@ -1168,8 +1135,7 @@ export const SettingsPage: React.FC = () => {
               <div className="p-4 rounded-xl bg-surface/70 border border-[#DCE2FB] text-xs text-ink-light flex items-start gap-2.5">
                 <ShieldCheck className="w-4 h-4 text-brand shrink-0 mt-0.5" />
                 <p className="leading-relaxed">
-                  Esta conta utiliza autenticação exclusiva via Google. Não há uma senha
-                  local configurada para alteração.
+                  Sua conta usa apenas o login do Google e não tem senha local.
                 </p>
               </div>
             ) : (
@@ -1249,9 +1215,6 @@ export const SettingsPage: React.FC = () => {
               <h3 className="text-lg font-bold font-sans text-ink">
                 Preferências de Notificação
               </h3>
-              <p className="text-xs text-muted">
-                Alertas locais no navegador ao concluir o processamento de reuniões.
-              </p>
             </div>
           </div>
 
@@ -1262,8 +1225,7 @@ export const SettingsPage: React.FC = () => {
                   Notificar no navegador quando uma reunião for concluída
                 </p>
                 <p className="text-xs text-muted mt-0.5">
-                  Utiliza a API de Notificações do navegador (salvo localmente neste
-                  dispositivo).
+                  Preferência salva neste dispositivo.
                 </p>
               </div>
               <input
@@ -1276,7 +1238,7 @@ export const SettingsPage: React.FC = () => {
 
             <div className="text-xs text-muted flex items-center justify-between px-1">
               <span>
-                Permissão atual do navegador:{' '}
+                Permissão do navegador:{' '}
                 <strong className="text-ink">
                   {permissionState === 'granted'
                     ? 'Permitida'

@@ -10,14 +10,11 @@ import {
   Cpu,
   Zap,
   ChevronDown,
-  Check,
-  ShieldCheck,
   Share2,
 } from 'lucide-react'
 import { LandingNavbar } from '../../components/landing/LandingNavbar'
 import { HalftoneWaveCanvas } from '../../components/landing/HalftoneWaveCanvas'
 import { Button } from '../../components/ui/Button'
-import { Badge } from '../../components/ui/Badge'
 import { ZumoLogo } from '../../components/ZumoLogo'
 import { cn } from '../../lib/utils'
 
@@ -68,24 +65,24 @@ export const LandingPage: React.FC = () => {
 
   const faqs = [
     {
-      q: 'O que torna a tecnologia do Zumo diferente?',
-      a: 'Nosso pipeline utiliza Voice Activity Detection (Silero VAD) nativo que remove silêncios antes do áudio chegar na inteligência artificial. Isso torna as transcrições 3x mais rápidas, reduz custos e garante resumos executivos extremamente precisos.',
+      q: 'Como o Zumo trata o áudio?',
+      a: 'O Silero VAD remove silêncios, reduz custos e torna a transcrição 3 vezes mais rápida.',
     },
     {
-      q: 'Meus áudios e dados de reunião ficam seguros?',
-      a: 'Sim, segurança e privacidade são prioridade absoluta. Você pode optar pelo Modo Local Offline (o áudio nunca sai do seu computador) ou Modo Nuvem Ultra-rápido com encriptação de ponta a ponta sem retenção de dados.',
+      q: 'Como meus dados são protegidos?',
+      a: 'No modo local, o áudio fica no seu computador. Na nuvem, há criptografia de ponta a ponta e não há retenção de dados.',
     },
     {
-      q: 'Quais formatos de arquivos de áudio e vídeo são suportados?',
-      a: 'Você pode subir gravações em .mp3, .wav, .m4a, .mp4 e .webm de até 250 MB (equivalente a reuniões de várias horas).',
+      q: 'Quais arquivos posso enviar?',
+      a: 'MP3, WAV, M4A, MP4 ou WebM de até 250 MB.',
     },
     {
-      q: 'A transcrição e o resumo funcionam bem em Português do Brasil?',
-      a: 'Perfeitamente. Nossos modelos foram calibrados com suporte nativo a termos corporativos, expressões técnicas e pronúncias em Português (pt-BR) com mais de 99% de precisão.',
+      q: 'O Zumo funciona em português do Brasil?',
+      a: 'Sim. Os modelos reconhecem pronúncias e termos técnicos em português do Brasil, com mais de 99% de precisão.',
     },
     {
-      q: 'O Zumo se conecta com minhas ferramentas de anotação?',
-      a: 'Sim! Você pode sincronizar e exportar notas, tarefas e transcrições diretamente para Obsidian, Discord, Notion e arquivos Markdown.',
+      q: 'Quais integrações estão disponíveis?',
+      a: 'Sincronize notas, tarefas e transcrições com Obsidian, Discord ou Notion, ou exporte em Markdown.',
     },
   ]
 
@@ -104,16 +101,9 @@ export const LandingPage: React.FC = () => {
           <div className="flex-1 flex flex-col justify-center max-w-4xl mx-auto px-4 sm:px-6 text-center relative z-10 pt-16 pb-6">
             {/* Main Headline */}
             <h1 className="text-4xl sm:text-6xl md:text-7xl font-bold tracking-tight text-ink font-sans leading-[1.08] mb-6">
-              Suas reuniões, <br />
-              <span className="text-brand">mais inteligentes.</span>
+              Transcreva suas reuniões <br />
+              <span className="text-brand">e gere resumos.</span>
             </h1>
-
-            {/* Subtitle */}
-            <p className="max-w-2xl mx-auto text-lg sm:text-xl text-muted font-normal leading-relaxed">
-              Transcreva, resuma e organize suas reuniões em um só lugar.
-              <br className="hidden sm:inline" /> Mais clareza, menos trabalho, mais
-              resultados.
-            </p>
           </div>
 
           {/* ================= FULL-WIDTH BLUE HALFTONE WAVE ================= */}
@@ -132,11 +122,8 @@ export const LandingPage: React.FC = () => {
                   <Mic className="w-5 h-5 stroke-[2.2]" />
                 </div>
                 <h3 className="text-base font-bold text-ink mb-1 font-sans">
-                  Transcrição precisa
+                  Transcrição de áudio
                 </h3>
-                <p className="text-xs text-muted leading-relaxed">
-                  Áudio em texto com alta qualidade e em poucos minutos.
-                </p>
               </div>
 
               {/* Feature 2 */}
@@ -148,7 +135,7 @@ export const LandingPage: React.FC = () => {
                   Resumos automáticos
                 </h3>
                 <p className="text-xs text-muted leading-relaxed">
-                  Principais pontos, decisões tomadas e acordos estruturados em tópicos.
+                  Pontos principais, decisões e acordos.
                 </p>
               </div>
 
@@ -158,10 +145,10 @@ export const LandingPage: React.FC = () => {
                   <Users className="w-5 h-5 stroke-[2.2]" />
                 </div>
                 <h3 className="text-base font-bold text-ink mb-1 font-sans">
-                  Organização simples
+                  Histórico de reuniões
                 </h3>
                 <p className="text-xs text-muted leading-relaxed">
-                  Todas as suas reuniões, atas e gravações arquivadas em um só lugar.
+                  Atas e gravações arquivadas.
                 </p>
               </div>
 
@@ -171,11 +158,8 @@ export const LandingPage: React.FC = () => {
                   <BarChart3 className="w-5 h-5 stroke-[2.2]" />
                 </div>
                 <h3 className="text-base font-bold text-ink mb-1 font-sans">
-                  Mais produtividade
+                  Tarefas e prazos
                 </h3>
-                <p className="text-xs text-muted leading-relaxed">
-                  Foco 100% no diálogo e no que realmente importa durante a reunião.
-                </p>
               </div>
             </div>
           </div>
@@ -188,16 +172,9 @@ export const LandingPage: React.FC = () => {
         >
           <div className="max-w-6xl mx-auto px-4 sm:px-6">
             <div className="text-center max-w-2xl mx-auto mb-16">
-              <Badge variant="brand" className="mb-3">
-                Pipeline de Extração
-              </Badge>
               <h2 className="text-3xl sm:text-4xl font-bold font-sans text-ink mb-4">
-                Como funciona o Zumo ?
+                Como funciona
               </h2>
-              <p className="text-base text-muted">
-                Projetado com arquitetura desacoplada para evitar travamentos e entregar
-                resultados sem esforço em três passos.
-              </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
@@ -207,15 +184,11 @@ export const LandingPage: React.FC = () => {
                   01
                 </div>
                 <h3 className="text-lg font-bold text-ink mb-2 font-sans">
-                  Envie ou Grave o Áudio
+                  Envie ou grave o áudio
                 </h3>
                 <p className="text-sm text-muted leading-relaxed mb-4 flex-1">
-                  Faça upload de arquivos MP3, WAV, M4A ou MP4 de até 250 MB ou inicie a
-                  gravação com um clique.
+                  MP3, WAV, M4A ou MP4 de até 250 MB.
                 </p>
-                <div className="text-xs text-brand font-medium flex items-center gap-1.5 pt-3 border-t border-subtle-border">
-                  <Check className="w-3.5 h-3.5" /> Validação e integridade de formato
-                </div>
               </div>
 
               {/* Step 2 */}
@@ -223,16 +196,10 @@ export const LandingPage: React.FC = () => {
                 <div className="w-12 h-12 rounded-xl bg-surface text-brand font-sans font-bold text-xl flex items-center justify-center mb-5">
                   02
                 </div>
-                <h3 className="text-lg font-bold text-ink mb-2 font-sans">
-                  Fatiamento & Transcrição
-                </h3>
+                <h3 className="text-lg font-bold text-ink mb-2 font-sans">Transcrição</h3>
                 <p className="text-sm text-muted leading-relaxed mb-4 flex-1">
-                  O Silero VAD isola trechos de voz real e descarta ruídos. O Whisper
-                  converte a fala em texto em segundos.
+                  O Silero VAD separa a fala do ruído. O Whisper transcreve o áudio.
                 </p>
-                <div className="text-xs text-brand font-medium flex items-center gap-1.5 pt-3 border-t border-subtle-border">
-                  <Check className="w-3.5 h-3.5" /> Rode tudo local!
-                </div>
               </div>
 
               {/* Step 3 */}
@@ -241,15 +208,11 @@ export const LandingPage: React.FC = () => {
                   03
                 </div>
                 <h3 className="text-lg font-bold text-ink mb-2 font-sans">
-                  Resumo & Ações Prontas
+                  Resumo e tarefas
                 </h3>
                 <p className="text-sm text-muted leading-relaxed mb-4 flex-1">
-                  A IA analisa o diálogo, extrai os combinados, atribui tarefas aos
-                  participantes e arquiva tudo na sua conta.
+                  O Zumo registra as decisões e atribui tarefas aos participantes.
                 </p>
-                <div className="text-xs text-brand font-medium flex items-center gap-1.5 pt-3 border-t border-subtle-border">
-                  <Check className="w-3.5 h-3.5" /> Conecte com Obsidian, Discord e Notion
-                </div>
               </div>
             </div>
           </div>
@@ -259,16 +222,9 @@ export const LandingPage: React.FC = () => {
         <section id="recursos" className="py-20">
           <div className="max-w-6xl mx-auto px-4 sm:px-6">
             <div className="text-center max-w-2xl mx-auto mb-16">
-              <Badge variant="brand" className="mb-3">
-                Recursos Avançados
-              </Badge>
               <h2 className="text-3xl sm:text-4xl font-bold font-sans text-ink mb-4">
-                Construído para profissionais e equipes exigentes
+                Recursos
               </h2>
-              <p className="text-base text-muted">
-                Da privacidade corporativa à velocidade de execução, tudo o que sua equipe
-                precisa.
-              </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -279,13 +235,11 @@ export const LandingPage: React.FC = () => {
                     <Cpu className="w-5 h-5" />
                   </div>
                   <h3 className="text-2xl font-bold font-sans text-ink mb-2">
-                    Liberdade Total: Modo Local Offline ou Nuvem Ultra-rápida
+                    Processamento local ou na nuvem
                   </h3>
                   <p className="text-sm text-muted max-w-xl leading-relaxed mb-6">
-                    Você decide onde seus dados são processados. Ative o modo local com{' '}
-                    <strong>Faster-Whisper</strong> para máxima privacidade sem sair da
-                    sua máquina, ou utilize o <strong>Groq Cloud</strong> para
-                    transcrições prontas em poucos segundos.
+                    Escolha entre <strong>Faster-Whisper</strong> local e{' '}
+                    <strong>Groq Cloud</strong>.
                   </p>
                 </div>
 
@@ -295,7 +249,7 @@ export const LandingPage: React.FC = () => {
                       Modo Local (Offline)
                     </span>
                     <span className="text-xs text-muted">
-                      100% privado, sem custo de API, funciona mesmo sem internet.
+                      Áudio no seu computador, sem internet nem custo de API.
                     </span>
                   </div>
                   <div className="p-3 rounded-xl bg-page border border-subtle-border">
@@ -303,7 +257,7 @@ export const LandingPage: React.FC = () => {
                       Modo Nuvem (Groq Whisper Large)
                     </span>
                     <span className="text-xs text-muted">
-                      Inferência em segundos para arquivos de 1 hora ou mais.
+                      Transcrição em segundos, mesmo para arquivos de uma hora ou mais.
                     </span>
                   </div>
                 </div>
@@ -316,15 +270,11 @@ export const LandingPage: React.FC = () => {
                     <Zap className="w-5 h-5" />
                   </div>
                   <h3 className="text-xl font-bold font-sans text-ink mb-2">
-                    Silero VAD Nativo
+                    Detecção de fala (Silero VAD)
                   </h3>
                   <p className="text-sm text-muted leading-relaxed mb-4">
-                    Filtro acústico inteligente que elimina silêncios e ruídos de fundo,
-                    garantindo transcrição limpa e focada apenas na fala.
+                    Remove silêncios e ruídos de fundo antes da transcrição.
                   </p>
-                </div>
-                <div className="inline-flex items-center gap-1.5 text-xs text-emerald-600 font-semibold">
-                  <ShieldCheck className="w-4 h-4" /> Zero alucinação em silêncio
                 </div>
               </div>
 
@@ -335,15 +285,11 @@ export const LandingPage: React.FC = () => {
                     <Lock className="w-5 h-5" />
                   </div>
                   <h3 className="text-xl font-bold font-sans text-ink mb-2">
-                    Privacidade por Padrão
+                    Privacidade
                   </h3>
                   <p className="text-sm text-muted leading-relaxed mb-4">
-                    Seus dados confidenciais de reunião não são utilizados para
-                    treinamento de modelos públicos. Controle total do ciclo de vida.
+                    Seus dados de reunião não são usados para treinar modelos públicos.
                   </p>
-                </div>
-                <div className="text-xs text-muted">
-                  Conformidade e segurança corporativa
                 </div>
               </div>
 
@@ -354,12 +300,10 @@ export const LandingPage: React.FC = () => {
                     <Share2 className="w-5 h-5" />
                   </div>
                   <h3 className="text-2xl font-bold font-sans text-ink mb-2">
-                    Conexão Direta com suas Ferramentas
+                    Integrações
                   </h3>
                   <p className="text-sm text-muted max-w-xl leading-relaxed mb-6">
-                    Mantenha seu fluxo de trabalho sem fricção. Suas notas, atas
-                    executivas e tarefas podem ser sincronizadas diretamente com suas
-                    plataformas favoritas.
+                    Sincronize notas, atas e tarefas.
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-xs font-semibold">
@@ -382,15 +326,9 @@ export const LandingPage: React.FC = () => {
         <section id="faq" className="py-20 bg-surface/30 border-t border-subtle-border">
           <div className="max-w-3xl mx-auto px-4 sm:px-6">
             <div className="text-center mb-12">
-              <Badge variant="brand" className="mb-3">
-                Dúvidas Frequentes
-              </Badge>
               <h2 className="text-3xl sm:text-4xl font-bold font-sans text-ink mb-4">
-                Perguntas Frequentes
+                Perguntas frequentes
               </h2>
-              <p className="text-sm text-muted">
-                Tudo o que você precisa saber sobre o Zumo e nossa tecnologia.
-              </p>
             </div>
 
             <div className="space-y-3">
@@ -434,12 +372,8 @@ export const LandingPage: React.FC = () => {
               <div className="absolute top-0 right-0 w-80 h-80 bg-brand-light/20 blur-3xl rounded-full pointer-events-none" />
 
               <h2 className="text-3xl sm:text-5xl font-bold font-sans mb-4 relative z-10">
-                Pronto para transformar suas reuniões?
+                Grave ou envie um áudio
               </h2>
-              <p className="max-w-xl mx-auto text-white/80 text-base sm:text-lg mb-8 relative z-10">
-                Comece agora. Envie seu arquivo de áudio e receba sua síntese executiva
-                com tarefas organizadas.
-              </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3 relative z-10">
                 <Link to="/login?mode=register" className="w-full sm:w-auto">
                   <Button
@@ -469,8 +403,6 @@ export const LandingPage: React.FC = () => {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-3">
             <ZumoLogo size="md" />
-            <span className="text-subtle-border">|</span>
-            <span className="text-xs text-muted">CortechX Meeting Summarizer</span>
           </div>
 
           <div className="flex items-center gap-6">

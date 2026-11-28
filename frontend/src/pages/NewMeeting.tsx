@@ -187,12 +187,12 @@ export const NewMeeting: React.FC = () => {
     setErrorMessage(null)
 
     if (file.size === 0) {
-      setFileError('O arquivo selecionado está vazio (0 bytes).')
+      setFileError('O arquivo está vazio.')
       return
     }
 
     if (file.size > MAX_FILE_SIZE_BYTES) {
-      setFileError('O tamanho do arquivo excede o limite máximo permitido de 250 MB.')
+      setFileError('O arquivo excede o limite de 250 MB.')
       return
     }
 
@@ -283,13 +283,13 @@ export const NewMeeting: React.FC = () => {
   // Multi-step Orchestration & Retry Execution
   const handleStartProcess = async () => {
     if (!title.trim()) {
-      setErrorMessage('Por favor, informe o título da reunião.')
+      setErrorMessage('Informe o título da reunião.')
       titleInputRef.current?.focus()
       return
     }
 
     if (!selectedFile) {
-      setErrorMessage('Por favor, selecione um arquivo de áudio ou vídeo.')
+      setErrorMessage('Selecione um arquivo de áudio ou vídeo.')
       return
     }
 
@@ -344,9 +344,7 @@ export const NewMeeting: React.FC = () => {
         language: recordingCtx.options.language,
         provider: recordingCtx.options.provider,
         auto_tasks: recordingCtx.options.autoTasks,
-        ...(recordingCtx.options.exportIntegrations
-          ? {}
-          : { skip_integrations: true }),
+        ...(recordingCtx.options.exportIntegrations ? {} : { skip_integrations: true }),
       })
       setCurrentStep('done')
       recordingCtx.clearRecording()
@@ -370,19 +368,17 @@ export const NewMeeting: React.FC = () => {
   const getStepFeedbackText = () => {
     switch (currentStep) {
       case 'creating':
-        return 'Criando registro da reunião...'
+        return 'Criando reunião…'
       case 'uploading':
         return `Enviando arquivo de áudio (${formatBytes(selectedFile?.size || 0)})...`
       case 'processing':
-        return 'Iniciando pipeline de transcrição e resumo...'
+        return 'Iniciando transcrição e resumo…'
       case 'done':
-        return 'Processo iniciado com sucesso! Redirecionando...'
+        return 'Processamento iniciado. Redirecionando…'
       case 'failed':
         if (failedStep === 'create') return 'Falha na criação da reunião.'
-        if (failedStep === 'upload')
-          return 'Falha no envio do áudio. Clique para tentar novamente.'
-        if (failedStep === 'process')
-          return 'Falha no agendamento do processamento. Clique para tentar novamente.'
+        if (failedStep === 'upload') return 'Falha no envio do áudio.'
+        if (failedStep === 'process') return 'Falha ao agendar o processamento.'
         return 'Ocorreu um erro.'
       default:
         return null
@@ -500,7 +496,7 @@ export const NewMeeting: React.FC = () => {
             </div>
 
             <p className="text-sm font-medium text-ink mb-1">
-              Solte seu arquivo de áudio ou vídeo aqui, ou{' '}
+              Solte um áudio ou vídeo aqui, ou{' '}
               <span className="text-brand underline decoration-brand/60 underline-offset-2 hover:text-brand-dark">
                 procure
               </span>
@@ -610,79 +606,79 @@ export const NewMeeting: React.FC = () => {
         (recordingCtx.liveTranscription.segments.length > 0 ||
           recordingCtx.liveTranscription.interimText.trim().length > 0 ||
           recordingCtx.liveTranscription.status === 'finalizing') && (
-        <Card className="mb-6 border-subtle-border shadow-xs overflow-hidden">
-          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 bg-surface/40 border-b border-subtle-border">
-            <button
-              type="button"
-              onClick={() => setIsTranscriptPreviewOpen((prev) => !prev)}
-              className="flex items-center gap-2 text-left group"
-            >
-              <div className="w-7 h-7 rounded-lg bg-surface text-brand flex items-center justify-center shrink-0">
-                <AudioLines className="w-4 h-4 stroke-[2.2]" />
-              </div>
-              <div>
-                <h4 className="font-sans text-sm font-semibold text-ink group-hover:text-brand transition-colors">
-                  Transcrição capturada ao vivo
-                </h4>
-                <p className="text-[11px] font-mono text-muted">
-                  {recordingCtx.liveTranscription.chunksReceived} chunks •{' '}
-                  {recordingCtx.liveTranscription.wordCount} palavras
-                </p>
-              </div>
-              {isTranscriptPreviewOpen ? (
-                <ChevronUp className="w-4 h-4 text-muted ml-1" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-muted ml-1" />
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={handleCopyLiveTranscript}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-white text-ink-light hover:bg-slate-50 transition-colors"
-            >
-              {copiedTranscript ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  <span className="text-emerald-700">Copiado</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5 text-muted" />
-                  <span>Copiar</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          {isTranscriptPreviewOpen && (
-            <div className="max-h-60 overflow-y-auto px-4 py-4 space-y-2.5 bg-white/70">
-              {recordingCtx.liveTranscription.segments.map((segment) => (
-                <div key={segment.id} className="flex items-start gap-3">
-                  <span className="font-mono text-[11px] text-muted/80 pt-0.5 shrink-0 select-none">
-                    {formatSecondsToTime(Math.floor(segment.startMs / 1000))}
-                  </span>
-                  <p className="text-sm leading-relaxed text-ink">{segment.text}</p>
+          <Card className="mb-6 border-subtle-border shadow-xs overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 bg-surface/40 border-b border-subtle-border">
+              <button
+                type="button"
+                onClick={() => setIsTranscriptPreviewOpen((prev) => !prev)}
+                className="flex items-center gap-2 text-left group"
+              >
+                <div className="w-7 h-7 rounded-lg bg-surface text-brand flex items-center justify-center shrink-0">
+                  <AudioLines className="w-4 h-4 stroke-[2.2]" />
                 </div>
-              ))}
-              {recordingCtx.liveTranscription.interimText && (
-                <div className="flex items-start gap-3">
-                  <span className="font-mono text-[11px] text-brand/80 pt-0.5 shrink-0 select-none">
-                    {formatSecondsToTime(
-                      Math.floor(
-                        (recordingCtx.liveTranscription.interimStartMs ?? 0) / 1000
-                      )
-                    )}
-                  </span>
-                  <p className="text-sm leading-relaxed text-ink-light">
-                    {recordingCtx.liveTranscription.interimText}
+                <div>
+                  <h4 className="font-sans text-sm font-semibold text-ink group-hover:text-brand transition-colors">
+                    Transcrição capturada ao vivo
+                  </h4>
+                  <p className="text-[11px] font-mono text-muted">
+                    {recordingCtx.liveTranscription.chunksReceived} chunks •{' '}
+                    {recordingCtx.liveTranscription.wordCount} palavras
                   </p>
                 </div>
-              )}
+                {isTranscriptPreviewOpen ? (
+                  <ChevronUp className="w-4 h-4 text-muted ml-1" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-muted ml-1" />
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCopyLiveTranscript}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-white text-ink-light hover:bg-slate-50 transition-colors"
+              >
+                {copiedTranscript ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-emerald-700">Copiado</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-muted" />
+                    <span>Copiar</span>
+                  </>
+                )}
+              </button>
             </div>
-          )}
-        </Card>
-      )}
+
+            {isTranscriptPreviewOpen && (
+              <div className="max-h-60 overflow-y-auto px-4 py-4 space-y-2.5 bg-white/70">
+                {recordingCtx.liveTranscription.segments.map((segment) => (
+                  <div key={segment.id} className="flex items-start gap-3">
+                    <span className="font-mono text-[11px] text-muted/80 pt-0.5 shrink-0 select-none">
+                      {formatSecondsToTime(Math.floor(segment.startMs / 1000))}
+                    </span>
+                    <p className="text-sm leading-relaxed text-ink">{segment.text}</p>
+                  </div>
+                ))}
+                {recordingCtx.liveTranscription.interimText && (
+                  <div className="flex items-start gap-3">
+                    <span className="font-mono text-[11px] text-brand/80 pt-0.5 shrink-0 select-none">
+                      {formatSecondsToTime(
+                        Math.floor(
+                          (recordingCtx.liveTranscription.interimStartMs ?? 0) / 1000
+                        )
+                      )}
+                    </span>
+                    <p className="text-sm leading-relaxed text-ink-light">
+                      {recordingCtx.liveTranscription.interimText}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </Card>
+        )}
 
       {/* Validation / Error alerts */}
       {fileError && (
@@ -698,10 +694,7 @@ export const NewMeeting: React.FC = () => {
           <div className="flex-1">
             <p className="font-semibold">{errorMessage}</p>
             {failedStep && (
-              <p className="mt-1 text-muted">
-                O progresso anterior foi preservado. Ao clicar no botão abaixo, a operação
-                continuará a partir desta etapa.
-              </p>
+              <p className="mt-1 text-muted">Tentar novamente retoma desta etapa.</p>
             )}
           </div>
         </div>

@@ -1,7 +1,10 @@
 import React from 'react'
 import { Video, Mic, X } from 'lucide-react'
 import { Button } from '../ui/Button'
-import { DetectedMeeting, getPlatformDisplayName } from '../../hooks/useTauriMeetingDetector'
+import {
+  DetectedMeeting,
+  getPlatformDisplayName,
+} from '../../hooks/useTauriMeetingDetector'
 
 interface TauriMeetingBannerProps {
   meeting: DetectedMeeting
@@ -39,12 +42,11 @@ export const TauriMeetingBanner: React.FC<TauriMeetingBannerProps> = ({
             </span>
           </div>
 
-          <p className="text-xs font-semibold text-ink truncate mb-1" title={meeting.title}>
+          <p
+            className="text-xs font-semibold text-ink truncate mb-1"
+            title={meeting.title}
+          >
             {meeting.title || 'Chamada em andamento'}
-          </p>
-
-          <p className="text-[11px] text-muted leading-tight mb-3">
-            Deseja gravar e transcrever esta reunião agora?
           </p>
 
           {/* Action Button */}

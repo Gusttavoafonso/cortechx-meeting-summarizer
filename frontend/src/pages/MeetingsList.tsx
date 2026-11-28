@@ -66,17 +66,17 @@ export const MeetingsList: React.FC = () => {
     }
     switch (meeting.status) {
       case 'processing':
-        return 'Processando resumo inteligente e extração de tarefas...'
+        return 'Gerando resumo e tarefas…'
       case 'transcribing':
         return 'Transcrevendo áudio...'
       case 'audio_uploaded':
-        return 'Áudio carregado. Pronto para iniciar processamento.'
+        return 'Áudio pronto para processar.'
       case 'received':
-        return 'Reunião criada. Aguardando envio do arquivo de áudio.'
+        return 'Aguardando envio do áudio.'
       case 'completed':
-        return 'Reunião transcrita com sucesso.'
+        return 'Transcrição concluída.'
       default:
-        return 'Nenhum resumo disponível ainda.'
+        return 'Resumo indisponível.'
     }
   }
 
@@ -115,7 +115,6 @@ export const MeetingsList: React.FC = () => {
           <h1 className="text-3xl font-bold tracking-tight text-ink font-sans">
             Reuniões
           </h1>
-          <p className="text-sm text-muted mt-1">Todas as suas reuniões transcritas</p>
         </div>
         <div className="flex items-center gap-2">
           {isFetching && !isLoading && (
@@ -186,13 +185,10 @@ export const MeetingsList: React.FC = () => {
             <MessagesSquare className="w-8 h-8 stroke-[1.5]" />
           </div>
           <h3 className="text-lg font-bold text-ink font-sans mb-1">
-            {searchTerm ? 'Nenhuma reunião encontrada' : 'Nenhuma reunião cadastrada'}
-          </h3>
-          <p className="text-sm text-muted max-w-sm mx-auto mb-6">
             {searchTerm
-              ? `Nenhum resultado corresponde à busca por "${searchTerm}". Tente outro termo.`
-              : 'Crie sua primeira reunião com upload de áudio para gerar transcrições e resumos inteligentes.'}
-          </p>
+              ? `Nenhuma reunião para “${searchTerm}”`
+              : 'Nenhuma reunião cadastrada'}
+          </h3>
           {searchTerm ? (
             <Button variant="outline" onClick={() => setSearchTerm('')}>
               Limpar busca

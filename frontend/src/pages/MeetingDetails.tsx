@@ -35,12 +35,7 @@ import { StatusBadge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { MeetingAudioPlayer } from '../components/MeetingAudioPlayer'
-import {
-  cn,
-  formatBytes,
-  formatMeetingDate,
-  formatSecondsToTime,
-} from '../lib/utils'
+import { cn, formatBytes, formatMeetingDate, formatSecondsToTime } from '../lib/utils'
 import { Meeting, SummaryResponse } from '../types/meeting'
 
 function buildMarkdownExport(meeting: Meeting, summary: SummaryResponse | null): string {
@@ -205,9 +200,7 @@ export const MeetingDetails: React.FC = () => {
       await queryClient.invalidateQueries({ queryKey: ['meeting', meetingId] })
       await queryClient.invalidateQueries({ queryKey: ['meetings'] })
     } catch (err) {
-      setActionError(
-        err instanceof Error ? err.message : 'Falha ao reprocessar reunião.'
-      )
+      setActionError(err instanceof Error ? err.message : 'Falha ao reprocessar reunião.')
     } finally {
       setIsRetrying(false)
     }
@@ -262,9 +255,7 @@ export const MeetingDetails: React.FC = () => {
     try {
       const res = await retryMeetingIntegrations(meetingId)
       await refetchIntegrations()
-      setActionSuccess(
-        `Reenvio agendado para: ${res.providers.join(', ')}.`
-      )
+      setActionSuccess(`Reenvio agendado para: ${res.providers.join(', ')}.`)
     } catch (err) {
       setActionError(
         err instanceof Error ? err.message : 'Falha ao reenviar integrações.'
@@ -314,7 +305,9 @@ export const MeetingDetails: React.FC = () => {
       <div className="flex-1 px-8 py-10 max-w-5xl mx-auto w-full">
         <Card className="p-10 text-center border-rose-200 bg-rose-50/20">
           <AlertCircle className="w-10 h-10 text-rose-600 mx-auto mb-3" />
-          <h2 className="text-lg font-bold font-sans text-ink mb-1">Reunião não encontrada</h2>
+          <h2 className="text-lg font-bold font-sans text-ink mb-1">
+            Reunião não encontrada
+          </h2>
           <p className="text-sm text-muted mb-6">
             {error instanceof Error
               ? error.message
@@ -523,11 +516,10 @@ export const MeetingDetails: React.FC = () => {
             <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
             <div className="flex-1">
               <h3 className="text-sm font-bold font-sans text-rose-800">
-                Falha no processamento desta reunião
+                Falha no processamento
               </h3>
               <p className="text-xs font-sans text-rose-700 mt-1 leading-relaxed">
-                {meeting.last_error ||
-                  'Ocorreu um erro durante a transcrição ou sumarização. Tente reprocessar.'}
+                {meeting.last_error || 'Tente reprocessar a reunião.'}
               </p>
             </div>
           </div>
@@ -541,12 +533,8 @@ export const MeetingDetails: React.FC = () => {
             <div className="space-y-1">
               <h3 className="text-sm font-bold font-sans text-ink flex items-center gap-2">
                 <Upload className="w-4 h-4 text-amber-600" />
-                <span>Reunião aguardando arquivo de áudio</span>
+                <span>Aguardando áudio</span>
               </h3>
-              <p className="text-xs text-muted">
-                Selecione a gravação desta reunião para enviar o áudio e iniciar o
-                processamento.
-              </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <input
@@ -585,12 +573,11 @@ export const MeetingDetails: React.FC = () => {
             <div className="space-y-1">
               <h3 className="text-sm font-bold font-sans text-ink">
                 {meeting.status === 'audio_uploaded'
-                  ? 'Áudio carregado e pronto para processamento'
-                  : 'Transcrição concluída, resumo ainda pendente'}
+                  ? 'Áudio pronto para processar'
+                  : 'Transcrição pronta, resumo pendente'}
               </h3>
               <p className="text-xs text-muted">
-                Inicie o pipeline para gerar o resumo executivo, extrair tarefas e
-                disparar as integrações.
+                Gera resumo e tarefas e aciona as integrações ativas.
               </p>
             </div>
             <Button
@@ -614,12 +601,9 @@ export const MeetingDetails: React.FC = () => {
           <div className="flex-1">
             <h3 className="text-sm font-semibold font-sans text-ink">
               {meeting.status === 'transcribing'
-                ? 'Transcrição de áudio em andamento...'
-                : 'Análise e sumarização em andamento...'}
+                ? 'Transcrevendo áudio…'
+                : 'Gerando resumo…'}
             </h3>
-            <p className="text-xs text-muted mt-0.5">
-              Acompanhando progresso automaticamente a cada 4 segundos.
-            </p>
           </div>
         </Card>
       )}
@@ -763,10 +747,7 @@ export const MeetingDetails: React.FC = () => {
           {isLoadingIntegrations ? (
             <p className="text-xs text-muted">Consultando entregas...</p>
           ) : deliveries.length === 0 ? (
-            <p className="text-xs text-muted">
-              Nenhuma entrega registrada para esta reunião. Caso tenha configurado
-              Discord, Notion ou Obsidian, clique em &quot;Reenviar pendentes&quot;.
-            </p>
+            <p className="text-xs text-muted">Nenhuma entrega registrada.</p>
           ) : (
             <div className="space-y-2.5">
               {deliveries.map((delivery) => (
@@ -822,7 +803,9 @@ export const MeetingDetails: React.FC = () => {
       {meeting.transcript && (
         <Card className="p-6">
           <div className="flex items-center justify-between gap-3 mb-4">
-            <h3 className="text-sm font-semibold font-sans text-ink">Transcrição da Reunião</h3>
+            <h3 className="text-sm font-semibold font-sans text-ink">
+              Transcrição da Reunião
+            </h3>
             <button
               type="button"
               onClick={handleCopyTranscript}

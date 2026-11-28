@@ -43,9 +43,6 @@ export const DashboardPage: React.FC = () => {
       <div className="flex items-start justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold font-sans text-ink">Dashboard</h1>
-          <p className="text-sm text-muted mt-1">
-            Visão geral das suas reuniões concluídas, tempo processado e tarefas.
-          </p>
         </div>
         <Link to="/meetings/new">
           <Button size="sm" leftIcon={<Plus className="w-4 h-4" />}>
@@ -74,16 +71,11 @@ export const DashboardPage: React.FC = () => {
 
         <Card className="p-6">
           <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-1">
-            Horas Processadas
+            Tempo de áudio enviado
           </p>
           <p className="text-3xl font-bold font-sans text-ink">
             {isLoading ? '--' : formatTotalDuration(stats?.total_audio_seconds ?? 0)}
           </p>
-          {stats && (
-            <p className="text-xs text-muted mt-1">
-              Tempo total de áudio enviado
-            </p>
-          )}
         </Card>
 
         <Card className="p-6">
@@ -93,11 +85,6 @@ export const DashboardPage: React.FC = () => {
           <p className="text-3xl font-bold font-sans text-ink">
             {isLoading ? '--' : (stats?.total_tasks ?? 0)}
           </p>
-          {stats && (
-            <p className="text-xs text-muted mt-1">
-              Itens de ação identificados pela IA
-            </p>
-          )}
         </Card>
       </div>
 
@@ -132,12 +119,8 @@ export const DashboardPage: React.FC = () => {
             <LayoutGrid className="w-6 h-6" />
           </div>
           <h3 className="text-base font-bold font-sans text-ink mb-1">
-            Nenhuma reunião registrada ainda
+            Nenhuma reunião cadastrada
           </h3>
-          <p className="text-sm text-muted max-w-sm mx-auto mb-6">
-            Grave uma reunião ou envie um arquivo de áudio para gerar transcrições,
-            resumos e tarefas automaticamente.
-          </p>
           <Link to="/meetings/new">
             <Button leftIcon={<Plus className="w-4 h-4" />}>
               Criar primeira reunião
@@ -151,9 +134,6 @@ export const DashboardPage: React.FC = () => {
               <h2 className="text-base font-bold font-sans text-ink">
                 Reuniões recentes
               </h2>
-              <p className="text-xs text-muted">
-                Últimas gravações e status do processamento
-              </p>
             </div>
             <Link
               to="/meetings"
@@ -186,9 +166,7 @@ export const DashboardPage: React.FC = () => {
                       {formatMeetingDate(meeting.created_at)}
                     </span>
                     {meeting.summary?.summary && (
-                      <span className="truncate max-w-md">
-                        {meeting.summary.summary}
-                      </span>
+                      <span className="truncate max-w-md">{meeting.summary.summary}</span>
                     )}
                   </div>
                 </div>

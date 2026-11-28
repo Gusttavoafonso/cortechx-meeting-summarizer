@@ -202,8 +202,7 @@ export const LiveTranscriptPanel: React.FC<LiveTranscriptPanelProps> = ({
               <AudioLines className="w-5 h-5 stroke-[2]" />
             </div>
             <p className="text-sm font-medium text-ink-light max-w-sm">
-              Escutando o áudio da reunião... as palavras aparecerão assim que a primeira
-              janela (~6s) for processada.
+              A primeira transcrição aparece após cerca de 6 segundos de áudio.
             </p>
             <p className="text-xs text-muted mt-1.5 font-mono">
               {transcription.chunksReceived} chunks recebidos
@@ -257,8 +256,8 @@ export const LiveTranscriptPanel: React.FC<LiveTranscriptPanelProps> = ({
       {(isPaused || transcription.status === 'paused') && (
         <div className="px-4 py-2 bg-slate-50/90 border-t border-subtle-border text-xs text-muted font-medium">
           {transcription.isRevealing
-            ? 'Gravação pausada — finalizando a transcrição do trecho anterior...'
-            : 'Gravação pausada. Clique em Retomar para continuar capturando.'}
+            ? 'Pausada. Finalizando o último trecho…'
+            : 'Gravação pausada.'}
         </div>
       )}
 

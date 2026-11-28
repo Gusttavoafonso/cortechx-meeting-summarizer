@@ -59,9 +59,6 @@ export const TranscriptsPage: React.FC = () => {
     <div className="flex-1 px-8 py-10 max-w-5xl mx-auto w-full">
       <div className="mb-8">
         <h1 className="text-3xl font-bold font-sans text-ink">Transcrições</h1>
-        <p className="text-sm text-muted mt-1">
-          Consulte rapidamente todas as reuniões que já possuem transcrição gerada.
-        </p>
       </div>
 
       <div className="mb-6">
@@ -103,14 +100,9 @@ export const TranscriptsPage: React.FC = () => {
           </div>
           <h3 className="text-lg font-bold font-sans text-ink mb-1">
             {searchTerm
-              ? 'Nenhuma transcrição encontrada'
+              ? `Nenhuma transcrição para “${searchTerm}”`
               : 'Nenhuma transcrição disponível'}
           </h3>
-          <p className="text-sm text-muted max-w-md mx-auto mb-6">
-            {searchTerm
-              ? `Nenhuma reunião transcrita corresponde a "${searchTerm}".`
-              : 'Assim que o processamento de uma reunião for concluído, sua transcrição ficará acessível aqui.'}
-          </p>
           {searchTerm ? (
             <Button variant="outline" onClick={() => setSearchTerm('')}>
               Limpar busca

@@ -53,9 +53,6 @@ export const MeetingOptionsModal: React.FC<MeetingOptionsModalProps> = ({
               <h3 className="font-sans text-lg font-semibold text-ink">
                 Opções da reunião
               </h3>
-              <p className="text-xs text-muted">
-                Configurações do pipeline de IA e transcrição
-              </p>
             </div>
           </div>
           <button
@@ -100,8 +97,7 @@ export const MeetingOptionsModal: React.FC<MeetingOptionsModalProps> = ({
                 Transcrição contínua por chunks
               </p>
               <p className="text-[11px] text-ink-light leading-snug mt-0.5">
-                A transcrição opera em fluxo cronológico contínuo por blocos de áudio, sem
-                separação ou identificação por oradores.
+                Transcreve blocos em ordem cronológica, sem identificar quem falou.
               </p>
             </div>
           </div>
@@ -123,7 +119,7 @@ export const MeetingOptionsModal: React.FC<MeetingOptionsModalProps> = ({
                 }`}
               >
                 <p className="font-semibold text-ink mb-0.5">Automático / Groq</p>
-                <p className="text-[10px] text-muted">Nuvem ultra-rápida (recomendado)</p>
+                <p className="text-[10px] text-muted">Nuvem (recomendado)</p>
               </button>
 
               <button
@@ -155,7 +151,7 @@ export const MeetingOptionsModal: React.FC<MeetingOptionsModalProps> = ({
                     Extração automática de tarefas
                   </p>
                   <p className="text-[11px] text-muted">
-                    Detecta planos de ação, responsáveis e prazos
+                    Identifica responsáveis e prazos.
                   </p>
                 </div>
               </div>
@@ -180,7 +176,7 @@ export const MeetingOptionsModal: React.FC<MeetingOptionsModalProps> = ({
                     Enviar para integrações conectadas
                   </p>
                   <p className="text-[11px] text-muted">
-                    Publica o resumo nos provedores ativos (Discord, Notion e Obsidian)
+                    Publica o resumo no Discord, Notion ou Obsidian, se conectados.
                   </p>
                 </div>
               </div>
