@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { AlertCircle } from 'lucide-react'
 
 const gisFailureMessage =
-  'Não foi possível carregar o botão do Google (verifique bloqueadores de anúncios, conexão ou origem autorizada no Google Cloud).'
+  'O botão do Google não carregou. Verifique a conexão, os bloqueadores de anúncios ou a origem autorizada no Google Cloud.'
 
 // Typing for Google Identity Services
 declare global {
@@ -132,7 +132,7 @@ export const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
     if (!clientId) {
       onErrorRef.current?.(
         new Error(
-          'VITE_GOOGLE_CLIENT_ID não está configurado no arquivo .env. Configure sua chave OAuth do Google para autenticar.'
+          'Configure VITE_GOOGLE_CLIENT_ID no .env com o ID do cliente OAuth do Google.'
         )
       )
     }
@@ -144,7 +144,7 @@ export const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
         <div className="space-y-2">
           <div
             ref={containerRef}
-            className={`w-full min-h-[44px] flex justify-center transition-opacity ${
+            className={`flex h-11 w-full flex-none items-center justify-center overflow-y-clip transition-opacity ${
               disabled ? 'pointer-events-none opacity-60' : ''
             }`}
           />

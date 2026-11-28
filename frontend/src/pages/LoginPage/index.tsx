@@ -255,15 +255,6 @@ export const LoginPage: React.FC = () => {
                   ? 'Bem-vindo de volta'
                   : 'Crie sua conta'}
             </h1>
-            <p className="text-xs text-muted mt-1">
-              {recoveryStep === 'request'
-                ? 'Informe seu e-mail para gerar um token de redefinição.'
-                : recoveryStep === 'confirm'
-                  ? 'Informe o token de recuperação e defina uma nova senha.'
-                  : mode === 'login'
-                    ? 'Acesse suas reuniões e resumos inteligentes.'
-                    : 'Comece a transcrever e resumir conversas com IA.'}
-            </p>
           </div>
 
           {/* Mode Switch Tabs */}
@@ -559,7 +550,6 @@ export const LoginPage: React.FC = () => {
               <div className="mt-6 text-center text-xs text-muted">
                 {mode === 'login' ? (
                   <p>
-                    Não tem uma conta?{' '}
                     <button
                       type="button"
                       onClick={() => handleSwitchMode('register')}
@@ -570,7 +560,6 @@ export const LoginPage: React.FC = () => {
                   </p>
                 ) : (
                   <p>
-                    Já tem uma conta?{' '}
                     <button
                       type="button"
                       onClick={() => handleSwitchMode('login')}

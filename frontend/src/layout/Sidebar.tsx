@@ -1,6 +1,5 @@
-import React from 'react'
-import { NavLink, useNavigate, useLocation, Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import React, { useId, useState } from 'react'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutGrid,
   MessagesSquare,
@@ -8,14 +7,11 @@ import {
   AudioLines,
   Settings,
   Plus,
-  LogOut,
-  LogIn,
+  Menu,
 } from 'lucide-react'
 import { ZumoLogo } from '../components/ZumoLogo'
 import { Button } from '../components/ui/Button'
 import { SlidingNav } from '../components/ui/SlidingNav'
-import { useAuth } from '../contexts/AuthContext'
-import { fetchSystemStatus } from '../api/system'
 import { cn } from '../lib/utils'
 
 interface NavItem {
@@ -32,51 +28,82 @@ const navItems: NavItem[] = [
   { name: 'Configurações', to: '/settings', icon: Settings },
 ]
 
-function formatLlmProviderLabel(provider?: string | null): string {
-  switch ((provider || '').toLowerCase()) {
-    case 'openai':
-      return 'OpenAI'
-    case 'groq':
-      return 'Groq'
-    case 'anthropic':
-      return 'Anthropic'
-    case 'gemini':
-    default:
-      return 'Gemini'
-  }
+interface AppNavigationProps {
+  onNavigate?: () => void
+  compact?: boolean
+  headerAction?: React.ReactNode
 }
 
-export const Sidebar: React.FC = () => {
+export const AppNavigation: React.FC<AppNavigationProps> = ({
+  onNavigate,
+  compact = false,
+  headerAction,
+}) => {
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const { user, logout } = useAuth()
-  const { data: systemStatus, isError: isSystemError } = useQuery({
-    queryKey: ['system-status'],
-    queryFn: fetchSystemStatus,
-    retry: 1,
-    staleTime: 30_000,
-  })
+
+  const handleLinkClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (
+      !event.defaultPrevented &&
+      event.button === 0 &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.shiftKey &&
+      !event.altKey
+    ) {
+      onNavigate?.()
+    }
+  }
 
   return (
-    <aside className="w-56 bg-surface shrink-0 min-h-screen flex flex-col px-3.5 py-4 select-none border-r border-[#DCE2FB]">
+    <>
       {/* Brand Header */}
-      <div className="flex items-center justify-between mb-5 px-2">
-        <NavLink
+      <div
+        className={cn(
+          'mb-5 flex items-center gap-2',
+          compact ? 'flex-col' : 'justify-between'
+        )}
+      >
+        <Link
           to="/dashboard"
-          className="hover:opacity-90 transition-opacity focus:outline-hidden"
+          onClick={handleLinkClick}
+          aria-label="Zumo, Dashboard"
+          title={compact ? 'Zumo, Dashboard' : undefined}
+          className="min-w-0 rounded-md hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand motion-safe:transition-opacity"
         >
-          <ZumoLogo size="sm" />
-        </NavLink>
+          {compact ? (
+            <img
+              src={import.meta.env.BASE_URL + 'zumo-favicon.png'}
+              alt=""
+              width={601}
+              height={590}
+              className="block h-7 w-auto"
+            />
+          ) : (
+            <ZumoLogo size="sm" alt="" />
+          )}
+        </Link>
+        {headerAction}
       </div>
 
       {/* Main Action Button */}
       <div className="mb-4">
         <Button
-          onClick={() => navigate('/meetings/new')}
-          leftIcon={<Plus className="w-3.5 h-3.5 stroke-[2.5]" />}
-          className="w-full h-9 justify-center font-semibold text-xs shadow-sm"
+          onClick={() => {
+            navigate('/meetings/new')
+            onNavigate?.()
+          }}
+          aria-label={compact ? 'Nova Reunião' : undefined}
+          title={compact ? 'Nova Reunião' : undefined}
+          leftIcon={
+            <Plus aria-hidden="true" className="h-3.5 w-3.5 shrink-0 stroke-[2.5]" />
+          }
+          className={cn(
+            'h-9 w-full justify-center text-xs font-semibold shadow-sm',
+            compact ? 'gap-0 px-0' : 'px-2 [&>span]:truncate'
+          )}
         >
-          Nova Reunião
+          {compact ? null : 'Nova Reunião'}
         </Button>
       </div>
 
@@ -84,7 +111,7 @@ export const Sidebar: React.FC = () => {
       <SlidingNav
         label="Navegação do aplicativo"
         locationKey={pathname}
-        className="flex flex-1 flex-col gap-0.5"
+        className="flex flex-1 flex-col gap-0.5 [&>.sliding-nav-indicator]:max-w-full"
         indicatorClassName="bg-brand/15"
       >
         {navItems.map((item) => {
@@ -93,120 +120,57 @@ export const Sidebar: React.FC = () => {
             <NavLink
               key={item.to}
               to={item.to}
+              onClick={handleLinkClick}
+              title={compact ? item.name : undefined}
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] font-semibold motion-safe:transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-btn',
+                  'flex items-center rounded-xl py-2 text-[13px] font-semibold motion-safe:transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-btn',
+                  compact ? 'justify-center' : 'gap-3 px-3',
                   isActive
                     ? 'text-brand-dark hover:bg-brand/5 active:bg-brand/10'
                     : 'text-ink-light hover:text-ink hover:bg-slate-200/50 active:bg-surface-hover'
                 )
               }
             >
-              <Icon aria-hidden="true" className="w-4 h-4 stroke-[2]" />
-              <span>{item.name}</span>
+              <Icon aria-hidden="true" className="h-4 w-4 shrink-0 stroke-[2]" />
+              <span className={compact ? 'sr-only' : 'truncate'}>{item.name}</span>
             </NavLink>
           )
         })}
       </SlidingNav>
+    </>
+  )
+}
 
-      {/* Bottom Shortcuts / Status */}
-      <div className="pt-3 border-t border-slate-200/60 mb-2.5 px-1">
-        <Link
-          to="/settings?tab=integracoes"
-          className="block bg-white/60 hover:bg-white border border-slate-200/80 rounded-xl p-2.5 transition-colors"
-        >
-          <div className="flex items-center gap-1.5">
-            <span
-              className={cn(
-                'w-2 h-2 rounded-full shrink-0',
-                isSystemError
-                  ? 'bg-rose-500'
-                  : systemStatus?.stt_mode === 'groq'
-                    ? 'bg-emerald-500'
-                    : 'bg-brand'
-              )}
-            />
-            <p className="text-[11px] font-semibold text-ink truncate">
-              {isSystemError
-                ? 'Backend Indisponível'
-                : systemStatus?.stt_mode === 'groq'
-                  ? 'Groq Cloud Ativo'
-                  : 'Whisper Local Ativo'}
-            </p>
-          </div>
-          <p className="text-[10px] text-muted mt-0.5 leading-snug">
-            {isSystemError
-              ? 'Verifique o servidor na porta 8000.'
-              : systemStatus?.stt_mode === 'groq'
-                ? systemStatus.stt_source === 'user'
-                  ? 'Usando sua chave API pessoal.'
-                  : 'Usando chave configurada no servidor.'
-                : `Modelo ${systemStatus?.whisper_model || 'small'} local.`}
-          </p>
-          {!isSystemError && systemStatus && (
-            <p
-              className={cn(
-                'text-[10px] mt-1 pt-1 border-t border-slate-200/70 leading-snug truncate',
-                systemStatus.llm_configured
-                  ? 'text-muted'
-                  : 'text-amber-700 font-semibold'
-              )}
-            >
-              {systemStatus.llm_configured
-                ? systemStatus.llm_source === 'user'
-                  ? `Resumo: ${formatLlmProviderLabel(systemStatus.llm_provider)} (chave pessoal)`
-                  : `Resumo: ${formatLlmProviderLabel(systemStatus.llm_provider)} (servidor)`
-                : 'Resumo: configure uma chave de IA'}
-            </p>
-          )}
-        </Link>
-      </div>
+export const Sidebar: React.FC = () => {
+  const sidebarId = useId()
+  const [expanded, setExpanded] = useState(true)
+  const toggleLabel = expanded ? 'Recolher barra lateral' : 'Expandir barra lateral'
 
-      {/* User / Workspace Footer */}
-      <div className="pt-3 border-t border-slate-200/40 px-1.5 flex items-center justify-between gap-2 text-xs text-muted">
-        {user ? (
-          <>
-            <div className="flex items-center gap-2 min-w-0 flex-1">
-              {user.picture_url ? (
-                <img
-                  src={user.picture_url}
-                  alt={user.name}
-                  className="w-7 h-7 rounded-full object-cover shrink-0 border border-slate-200"
-                />
-              ) : (
-                <div className="w-7 h-7 rounded-full bg-brand/10 text-brand flex items-center justify-center font-bold text-[11px] shrink-0">
-                  {user.name.charAt(0).toUpperCase()}
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="truncate font-semibold text-ink leading-tight">
-                  {user.name}
-                </p>
-                <p className="text-[10px] text-muted truncate">Conectado</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={async () => {
-                await logout()
-                navigate('/login')
-              }}
-              title="Sair da conta"
-              className="p-1.5 rounded-lg text-muted hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0 cursor-pointer"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-            </button>
-          </>
-        ) : (
-          <Link
-            to="/login"
-            className="flex items-center justify-between w-full p-1 rounded-lg text-xs font-semibold text-brand hover:underline"
+  return (
+    <aside
+      id={sidebarId}
+      className={cn(
+        'hidden min-h-screen shrink-0 select-none flex-col border-r border-[#DCE2FB] bg-surface px-3.5 py-4 motion-safe:transition-[width] motion-safe:duration-200 motion-safe:ease-out md:flex',
+        expanded ? 'w-56' : 'w-16'
+      )}
+    >
+      <AppNavigation
+        compact={!expanded}
+        headerAction={
+          <button
+            type="button"
+            aria-label={toggleLabel}
+            title={toggleLabel}
+            aria-expanded={expanded}
+            aria-controls={sidebarId}
+            onClick={() => setExpanded((current) => !current)}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-ink-light hover:bg-surface-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand motion-safe:transition-colors"
           >
-            <span>Fazer login</span>
-            <LogIn className="w-3.5 h-3.5" />
-          </Link>
-        )}
-      </div>
+            <Menu aria-hidden="true" className="h-4 w-4" />
+          </button>
+        }
+      />
     </aside>
   )
 }

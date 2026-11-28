@@ -124,9 +124,6 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
             <h3 className="font-sans text-lg font-semibold text-ink mb-0.5">
               Gravação ao vivo
             </h3>
-            <p className="text-xs text-muted max-w-md mx-auto">
-              Capture o áudio da chamada e do seu microfone em tempo real.
-            </p>
           </div>
 
           {/* Seletor de modo minimalista */}
@@ -183,9 +180,7 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
               )}
             </button>
             <span className="text-xs font-semibold text-ink tracking-tight">
-              {isStartingRecording
-                ? 'Aguardando permissão de captura...'
-                : 'Iniciar gravação'}
+              {isStartingRecording ? 'Aguardando permissão…' : 'Iniciar gravação'}
             </span>
           </div>
 
@@ -206,7 +201,7 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
                   2
                 </span>
                 <p className="text-[11px] text-ink-light leading-snug">
-                  Autorize o microfone — a transcrição aparecerá ao vivo automaticamente.
+                  Autorize o acesso ao microfone.
                 </p>
               </div>
             </div>
@@ -214,8 +209,7 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
             <div className="flex items-center gap-2 max-w-lg bg-surface/60 border border-[#DCE2FB] rounded-xl px-3.5 py-2.5 text-left">
               <Mic className="w-4 h-4 text-brand shrink-0 stroke-[2]" />
               <p className="text-[11px] text-ink-light leading-snug">
-                Apenas o microfone será capturado, com transcrição simultânea em tempo
-                real na tela.
+                Autorize o microfone para gravar.
               </p>
             </div>
           )}
