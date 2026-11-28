@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { AlertCircle } from 'lucide-react'
 
+const gisFailureMessage =
+  'Não foi possível carregar o botão do Google (verifique bloqueadores de anúncios, conexão ou origem autorizada no Google Cloud).'
+
 // Typing for Google Identity Services
 declare global {
   interface Window {
@@ -50,6 +53,7 @@ export const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
 
   const [gisLoaded, setGisLoaded] = useState(false)
   const [gisTimedOut, setGisTimedOut] = useState(false)
+  const showGisWarning = gisTimedOut && !gisLoaded
   const clientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string) || ''
 
   useEffect(() => {
@@ -144,15 +148,18 @@ export const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
               disabled ? 'pointer-events-none opacity-60' : ''
             }`}
           />
-          {gisTimedOut && !gisLoaded && (
-            <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200/80 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
+          <div>
+            <p
+              aria-hidden="true"
+              className={`text-[11px] text-amber-700 bg-amber-50 border border-amber-200/80 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5 ${showGisWarning ? '' : 'invisible'}`}
+            >
               <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-              <span>
-                Não foi possível carregar o botão do Google (verifique bloqueadores de
-                anúncios, conexão ou origem autorizada no Google Cloud).
-              </span>
+              <span className="min-w-0 break-words">{gisFailureMessage}</span>
             </p>
-          )}
+            <div role="status" className="sr-only">
+              {showGisWarning ? gisFailureMessage : ''}
+            </div>
+          </div>
         </div>
       ) : (
         <div className="space-y-2">

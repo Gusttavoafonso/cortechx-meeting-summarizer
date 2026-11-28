@@ -1,5 +1,5 @@
 import React from 'react'
-import { NavLink, useNavigate, Link } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   LayoutGrid,
@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { ZumoLogo } from '../components/ZumoLogo'
 import { Button } from '../components/ui/Button'
+import { SlidingNav } from '../components/ui/SlidingNav'
 import { useAuth } from '../contexts/AuthContext'
 import { fetchSystemStatus } from '../api/system'
 import { cn } from '../lib/utils'
@@ -47,6 +48,7 @@ function formatLlmProviderLabel(provider?: string | null): string {
 
 export const Sidebar: React.FC = () => {
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const { user, logout } = useAuth()
   const { data: systemStatus, isError: isSystemError } = useQuery({
     queryKey: ['system-status'],
@@ -79,7 +81,12 @@ export const Sidebar: React.FC = () => {
       </div>
 
       {/* Navigation Links */}
-      <nav className="flex-1 space-y-0.5">
+      <SlidingNav
+        label="Navegação do aplicativo"
+        locationKey={pathname}
+        className="flex flex-1 flex-col gap-0.5"
+        indicatorClassName="bg-brand/15"
+      >
         {navItems.map((item) => {
           const Icon = item.icon
           return (
@@ -88,19 +95,19 @@ export const Sidebar: React.FC = () => {
               to={item.to}
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] font-semibold transition-all duration-150',
+                  'flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] font-semibold motion-safe:transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-btn',
                   isActive
-                    ? 'bg-primary-btn text-white shadow-xs'
-                    : 'text-ink-light hover:text-ink hover:bg-slate-200/50'
+                    ? 'text-brand-dark hover:bg-brand/5 active:bg-brand/10'
+                    : 'text-ink-light hover:text-ink hover:bg-slate-200/50 active:bg-surface-hover'
                 )
               }
             >
-              <Icon className="w-4 h-4 stroke-[2]" />
+              <Icon aria-hidden="true" className="w-4 h-4 stroke-[2]" />
               <span>{item.name}</span>
             </NavLink>
           )
         })}
-      </nav>
+      </SlidingNav>
 
       {/* Bottom Shortcuts / Status */}
       <div className="pt-3 border-t border-slate-200/60 mb-2.5 px-1">

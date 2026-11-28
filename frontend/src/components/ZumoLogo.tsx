@@ -3,12 +3,14 @@ import { cn } from '../lib/utils'
 import zumoLogo from '../assets/zumo-logo-extended.png'
 
 interface ZumoLogoProps {
+  alt?: string
   className?: string
   size?: 'sm' | 'md' | 'lg'
   showIconOnly?: boolean
 }
 
 export const ZumoLogo: React.FC<ZumoLogoProps> = ({
+  alt = 'Zumo',
   className,
   size = 'md',
   showIconOnly = false,
@@ -35,7 +37,9 @@ export const ZumoLogo: React.FC<ZumoLogoProps> = ({
   return (
     <img
       src={zumoLogo}
-      alt="Zumo"
+      alt={alt}
+      width={1395}
+      height={424}
       className={cn('block h-auto shrink-0 select-none', sizeClasses[size], className)}
     />
   )

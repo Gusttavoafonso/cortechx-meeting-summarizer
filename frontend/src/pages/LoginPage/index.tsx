@@ -452,28 +452,6 @@ export const LoginPage: React.FC = () => {
             </form>
           ) : (
             <>
-              {/* Google Sign-In */}
-              <div className="mb-6">
-                <GoogleLoginButton
-                  onSuccess={handleGoogleSuccess}
-                  onError={handleGoogleError}
-                  disabled={isSubmitting}
-                  text={mode === 'login' ? 'continue_with' : 'signup_with'}
-                />
-              </div>
-
-              {/* Or Divider */}
-              <div className="relative mb-6">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-subtle-border" />
-                </div>
-                <div className="relative flex justify-center text-xs">
-                  <span className="bg-white px-3 text-muted">
-                    ou continue com e-mail
-                  </span>
-                </div>
-              </div>
-
               {/* Email/Password Form */}
               <form onSubmit={handleSubmit} className="space-y-4">
                 {mode === 'register' && (
@@ -547,9 +525,7 @@ export const LoginPage: React.FC = () => {
                     }
                     required
                     disabled={isSubmitting}
-                    autoComplete={
-                      mode === 'login' ? 'current-password' : 'new-password'
-                    }
+                    autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                   />
                 </div>
 
@@ -561,6 +537,23 @@ export const LoginPage: React.FC = () => {
                   {mode === 'login' ? 'Entrar no Zumo' : 'Criar minha conta'}
                 </Button>
               </form>
+
+              {/* Or Divider */}
+              <div className="relative my-6">
+                <div aria-hidden="true" className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-subtle-border" />
+                </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="bg-white px-3 text-muted">ou</span>
+                </div>
+              </div>
+
+              <GoogleLoginButton
+                onSuccess={handleGoogleSuccess}
+                onError={handleGoogleError}
+                disabled={isSubmitting}
+                text={mode === 'login' ? 'continue_with' : 'signup_with'}
+              />
 
               {/* Footer Note */}
               <div className="mt-6 text-center text-xs text-muted">
