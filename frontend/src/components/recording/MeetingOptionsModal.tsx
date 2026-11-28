@@ -37,8 +37,12 @@ export const MeetingOptionsModal: React.FC<MeetingOptionsModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/40 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        aria-hidden="true"
+        className="modal-backdrop-enter absolute inset-0 bg-ink/40 backdrop-blur-xs"
+      />
+      <div className="modal-panel-enter relative bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
