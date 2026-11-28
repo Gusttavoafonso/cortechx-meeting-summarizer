@@ -1,17 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  Mic,
-  FileText,
-  Users,
-  BarChart3,
-  ArrowRight,
-  Lock,
-  Cpu,
-  Zap,
-  ChevronDown,
-  Share2,
-} from 'lucide-react'
+import { Mic, FileText, ArrowRight, Cpu, ChevronDown, Share2 } from 'lucide-react'
 import { LandingNavbar } from '../../components/landing/LandingNavbar'
 import { HalftoneWaveCanvas } from '../../components/landing/HalftoneWaveCanvas'
 import { Button } from '../../components/ui/Button'
@@ -101,67 +90,14 @@ export const LandingPage: React.FC = () => {
           <div className="flex-1 flex flex-col justify-center max-w-4xl mx-auto px-4 sm:px-6 text-center relative z-10 pt-16 pb-6">
             {/* Main Headline */}
             <h1 className="text-4xl sm:text-6xl md:text-7xl font-bold tracking-tight text-ink font-sans leading-[1.08] mb-6">
-              Transcreva suas reuniões <br />
-              <span className="text-brand">e gere resumos.</span>
+              Nenhuma decisão perdida no <br />
+              <span className="text-brand">meio da call.</span>
             </h1>
           </div>
 
           {/* ================= FULL-WIDTH BLUE HALFTONE WAVE ================= */}
           <div className="w-full relative mt-auto mb-12 sm:mb-20 overflow-hidden select-none">
             <HalftoneWaveCanvas height={320} className="w-full" />
-          </div>
-        </section>
-
-        {/* ================= 4 PILLARS FEATURE STRIP (SEEN ON SCROLL) ================= */}
-        <section className="py-16 md:py-20 bg-page border-b border-subtle-border/80 relative z-20">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Feature 1 */}
-              <div className="p-5 rounded-2xl bg-white border border-subtle-border/80 hover:border-brand/30 transition-all shadow-card group">
-                <div className="w-10 h-10 rounded-xl bg-surface flex items-center justify-center text-brand mb-3 group-hover:scale-105 transition-transform">
-                  <Mic className="w-5 h-5 stroke-[2.2]" />
-                </div>
-                <h3 className="text-base font-bold text-ink mb-1 font-sans">
-                  Transcrição de áudio
-                </h3>
-              </div>
-
-              {/* Feature 2 */}
-              <div className="p-5 rounded-2xl bg-white border border-subtle-border/80 hover:border-brand/30 transition-all shadow-card group">
-                <div className="w-10 h-10 rounded-xl bg-surface flex items-center justify-center text-brand mb-3 group-hover:scale-105 transition-transform">
-                  <FileText className="w-5 h-5 stroke-[2.2]" />
-                </div>
-                <h3 className="text-base font-bold text-ink mb-1 font-sans">
-                  Resumos automáticos
-                </h3>
-                <p className="text-xs text-muted leading-relaxed">
-                  Pontos principais, decisões e acordos.
-                </p>
-              </div>
-
-              {/* Feature 3 */}
-              <div className="p-5 rounded-2xl bg-white border border-subtle-border/80 hover:border-brand/30 transition-all shadow-card group">
-                <div className="w-10 h-10 rounded-xl bg-surface flex items-center justify-center text-brand mb-3 group-hover:scale-105 transition-transform">
-                  <Users className="w-5 h-5 stroke-[2.2]" />
-                </div>
-                <h3 className="text-base font-bold text-ink mb-1 font-sans">
-                  Histórico de reuniões
-                </h3>
-                <p className="text-xs text-muted leading-relaxed">
-                  Atas e gravações arquivadas.
-                </p>
-              </div>
-
-              {/* Feature 4 */}
-              <div className="p-5 rounded-2xl bg-white border border-subtle-border/80 hover:border-brand/30 transition-all shadow-card group">
-                <div className="w-10 h-10 rounded-lg bg-surface flex items-center justify-center text-brand mb-3 group-hover:scale-105 transition-transform">
-                  <BarChart3 className="w-5 h-5 stroke-[2.2]" />
-                </div>
-                <h3 className="text-base font-bold text-ink mb-1 font-sans">
-                  Tarefas e prazos
-                </h3>
-              </div>
-            </div>
           </div>
         </section>
 
@@ -221,103 +157,53 @@ export const LandingPage: React.FC = () => {
         {/* ================= BENTO GRID DE RECURSOS ================= */}
         <section id="recursos" className="py-20">
           <div className="max-w-6xl mx-auto px-4 sm:px-6">
-            <div className="text-center max-w-2xl mx-auto mb-16">
-              <h2 className="text-3xl sm:text-4xl font-bold font-sans text-ink mb-4">
+            <div className="text-center max-w-2xl mx-auto mb-12">
+              <h2 className="text-3xl sm:text-4xl font-bold font-sans text-ink">
                 Recursos
               </h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Feature Large: Local vs Cloud Engine */}
-              <div className="md:col-span-2 p-8 rounded-2xl bg-white border border-subtle-border shadow-card flex flex-col justify-between">
-                <div>
-                  <div className="w-10 h-10 rounded-xl bg-surface flex items-center justify-center text-brand mb-4">
-                    <Cpu className="w-5 h-5" />
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
+              {[
+                {
+                  icon: Cpu,
+                  title: 'Transcrição durante a reunião',
+                  description:
+                    'Acompanhe o texto enquanto grava. Processe a gravação no seu computador ou na nuvem.',
+                },
+                {
+                  icon: FileText,
+                  title: 'Resumos com LLM',
+                  description:
+                    'Gere resumos, decisões e tarefas a partir da transcrição.',
+                },
+                {
+                  icon: Share2,
+                  title: 'Integrações externas',
+                  description: 'Envie resumos e tarefas ao Obsidian, Discord e Notion.',
+                },
+                {
+                  icon: Mic,
+                  title: 'Sem bots na chamada',
+                  description:
+                    'Com sua permissão, grave pelo microfone e, quando disponível, pelo áudio do sistema.',
+                },
+              ].map(({ icon: Icon, title, description }) => (
+                <div
+                  key={title}
+                  className="min-w-0 rounded-2xl border border-subtle-border bg-white p-5 shadow-card sm:p-7 lg:p-8"
+                >
+                  <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-surface text-brand">
+                    <Icon aria-hidden="true" className="h-5 w-5" />
                   </div>
-                  <h3 className="text-2xl font-bold font-sans text-ink mb-2">
-                    Processamento local ou na nuvem
+                  <h3 className="mb-2 font-sans text-lg font-bold text-ink sm:text-xl">
+                    {title}
                   </h3>
-                  <p className="text-sm text-muted max-w-xl leading-relaxed mb-6">
-                    Escolha entre <strong>Faster-Whisper</strong> local e{' '}
-                    <strong>Groq Cloud</strong>.
+                  <p className="max-w-prose text-sm leading-relaxed text-muted">
+                    {description}
                   </p>
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-subtle-border">
-                  <div className="p-3 rounded-xl bg-page border border-subtle-border">
-                    <span className="text-xs font-bold text-ink block mb-0.5">
-                      Modo Local (Offline)
-                    </span>
-                    <span className="text-xs text-muted">
-                      Áudio no seu computador, sem internet nem custo de API.
-                    </span>
-                  </div>
-                  <div className="p-3 rounded-xl bg-page border border-subtle-border">
-                    <span className="text-xs font-bold text-brand block mb-0.5">
-                      Modo Nuvem (Groq Whisper Large)
-                    </span>
-                    <span className="text-xs text-muted">
-                      Transcrição em segundos, mesmo para arquivos de uma hora ou mais.
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Feature 2: Voice Activity Detection */}
-              <div className="p-8 rounded-2xl bg-white border border-subtle-border shadow-card flex flex-col justify-between">
-                <div>
-                  <div className="w-10 h-10 rounded-xl bg-surface flex items-center justify-center text-brand mb-4">
-                    <Zap className="w-5 h-5" />
-                  </div>
-                  <h3 className="text-xl font-bold font-sans text-ink mb-2">
-                    Detecção de fala (Silero VAD)
-                  </h3>
-                  <p className="text-sm text-muted leading-relaxed mb-4">
-                    Remove silêncios e ruídos de fundo antes da transcrição.
-                  </p>
-                </div>
-              </div>
-
-              {/* Feature 3: Security & Privacy */}
-              <div className="p-8 rounded-2xl bg-white border border-subtle-border shadow-card flex flex-col justify-between">
-                <div>
-                  <div className="w-10 h-10 rounded-xl bg-surface flex items-center justify-center text-brand mb-4">
-                    <Lock className="w-5 h-5" />
-                  </div>
-                  <h3 className="text-xl font-bold font-sans text-ink mb-2">
-                    Privacidade
-                  </h3>
-                  <p className="text-sm text-muted leading-relaxed mb-4">
-                    Seus dados de reunião não são usados para treinar modelos públicos.
-                  </p>
-                </div>
-              </div>
-
-              {/* Feature 4: Supported Platforms (Obsidian, Discord, Notion, Markdown) */}
-              <div className="md:col-span-2 p-8 rounded-2xl bg-white border border-subtle-border shadow-card flex flex-col justify-between">
-                <div>
-                  <div className="w-10 h-10 rounded-xl bg-surface flex items-center justify-center text-brand mb-4">
-                    <Share2 className="w-5 h-5" />
-                  </div>
-                  <h3 className="text-2xl font-bold font-sans text-ink mb-2">
-                    Integrações
-                  </h3>
-                  <p className="text-sm text-muted max-w-xl leading-relaxed mb-6">
-                    Sincronize notas, atas e tarefas.
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-3 text-xs font-semibold">
-                  <span className="bg-surface px-4 py-2 rounded-xl text-ink border border-brand/15">
-                    Obsidian
-                  </span>
-                  <span className="bg-surface px-4 py-2 rounded-xl text-ink border border-brand/15">
-                    Discord
-                  </span>
-                  <span className="bg-surface px-4 py-2 rounded-xl text-ink border border-brand/15">
-                    Notion
-                  </span>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         </section>
@@ -372,7 +258,7 @@ export const LandingPage: React.FC = () => {
               <div className="absolute top-0 right-0 w-80 h-80 bg-brand-light/20 blur-3xl rounded-full pointer-events-none" />
 
               <h2 className="text-3xl sm:text-5xl font-bold font-sans mb-4 relative z-10">
-                Grave ou envie um áudio
+                Pronto para transformar suas reuniões em decisões e tarefas?
               </h2>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3 relative z-10">
                 <Link to="/login?mode=register" className="w-full sm:w-auto">
@@ -385,12 +271,6 @@ export const LandingPage: React.FC = () => {
                   </Button>
                 </Link>
                 <Link to="/login" className="w-full sm:w-auto">
-                  <button
-                    type="button"
-                    className="w-full sm:w-auto h-12 px-6 rounded-xl text-sm font-semibold text-white/90 hover:text-white hover:bg-white/10 transition-colors"
-                  >
-                    Acessar Plataforma
-                  </button>
                 </Link>
               </div>
             </div>
