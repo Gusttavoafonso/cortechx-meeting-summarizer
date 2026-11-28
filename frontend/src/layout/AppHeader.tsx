@@ -48,23 +48,29 @@ export const AppHeader: React.FC = () => {
 
       {user ? (
         <div className="flex min-w-0 items-center gap-2 text-xs text-muted">
-          {user.picture_url ? (
-            <img
-              src={user.picture_url}
-              alt=""
-              className="h-7 w-7 shrink-0 rounded-full border border-slate-200 object-cover"
-            />
-          ) : (
-            <span
-              aria-hidden="true"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand/10 text-[11px] font-bold text-brand"
-            >
-              {user.name.charAt(0).toUpperCase()}
+          <Link
+            to="/settings?tab=perfil"
+            aria-label={`Perfil de ${user.name}`}
+            className="flex min-w-0 items-center gap-2 rounded-full px-2 py-1 hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand motion-safe:transition-colors"
+          >
+            {user.picture_url ? (
+              <img
+                src={user.picture_url}
+                alt=""
+                className="h-7 w-7 shrink-0 rounded-full border border-slate-200 object-cover"
+              />
+            ) : (
+              <span
+                aria-hidden="true"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand/10 text-[11px] font-bold text-brand"
+              >
+                {user.name.charAt(0).toUpperCase()}
+              </span>
+            )}
+            <span className="truncate font-semibold leading-tight text-ink">
+              {user.name}
             </span>
-          )}
-          <div className="min-w-0">
-            <p className="truncate font-semibold leading-tight text-ink">{user.name}</p>
-          </div>
+          </Link>
           <button
             type="button"
             aria-label="Sair da conta"

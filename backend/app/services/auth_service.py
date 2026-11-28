@@ -138,9 +138,6 @@ def get_or_create_google_user(
 
     if user:
         updated = False
-        if user.name != name:
-            user.name = name
-            updated = True
         if user.picture_url != picture_url:
             user.picture_url = picture_url
             updated = True
